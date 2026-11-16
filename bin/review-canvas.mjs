@@ -40,7 +40,14 @@ const run = (args, env = {}) => {
     stdio: "inherit",
     env: { ...process.env, ...env },
   });
-  process.exit(result.status ?? 1);
+  const status = result.status ?? 1;
+  // --silent で pnpm が理由を出さないことがある（スクリプトが無いなど）ので、失敗したことだけは必ず伝える
+  if (status !== 0 && args.includes("branch-storybooks")) {
+    console.error(
+      `infra の branch-storybooks を動かせませんでした（終了コード ${status}）`,
+    );
+  }
+  process.exit(status);
 };
 
 const gitRoot = () => {
