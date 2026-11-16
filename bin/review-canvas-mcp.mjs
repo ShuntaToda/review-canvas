@@ -455,10 +455,11 @@ export const createServer = ({
       const hasReply = replyBody !== undefined && replyBody.trim() !== "";
       if (hasReply) {
         // 解決済みには印を付けられない（409）。返信だけが残らないよう、書く前に確かめる
-        const thread = await call("GET", `/threads/${commentId}`, {
+        // 応答は { branch, commit, thread: { status, … } }（openapi の ThreadDetail）
+        const detail = await call("GET", `/threads/${commentId}`, {
           query: { branch },
         });
-        if (thread?.status === "resolved") {
+        if (detail?.thread?.status === "resolved") {
           throw new ToolError(
             "このスレッドは解決済みです。返信も印も付けていません（人が再開してから、もう一度呼んでください）",
           );

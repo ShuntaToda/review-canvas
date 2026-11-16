@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,26 @@ const json = (status, body) =>
     status,
     headers: { "Content-Type": "application/json" },
   });
+
+/** GET /api/threads/{commentId} の応答（openapi の ThreadDetail の形。下のテストが openapi.json と照らす） */
+const threadDetail = (status) => ({
+  branch: "main",
+  commit: "abc1234",
+  thread: {
+    number: 1,
+    status,
+    story: {
+      source: "shop",
+      storyId: "features-search--default",
+      title: "Features/Search",
+      name: "Default",
+      importPath: "./src/features/search/Search.stories.tsx",
+    },
+    root: { id: COMMENT_ID, status },
+    replies: [],
+    omittedReplyCount: 0,
+  },
+});
 
 /** 道具を呼ぶ（tools/call）。fetch は渡した応答を順に返す */
 const setUp = ({ env = {}, responses = [], gitBranch = () => "main" } = {}) => {
@@ -137,6 +157,32 @@ describe("MCP の手続き", () => {
       error: { code: -32700 },
     });
     expect(await handleLine(server, "  ")).toBeUndefined();
+  });
+});
+
+describe("偽の応答の形", () => {
+  test("[正常系]テストで使うスレッド 1 件の応答は、openapi.json の ThreadDetail と同じ項目を持つ（状態は thread の中）", () => {
+    const openapi = JSON.parse(
+      readFileSync(new URL("../openapi.json", import.meta.url), "utf8"),
+    );
+    const operation = openapi.paths["/api/threads/{commentId}"].get;
+    expect(
+      operation.responses["200"].content["application/json"].schema.$ref,
+    ).toBe("#/components/schemas/ThreadDetail");
+    const { ThreadDetail, Thread } = openapi.components.schemas;
+    const detail = threadDetail("resolved");
+
+    expect(Object.keys(detail).sort()).toStrictEqual(
+      [...ThreadDetail.required].sort(),
+    );
+    expect(ThreadDetail.properties.thread.$ref).toBe(
+      "#/components/schemas/Thread",
+    );
+    expect(Object.keys(detail.thread).sort()).toStrictEqual(
+      [...Thread.required].sort(),
+    );
+    expect(Thread.properties.status.enum).toContain(detail.thread.status);
+    expect(ThreadDetail.properties.status).toBeUndefined();
   });
 });
 
@@ -311,7 +357,7 @@ describe("get_comment・reply・mark_ai_fixed", () => {
   test("[正常系]mark_ai_fixed は、返信を書いてから印を付け、状態と付けた人を返す", async () => {
     const { callTool, request, fetch } = setUp({
       responses: [
-        json(200, { status: "open" }),
+        json(200, threadDetail("open")),
         json(201, { id: "REPLY" }),
         json(200, {
           status: "ai-fixed",
@@ -363,7 +409,7 @@ describe("get_comment・reply・mark_ai_fixed", () => {
   test("[異常系]mark_ai_fixed の返信が失敗したら、印を付けない", async () => {
     const { callTool, fetch, request } = setUp({
       responses: [
-        json(200, { status: "open" }),
+        json(200, threadDetail("open")),
         json(404, { error: "CommentNotFoundError", message: "" }),
       ],
     });
@@ -380,7 +426,7 @@ describe("get_comment・reply・mark_ai_fixed", () => {
 
   test("[異常系]mark_ai_fixed は、解決済みのスレッドには返信も印も書かない（返信だけが残らないように）", async () => {
     const { callTool, fetch, request } = setUp({
-      responses: [json(200, { status: "resolved" })],
+      responses: [json(200, threadDetail("resolved"))],
     });
 
     const result = await callTool("mark_ai_fixed", {
@@ -397,7 +443,7 @@ describe("get_comment・reply・mark_ai_fixed", () => {
   test("[異常系]mark_ai_fixed は、返信のあとで印が弾かれたら（409）、返信は投稿済みだと伝える", async () => {
     const { callTool, fetch } = setUp({
       responses: [
-        json(200, { status: "open" }),
+        json(200, threadDetail("open")),
         json(201, { id: "REPLY" }),
         json(409, { error: "CommentAlreadyResolvedError", message: "" }),
       ],
