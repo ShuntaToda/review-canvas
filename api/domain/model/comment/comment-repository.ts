@@ -100,7 +100,7 @@ export type CommentRepository = {
 
   /**
    * AI 修正済みの印（付けた人・日時）と更新日時だけを書き換える（同時に行われた本文の編集・解決を消さない）。
-   * コメントが無い・削除済みなら CommentNotFoundError
+   * コメントが無い・削除済みなら CommentNotFoundError、読んだあとに解決されていたら CommentAlreadyResolvedError（書かない）
    * @returns 書き換えた後のコメント
    */
   updateAiFixed(comment: Comment): Promise<Comment>;

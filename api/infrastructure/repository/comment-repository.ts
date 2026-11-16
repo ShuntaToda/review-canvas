@@ -22,6 +22,7 @@ import {
   COMMENTS_PER_BRANCH_LIMIT,
   COMMENTS_PER_PAGE,
   CommentLimitExceededError,
+  CommentAlreadyResolvedError,
   CommentNotFoundError,
 } from "@/domain/model/comment/comment-errors";
 import type {
@@ -570,6 +571,7 @@ export class CommentRepositoryImpl implements CommentRepository {
   async #updateAttributes(
     comment: Comment,
     attributes: Partial<CommentDdbItem>,
+    { unresolvedOnly = false }: { unresolvedOnly?: boolean } = {},
   ): Promise<Comment> {
     const { branch, id: commentId } = comment;
     const entries = Object.entries(attributes);
@@ -580,15 +582,22 @@ export class CommentRepositoryImpl implements CommentRepository {
           Key: { branch, id: commentId },
           UpdateExpression: `SET ${entries.map(([name]) => `#${name} = :${name}`).join(", ")}`,
           // 削除と重なったときに、削除したコメントを生き返らせない
-          ConditionExpression: LIVE_CONDITION,
+          // unresolvedOnly: 読んでから書くまでのあいだに解決されていたら、書かない
+          ConditionExpression: unresolvedOnly
+            ? `${LIVE_CONDITION} AND (attribute_not_exists(#resolved) OR #resolved = :notResolved)`
+            : LIVE_CONDITION,
           ExpressionAttributeNames: {
             "#id": "id",
             "#deletedAt": "deletedAt",
+            ...(unresolvedOnly ? { "#resolved": "resolved" } : {}),
             ...Object.fromEntries(entries.map(([name]) => [`#${name}`, name])),
           },
-          ExpressionAttributeValues: Object.fromEntries(
-            entries.map(([name, value]) => [`:${name}`, value]),
-          ),
+          ExpressionAttributeValues: {
+            ...(unresolvedOnly ? { ":notResolved": false } : {}),
+            ...Object.fromEntries(
+              entries.map(([name, value]) => [`:${name}`, value]),
+            ),
+          },
           ReturnValues: "ALL_NEW",
         }),
       );
@@ -601,6 +610,17 @@ export class CommentRepositoryImpl implements CommentRepository {
       return this.#parse(Attributes, { branch, commentId });
     } catch (error) {
       if (error instanceof ConditionalCheckFailedException) {
+        // 弾かれたわけを読み直して見分ける（無い・削除済みは 404、解決済みは 409）
+        if (
+          unresolvedOnly &&
+          (await this.findByBranchAndId({ branch, commentId }))?.resolved ===
+            true
+        ) {
+          throw new CommentAlreadyResolvedError({
+            cause: error,
+            context: { branch, commentId },
+          });
+        }
         throw new CommentNotFoundError({
           cause: error,
           context: { branch, commentId },
@@ -652,12 +672,16 @@ export class CommentRepositoryImpl implements CommentRepository {
       commentId: comment.id,
     });
     const ddbItem = commentDdbItemSchema.parse(ddbItemFromDomain(comment));
-    return this.#updateAttributes(comment, {
-      aiFixedBy: ddbItem.aiFixedBy,
-      aiFixedById: ddbItem.aiFixedById,
-      aiFixedAt: ddbItem.aiFixedAt,
-      updatedAt: ddbItem.updatedAt,
-    });
+    return this.#updateAttributes(
+      comment,
+      {
+        aiFixedBy: ddbItem.aiFixedBy,
+        aiFixedById: ddbItem.aiFixedById,
+        aiFixedAt: ddbItem.aiFixedAt,
+        updatedAt: ddbItem.updatedAt,
+      },
+      { unresolvedOnly: true },
+    );
   }
 
   /**

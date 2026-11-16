@@ -10,6 +10,7 @@ import type { Comment } from "@/domain/model/comment/comment";
 import { commentAnchorDummyFrom } from "@/domain/model/comment/comment-anchor.dummy";
 import {
   COMMENTS_PER_BRANCH_LIMIT,
+  CommentAlreadyResolvedError,
   CommentLimitExceededError,
   CommentNotFoundError,
 } from "@/domain/model/comment/comment-errors";
@@ -540,6 +541,40 @@ describe("CommentRepository", () => {
 
       expect(fixed.status).toBe("ai-fixed");
       expect(fixed.aiFixedById).toBe("abc123@clients");
+    });
+
+    test("[異常系]読んだあとに解決されたスレッドには印を書かず CommentAlreadyResolvedError（解決のままで、印は付かない）", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+      await commentRepository.create(comment);
+      const now = new Date("2026-11-13T11:00:00.000+09:00");
+
+      // どちらも同じ（古い）状態から作った変更を、解決→印の順に書く
+      await commentRepository.updateResolution(
+        comment.setResolved({ resolved: true, actor: SUZUKI, now }),
+      );
+      await expect(
+        commentRepository.updateAiFixed(
+          comment.setAiFixed({ aiFixed: true, actor: AI, now }),
+        ),
+      ).rejects.toThrow(CommentAlreadyResolvedError);
+
+      const saved = await commentRepository.findByBranchAndId({
+        branch: "feature/a",
+        commentId: comment.id,
+      });
+      expect(saved).toMatchObject({ resolved: true, aiFixedBy: null });
+    });
+
+    test("[異常系]無いコメントに印を書こうとすると CommentNotFoundError（解決済みとは見分ける）", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+
+      await expect(
+        commentRepository.updateAiFixed(
+          comment.setAiFixed({ aiFixed: true, actor: AI, now: deletedAt }),
+        ),
+      ).rejects.toThrow(CommentNotFoundError);
     });
 
     test("[異常系]削除済みのコメントには印を付けず CommentNotFoundError", async () => {

@@ -78,9 +78,13 @@ export class SetCommentAiFixedUseCaseImpl implements SetCommentAiFixedUseCase {
     // 印だけを書き換える（同時に行われた本文の編集・解決を消さない）
     const saved = await this.#commentRepository.updateAiFixed(updated);
 
-    this.#logger.debug("コメントのAI修正済みの印の変更完了", {
+    // 誰が付けた印を、誰が付け外ししたかの痕跡（外すと項目からは前の人が消えるので、ここに残す）
+    this.#logger.info("コメントのAI修正済みの印の変更完了", {
+      branch,
       commentId,
       aiFixed,
+      actorId: reviewer.id,
+      previousAiFixedById: comment.aiFixedById,
     });
 
     return { comment: saved };

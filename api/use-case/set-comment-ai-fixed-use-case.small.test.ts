@@ -16,15 +16,17 @@ const AI = { id: "abc123@clients", name: "AI（fixer）" };
 
 const buildUseCase = (found: ReturnType<typeof commentDummyFrom> | null) => {
   const save = vi.fn((c: unknown) => Promise.resolve(c));
+  const logger = new LoggerDummy();
+  const info = vi.spyOn(logger, "info");
   const useCase = new SetCommentAiFixedUseCaseImpl({
     commentRepository: {
       updateAiFixed: save,
       findByBranchAndId: vi.fn().mockResolvedValue(found),
     } as unknown as CommentRepository,
     fetchNow: buildFetchNowDummy(now),
-    logger: new LoggerDummy(),
+    logger,
   });
-  return { useCase, save };
+  return { useCase, save, info };
 };
 
 describe("SetCommentAiFixedUseCase", () => {
@@ -73,5 +75,30 @@ describe("SetCommentAiFixedUseCase", () => {
       }),
     ).rejects.toThrow(CommentNotFoundError);
     expect(save).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]印を外したとき、外した人と、外す前に付けていた人の利用者IDをログに残す", async () => {
+    const comment = commentDummyFrom({ authorId: YAMADA.id }).setAiFixed({
+      aiFixed: true,
+      actor: AI,
+      now,
+    });
+    const { useCase, info } = buildUseCase(comment);
+
+    const { comment: reverted } = await useCase.execute({
+      branch: comment.branch,
+      commentId: comment.id,
+      aiFixed: false,
+      reviewer: YAMADA,
+    });
+
+    expect(reverted.aiFixedById).toBeNull();
+    expect(info).toHaveBeenCalledWith(expect.any(String), {
+      branch: comment.branch,
+      commentId: comment.id,
+      aiFixed: false,
+      actorId: YAMADA.id,
+      previousAiFixedById: "abc123@clients",
+    });
   });
 });
