@@ -141,9 +141,12 @@ export const CommentSidebar = ({
           {errorMessage}
         </p>
       )}
+      {/* 読み込みに失敗して 0 件のときは、読めていないので「まだありません」とは言わない（上の知らせだけを出す） */}
       {loading && threads.length === 0 ? (
         <p className="p-4 text-sm text-muted">読み込み中…</p>
-      ) : threads.length === 0 && emptyListMessage(status, counts) !== null ? (
+      ) : threads.length === 0 &&
+        errorMessage !== undefined ? null : threads.length === 0 &&
+        emptyListMessage(status, counts) !== null ? (
         <p className="p-6 text-center text-sm text-muted">
           {emptyListMessage(status, counts)}
         </p>
