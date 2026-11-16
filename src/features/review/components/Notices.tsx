@@ -107,7 +107,7 @@ export const CanvasErrorFallback = ({ onRetry }: { onRetry: () => void }) => (
 );
 
 /**
- * 開いていたスレッドが削除されたときの知らせ。返信の書きかけがあれば、写せるように見せる
+ * 開いていた・リンクで開いたスレッドが見つからないときの知らせ。返信の書きかけがあれば、写せるように見せる
  */
 export const DeletedThreadNotice = ({
   draftBody,
@@ -120,7 +120,7 @@ export const DeletedThreadNotice = ({
     role="alert"
     className="absolute top-12 left-1/2 z-40 flex w-80 -translate-x-1/2 flex-col gap-2 rounded-lg border border-line bg-panel p-3 text-sm shadow-xl"
   >
-    <p className="font-bold">{messages.notFound}</p>
+    <p className="font-bold">{messages.threadNotFound}</p>
     {draftBody.trim() !== "" && (
       <label className="flex flex-col gap-1 text-xs text-ink-sub">
         書きかけの返信（コピーして残せます）

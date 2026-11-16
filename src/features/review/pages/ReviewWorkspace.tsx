@@ -207,7 +207,7 @@ export const ReviewWorkspace = ({
     return {
       page,
       cameras,
-      // 削除されたスレッドへのリンクでも ID を残し、「削除されました」と知らせる
+      // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       resolved: thread?.root.resolved ?? false,
       showComponents:

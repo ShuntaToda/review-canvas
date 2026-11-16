@@ -4,6 +4,7 @@ import type { StorySource } from "../model/sources";
 import type { Story } from "../model/storybook";
 import { storyKey } from "../model/storybook";
 import {
+  emptyListMessage,
   isStaleCommit,
   type StatusFilter,
   type Thread,
@@ -142,6 +143,10 @@ export const CommentSidebar = ({
       )}
       {loading && threads.length === 0 ? (
         <p className="p-4 text-sm text-muted">読み込み中…</p>
+      ) : threads.length === 0 && emptyListMessage(status, counts) !== null ? (
+        <p className="p-6 text-center text-sm text-muted">
+          {emptyListMessage(status, counts)}
+        </p>
       ) : threads.length === 0 ? (
         <div className="flex flex-col items-center gap-2 p-6 text-center text-sm text-muted">
           <MessageSquare aria-hidden className="size-6" />

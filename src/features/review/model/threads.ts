@@ -69,6 +69,20 @@ export const filterThreads = (
   );
 
 /**
+ * 一覧が空のときの文言。絞り込み（解決の状態）で 0 件になったときはそう伝え、
+ * そもそもコメントが無いとき（null）は、ピンの置き方の案内を出す
+ */
+export const emptyListMessage = (
+  status: StatusFilter,
+  counts: Record<StatusFilter, number>,
+): string | null => {
+  if (counts.all === 0) return null;
+  if (status === "open") return "未解決のコメントはありません";
+  if (status === "resolved") return "解決済みのコメントはありません";
+  return null;
+};
+
+/**
  * いま表示している Storybook と違うコミットで書かれたか（その後に画面が変わっているかもしれない印）。
  * コミットが分からないときは印を出さない
  */

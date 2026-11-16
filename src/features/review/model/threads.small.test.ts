@@ -1,6 +1,7 @@
 import {
   buildThreads,
   type Comment,
+  emptyListMessage,
   filterThreads,
   isStaleCommit,
   lastActivityAt,
@@ -117,4 +118,29 @@ describe("lastActivityAt", () => {
 
     expect(lastActivityAt(thread!)).toBe("2026-11-13T12:00:00.000+09:00");
   });
+});
+
+describe("emptyListMessage", () => {
+  test.each([
+    {
+      status: "open",
+      counts: { open: 0, resolved: 2, all: 2 },
+      expected: "未解決のコメントはありません",
+    },
+    {
+      status: "resolved",
+      counts: { open: 1, resolved: 0, all: 1 },
+      expected: "解決済みのコメントはありません",
+    },
+    {
+      status: "open",
+      counts: { open: 0, resolved: 0, all: 0 },
+      expected: null,
+    },
+  ] as const)(
+    "[正常系]$status で絞った一覧が空（$counts）なら $expected",
+    ({ status, counts, expected }) => {
+      expect(emptyListMessage(status, counts)).toBe(expected);
+    },
+  );
 });
