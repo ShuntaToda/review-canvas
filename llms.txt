@@ -30,3 +30,4 @@ AI がこのリポジトリを扱うときの入口です。
 - [docs/security.md](docs/security.md): セキュリティの考え方（別のオリジン・ログイン・AI からの書き込みの扱い）
 - [docs/development.md](docs/development.md): 層分け・テスト・検証・リリースと互換性
 - [AGENTS.md](AGENTS.md): コーディングエージェント向けの約束
+- [docs/design-screenshots.md](docs/design-screenshots.md): 設計メモ（コメントにスクリーンショットを残す。まだ作っていない）
