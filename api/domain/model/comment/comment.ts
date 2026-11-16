@@ -48,7 +48,7 @@ export class Comment {
   /**
    * コメントを分ける区画（Git のブランチ名）。ブランチごとにビルドした Storybook へ別々にコメントするため
    *
-   * @example 'feature/application-search'
+   * @example 'feature/order-search'
    */
   readonly branch: string;
 

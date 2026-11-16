@@ -68,7 +68,7 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-            "example": "feature/application-search"
+            "example": "feature/order-search"
           },
           "parentId": {
             "type": "string",
@@ -217,7 +217,7 @@
             "type": "string",
             "nullable": true,
             "maxLength": 200,
-            "description": "アクセシブルな名前（aria-label・aria-labelledby・label・alt・文字）。例: 申し込む"
+            "description": "アクセシブルな名前（aria-label・aria-labelledby・label・alt・文字）。例: 注文する"
           },
           "text": {
             "type": "string",
@@ -526,7 +526,7 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-            "example": "feature/application-search"
+            "example": "feature/order-search"
           },
           "source": {
             "type": "string",
@@ -587,7 +587,7 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-            "example": "feature/application-search"
+            "example": "feature/order-search"
           },
           "body": {
             "type": "string",
@@ -629,7 +629,7 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-            "example": "feature/application-search"
+            "example": "feature/order-search"
           },
           "body": {
             "type": "string",
@@ -652,7 +652,7 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-            "example": "feature/application-search"
+            "example": "feature/order-search"
           },
           "resolved": {
             "type": "boolean",
@@ -866,7 +866,7 @@
               "minLength": 1,
               "maxLength": 200,
               "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-              "example": "feature/application-search"
+              "example": "feature/order-search"
             },
             "required": true,
             "name": "branch",
@@ -1271,7 +1271,7 @@
               "minLength": 1,
               "maxLength": 200,
               "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
-              "example": "feature/application-search"
+              "example": "feature/order-search"
             },
             "required": true,
             "name": "branch",

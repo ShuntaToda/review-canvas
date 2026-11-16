@@ -57,7 +57,7 @@ describe("commentAnchorRequestSchema", () => {
     { name: "文字が上限を超える", patch: { text: "a".repeat(201) } },
     { name: "タグが空", patch: { tag: "" } },
     { name: "知らない版", patch: { version: 2 } },
-    { name: "文字に改行が入る", patch: { text: "申し込む\n次へ" } },
+    { name: "文字に改行が入る", patch: { text: "注文する\n次へ" } },
     { name: "HTML に制御文字が入る", patch: { html: "<b>\u0007</b>" } },
     {
       name: "属性の値に文字の向きを変える制御文字が入る",

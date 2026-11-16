@@ -75,7 +75,7 @@ export const commentAnchorRequestSchema = z
     name: shortText(200)
       .nullable()
       .describe(
-        "アクセシブルな名前（aria-label・aria-labelledby・label・alt・文字）。例: 申し込む",
+        "アクセシブルな名前（aria-label・aria-labelledby・label・alt・文字）。例: 注文する",
       ),
     text: shortText(200)
       .nullable()

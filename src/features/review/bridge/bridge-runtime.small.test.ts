@@ -14,7 +14,7 @@ const setUp = (allowedOrigins: string[] = [CANVAS]) => {
   document.body.append(iframe);
   const frameWindow = iframe.contentWindow;
   if (frameWindow === null) throw new Error("iframe の window がありません");
-  frameWindow.document.body.innerHTML = `<form><button data-testid="submit-button" type="submit">申し込む</button></form>`;
+  frameWindow.document.body.innerHTML = `<form><button data-testid="submit-button" type="submit">注文する</button></form>`;
   const posted: { data: unknown; origin: string }[] = [];
   // vitest の jsdom では、iframe の親（parent）がテストの window と別のものになるため、parent を使う
   const parentWindow = frameWindow.parent;
@@ -125,8 +125,8 @@ describe("installBridge", () => {
       closestTestId: null,
       elementId: null,
       role: "button",
-      name: "申し込む",
-      text: "申し込む",
+      name: "注文する",
+      text: "注文する",
       attributes: {},
       state: { hasValue: null, checked: null, disabled: false },
       selector: "button",

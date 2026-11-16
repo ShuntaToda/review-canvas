@@ -4,7 +4,7 @@
  * コメントの既定の区画（ブランチ）と、コメントに残すコミットに使う
  */
 export type ReviewTarget = {
-  /** @example 'feature/application-search' */
+  /** @example 'feature/order-search' */
   branch: string;
   /** 短いコミットハッシュ。分からなければ 'unknown' */
   commit: string;

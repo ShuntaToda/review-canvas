@@ -13,10 +13,10 @@ import {
 import type { CommentAnchor } from "./threads";
 
 const STORY = {
-  id: "features-application--default",
-  title: "Features/Application",
+  id: "shop-orderform--default",
+  title: "Shop/OrderForm",
   name: "Default",
-  importPath: "./src/features/application/Application.stories.tsx",
+  importPath: "./src/pages/OrderForm.stories.tsx",
 };
 
 /** jsdom は配置を計算しないので、要素の矩形を決めておく */
@@ -51,8 +51,8 @@ describe("captureAnchor", () => {
     document.body.innerHTML = `
       <main>
         <h2>ご注文内容の確認</h2>
-        <form aria-label="ご注文内容" data-testid="application-form">
-          <button id="submit" type="submit" data-testid="submit-button" class="btn"><span id="label">申し込む</span><svg><path id="icon"></path></svg></button>
+        <form aria-label="ご注文内容" data-testid="order-form">
+          <button id="submit" type="submit" data-testid="submit-button" class="btn"><span id="label">注文する</span><svg><path id="icon"></path></svg></button>
         </form>
       </main>`;
     setRect(document.body, { left: 0, top: 0, width: 390, height: 844 });
@@ -71,8 +71,8 @@ describe("captureAnchor", () => {
       closestTestId: { testId: "submit-button", depth: 0 },
       elementId: "submit",
       role: "button",
-      name: "申し込む",
-      text: "申し込む",
+      name: "注文する",
+      text: "注文する",
       attributes: { type: "submit" },
       state: { hasValue: null, checked: null, disabled: false },
       selector: '[data-testid="submit-button"]',
@@ -93,7 +93,7 @@ describe("captureAnchor", () => {
       tag: "form",
       role: "form",
       name: "ご注文内容",
-      testId: "application-form",
+      testId: "order-form",
     });
     expect(anchor?.nthPath).toBe(
       "html > body > main:nth-of-type(1) > form:nth-of-type(1) > button:nth-of-type(1)",
@@ -198,7 +198,7 @@ describe("captureAnchor", () => {
         storyStoreValue: {
           args: {
             get: (id: string) =>
-              id === STORY.id ? { label: "申し込む", onClick: () => 0 } : {},
+              id === STORY.id ? { label: "注文する", onClick: () => 0 } : {},
           },
           userGlobals: { get: () => ({ locale: "ja" }) },
         },
@@ -212,7 +212,7 @@ describe("captureAnchor", () => {
     });
 
     expect(anchor?.story.args).toBe(
-      '{"label":"申し込む","onClick":"[Function]"}',
+      '{"label":"注文する","onClick":"[Function]"}',
     );
     expect(anchor?.story.globals).toBe('{"locale":"ja"}');
   });
@@ -298,7 +298,7 @@ describe("cssSelectorOf・nthPathOf", () => {
 describe("componentChainOf", () => {
   test("[正常系]React の fiber をたどり、外側からのコンポーネント名にする（4 文字未満の縮めた名前・Context・Provider は除き、memo・forwardRef は名前で読む）", () => {
     document.body.innerHTML = `<button id="b">x</button>`;
-    const ApplicationForm = () => null;
+    const OrderForm = () => null;
     const SubmitButton = () => null;
     const e = () => null;
     const fiber = {
@@ -315,7 +315,7 @@ describe("componentChainOf", () => {
                 type: Object.assign(() => null, { displayName: "Ave" }),
                 return: {
                   type: { displayName: "ThemeProvider" },
-                  return: { type: ApplicationForm, return: null },
+                  return: { type: OrderForm, return: null },
                 },
               },
             },
@@ -326,7 +326,7 @@ describe("componentChainOf", () => {
     Object.assign(byId("b"), { __reactFiber$abc123: fiber });
 
     expect(componentChainOf(byId("b"))).toStrictEqual([
-      "ApplicationForm",
+      "OrderForm",
       "FieldGroup",
       "SubmitButton",
     ]);
@@ -338,12 +338,12 @@ describe("componentChainOf", () => {
       enumerable: false,
       value: {
         type: { __name: "SubmitButton" },
-        parent: { type: { name: "ApplicationForm" }, parent: null },
+        parent: { type: { name: "OrderForm" }, parent: null },
       },
     });
 
     expect(componentChainOf(byId("b"))).toStrictEqual([
-      "ApplicationForm",
+      "OrderForm",
       "SubmitButton",
     ]);
   });

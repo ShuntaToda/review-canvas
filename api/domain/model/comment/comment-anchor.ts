@@ -34,7 +34,7 @@ export type CommentAnchor = {
   elementId: string | null;
   /** ロール（role 属性、無ければタグから決まるロール）。@example 'button' */
   role: string | null;
-  /** アクセシブルな名前。@example '申し込む' */
+  /** アクセシブルな名前。@example '注文する' */
   name: string | null;
   /** 見えている文字（200 字まで） */
   text: string | null;

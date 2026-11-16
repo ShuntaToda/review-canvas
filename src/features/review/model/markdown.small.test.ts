@@ -225,8 +225,8 @@ const anchor = (props?: Partial<CommentAnchor>): CommentAnchor => ({
   closestTestId: { testId: "submit-button", depth: 0 },
   elementId: null,
   role: "button",
-  name: "申し込む",
-  text: "申し込む",
+  name: "注文する",
+  text: "注文する",
   attributes: { type: "submit" },
   state: { hasValue: null, checked: null, disabled: false },
   selector: '[data-testid="submit-button"]',
@@ -239,13 +239,13 @@ const anchor = (props?: Partial<CommentAnchor>): CommentAnchor => ({
   box: { x: 40.4, y: 600, width: 310, height: 48 },
   offset: { x: 0.5, y: 0.25 },
   styles: { "font-size": "16px", "font-weight": "700", display: "flex" },
-  html: '<button type="submit" data-testid="submit-button">申し込む</button>',
-  components: ["ApplicationForm", "SubmitButton"],
+  html: '<button type="submit" data-testid="submit-button">注文する</button>',
+  components: ["OrderForm", "SubmitButton"],
   story: {
     title: "Features/Search",
     name: "Default",
     importPath: "./src/features/search/Search.stories.tsx",
-    args: '{"label":"申し込む"}',
+    args: '{"label":"注文する"}',
     globals: null,
   },
   ...props,
@@ -267,10 +267,10 @@ describe("buildMarkdown（要素の手がかり）", () => {
     expect(markdown).toContain(
       [
         "  > 色が違う",
-        "  - 対象の要素: button「申し込む」（data-testid `submit-button`）",
+        "  - 対象の要素: button「注文する」（data-testid `submit-button`）",
         "    - 画面: Features/Search / Default（`./src/features/search/Search.stories.tsx`）・幅 1280px・コミット `abc1234`",
         '    - セレクタ: `[data-testid="submit-button"]`',
-        "    - 文字: 申し込む",
+        "    - 文字: 注文する",
         "    - 場所: 見出し「ご注文内容の確認」の下・form「ご注文内容」の中",
         "    - 矩形: x 40, y 600, 310×48（画面の左上からの px）",
         "    - 見た目: `font-size: 16px; font-weight: 700`",
@@ -313,10 +313,10 @@ describe("buildMarkdown（要素の手がかり）", () => {
     expect(markdown).toContain("- 書いたときの幅: 1280px・コミット `abc1234`");
     expect(markdown).toContain("  - data-testid: `submit-button`");
     expect(markdown).toContain(
-      "  - タグ・ロール・名前: `button`・`button`・申し込む",
+      "  - タグ・ロール・名前: `button`・`button`・注文する",
     );
     expect(markdown).toContain(
-      "  - コンポーネント（外側から。読めたときだけ）: `ApplicationForm > SubmitButton`",
+      "  - コンポーネント（外側から。読めたときだけ）: `OrderForm > SubmitButton`",
     );
     expect(markdown).toContain(
       "  - 祖先（近い順）: `form「ご注文内容」[data-testid=form]`",
@@ -327,12 +327,12 @@ describe("buildMarkdown（要素の手がかり）", () => {
     expect(markdown).toContain(
       "  - 見た目（計算後の値）: `font-size: 16px; font-weight: 700; display: flex`",
     );
-    expect(markdown).toContain('  - args: `{"label":"申し込む"}`');
+    expect(markdown).toContain('  - args: `{"label":"注文する"}`');
     expect(markdown).toContain(
       [
         "  - HTML（抜き出し）:",
         "    ```html",
-        '    <button type="submit" data-testid="submit-button">申し込む</button>',
+        '    <button type="submit" data-testid="submit-button">注文する</button>',
         "    ```",
       ].join("\n"),
     );

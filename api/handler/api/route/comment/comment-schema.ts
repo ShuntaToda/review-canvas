@@ -27,7 +27,7 @@ const branchSchema = z
   .refine((branch) => !branch.includes(".."), {
     message: "ブランチ名に .. は使えません",
   })
-  .openapi({ example: "feature/application-search" });
+  .openapi({ example: "feature/order-search" });
 
 /**
  * 改行とタブのほかに、制御文字（U+0000–001F・U+007F–009F）と、行・段落の区切り、文字の向きを変える制御文字（U+202A–202E・U+2066–2069）を含まない（本文は改行してよい）。

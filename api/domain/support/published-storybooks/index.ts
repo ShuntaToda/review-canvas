@@ -4,7 +4,7 @@ import type { StorySource } from "@/domain/model/comment/comment";
  * 配信に置いたブランチごとの Storybook（ビルドしたコミット・日時と、置いた Storybook）
  */
 export type PublishedBranch = {
-  /** @example 'feature/application-search' */
+  /** @example 'feature/order-search' */
   branch: string;
   /** ビルドした短いコミットハッシュ。分からなければ 'unknown' */
   commit: string;

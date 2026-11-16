@@ -68,20 +68,20 @@ const anchorOf = (html: string, selector: string): CommentAnchor => {
 describe("locateAnchor", () => {
   test("[正常系]data-testid が同じ要素を、並びが変わっても見つける", () => {
     const anchor = anchorOf(
-      `<form><button data-testid="submit">申し込む</button></form>`,
+      `<form><button data-testid="submit">注文する</button></form>`,
       "button",
     );
-    document.body.innerHTML = `<div><p>前に足した文</p><section><button data-testid="submit">申し込む</button></section></div>`;
+    document.body.innerHTML = `<div><p>前に足した文</p><section><button data-testid="submit">注文する</button></section></div>`;
 
-    expect(locateAnchor(document, anchor)?.textContent).toBe("申し込む");
+    expect(locateAnchor(document, anchor)?.textContent).toBe("注文する");
   });
 
   test("[正常系]data-testid が無くなっても、ロールと名前が同じ要素を見つける", () => {
     const anchor = anchorOf(
-      `<button data-testid="old">戻る</button><button data-testid="submit">申し込む</button>`,
+      `<button data-testid="old">戻る</button><button data-testid="submit">注文する</button>`,
       '[data-testid="submit"]',
     );
-    document.body.innerHTML = `<button>戻る</button><button class="primary">申し込む</button>`;
+    document.body.innerHTML = `<button>戻る</button><button class="primary">注文する</button>`;
 
     expect(locateAnchor(document, anchor)?.className).toBe("primary");
   });
@@ -174,10 +174,10 @@ describe("locateAnchor", () => {
 
   test("[異常系]描かれていない（大きさが 0 の）要素は採らず、ほかに無ければ null", () => {
     const anchor = anchorOf(
-      `<button data-testid="submit">申し込む</button>`,
+      `<button data-testid="submit">注文する</button>`,
       "button",
     );
-    document.body.innerHTML = `<button data-testid="submit" id="hidden">申し込む</button><button data-testid="submit" id="shown">申し込む</button>`;
+    document.body.innerHTML = `<button data-testid="submit" id="hidden">注文する</button><button data-testid="submit" id="shown">注文する</button>`;
     const hidden = document.getElementById("hidden");
     const shown = document.getElementById("shown");
     if (hidden === null || shown === null)
@@ -192,10 +192,10 @@ describe("locateAnchor", () => {
 
   test("[異常系]種類（タグ・ロール）が違う要素は採らず、見つからなければ null", () => {
     const anchor = anchorOf(
-      `<button data-testid="submit">申し込む</button>`,
+      `<button data-testid="submit">注文する</button>`,
       "button",
     );
-    document.body.innerHTML = `<a data-testid="submit" href="/x">申し込む</a>`;
+    document.body.innerHTML = `<a data-testid="submit" href="/x">注文する</a>`;
 
     expect(locateAnchor(document, anchor)).toBeNull();
     document.body.innerHTML = `<p>別の画面</p>`;
@@ -205,7 +205,7 @@ describe("locateAnchor", () => {
 
 describe("pinOnElement", () => {
   test("[正常系]見つけた要素の上で、置いたときと同じ割合の位置にピンを置く（幅が変わっても追いかける）", () => {
-    const anchor = anchorOf(`<button>申し込む</button>`, "button");
+    const anchor = anchorOf(`<button>注文する</button>`, "button");
     expect(anchor.offset).toStrictEqual({ x: 0.25, y: 0.25 });
     const button = document.querySelector("button");
     if (button === null) throw new Error("ボタンがありません");
@@ -281,7 +281,7 @@ describe("mergeLocatedPins", () => {
 
 describe("describeAnchor", () => {
   test.each([
-    [`<button>申し込む</button>`, "button", "button「申し込む」"],
+    [`<button>注文する</button>`, "button", "button「注文する」"],
     [
       `<label for="n">お名前</label><input id="n">`,
       "input",

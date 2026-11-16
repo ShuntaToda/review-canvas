@@ -2,7 +2,7 @@ import { clip } from "./anchor-dom";
 import type { CommentAnchor } from "./threads";
 
 /**
- * 要素を一言で表す（例: button「申し込む」・textbox「お名前」（input））。
+ * 要素を一言で表す（例: button「注文する」・textbox「お名前」（input））。
  * ロール（無ければタグ）と、名前（無ければ見えている文字）で書く。ロールとタグが違えばタグを添える
  */
 export const describeAnchor = (anchor: CommentAnchor): string => {
@@ -22,7 +22,7 @@ export const describeRegion = (
     ? region.kind
     : `${region.kind}「${clip(region.label, 40)}」`;
 
-/** 祖先 1 段を一言で（例: form「ご注文内容」[data-testid=application-form]） */
+/** 祖先 1 段を一言で（例: form「ご注文内容」[data-testid=order-form]） */
 export const describeAncestor = (
   ancestor: CommentAnchor["ancestors"][number],
 ): string => {

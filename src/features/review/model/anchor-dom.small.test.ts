@@ -3,8 +3,8 @@ import { attributeValue, clip, queryAll } from "./anchor-dom";
 
 describe("clip", () => {
   test("[正常系]制御文字・改行・文字の向きを変える制御文字は空白にして 1 行にまとめる", () => {
-    expect(clip(" 申し込む\n\t次へ\u0007‮です ", 40)).toBe(
-      "申し込む 次へ です",
+    expect(clip(" 注文する\n\t次へ\u0007‮です ", 40)).toBe(
+      "注文する 次へ です",
     );
   });
 
