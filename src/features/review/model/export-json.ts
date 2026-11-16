@@ -16,9 +16,38 @@ export type ExportFormat = MarkdownFormat | "json";
 export const EXPORT_JSON_VERSION = 1;
 
 /**
- * 書き出した JSON の 1 スレッド。API の `GET /api/threads` の 1 件（Thread）と同じ項目に、
+ * 書き出した JSON の 1 スレッド。API の `GET /api/threads` の 1 件（Thread）から利用者ID を除き、
  * ページの名前と、開くための URL を足したもの
  */
+/**
+ * 書き出すコメント。項目を 1 つずつ挙げて写す（API に項目が足されても、決めずに書き出しへ出ていかない）。
+ * 利用者ID（authorId・aiFixedById）は出さない。名前（author など）には、名前のクレームが無い人ではメールアドレスが入る
+ */
+export type ExportedComment = Omit<Comment, "authorId" | "aiFixedById">;
+
+const exportComment = (comment: Comment): ExportedComment => ({
+  id: comment.id,
+  branch: comment.branch,
+  parentId: comment.parentId,
+  source: comment.source,
+  storyId: comment.storyId,
+  x: comment.x,
+  y: comment.y,
+  frameWidth: comment.frameWidth,
+  ...(comment.anchor === undefined ? {} : { anchor: comment.anchor }),
+  body: comment.body,
+  author: comment.author,
+  commit: comment.commit,
+  resolved: comment.resolved,
+  resolvedBy: comment.resolvedBy,
+  resolvedAt: comment.resolvedAt,
+  status: comment.status,
+  aiFixedBy: comment.aiFixedBy,
+  aiFixedAt: comment.aiFixedAt,
+  createdAt: comment.createdAt,
+  updatedAt: comment.updatedAt,
+});
+
 export type ExportedThread = {
   number: number;
   status: ThreadStatus;
@@ -39,8 +68,8 @@ export type ExportedThread = {
     storyIframe: string | null;
     storybook: string | null;
   };
-  root: Comment;
-  replies: Comment[];
+  root: ExportedComment;
+  replies: ExportedComment[];
 };
 
 export type ExportedJson = {
@@ -110,8 +139,8 @@ export const buildExportData = ({
             ? null
             : storybookUrl(storybookBase, root.source, root.storyId),
       },
-      root,
-      replies,
+      root: exportComment(root),
+      replies: replies.map(exportComment),
     };
   }),
 });

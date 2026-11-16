@@ -108,8 +108,14 @@ export const Toolbar = ({
           >
             {sources.get(source).label}
             {(openCounts[source] ?? 0) > 0 && (
-              <span className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white">
-                {openCounts[source]}
+              <span
+                className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white"
+                title={`未解決・確認待ち ${openCounts[source]} 件`}
+              >
+                <span aria-hidden="true">{openCounts[source]}</span>
+                <span className="sr-only">
+                  （未解決・確認待ち {openCounts[source]} 件）
+                </span>
               </span>
             )}
           </button>

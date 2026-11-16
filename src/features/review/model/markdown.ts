@@ -125,7 +125,7 @@ const threadLines = ({
         ]),
   ].join(" ");
   // AI 修正済み（確認待ち）は、まだ人が確かめていないのでチェックを付けず、印だけ添える
-  const head = `- [${root.resolved ? "x" : " "}] **#${number}**${root.status === "ai-fixed" ? `（${STATUS_LABELS["ai-fixed"]}）` : ""} ${inline(story?.name ?? root.anchor?.story.name ?? root.storyId)}（${inline(root.author)}・${formatDateTime(root.createdAt)}）${links}`;
+  const head = `- [${root.resolved ? "x" : " "}] **#${number}**${root.status === "ai-fixed" ? AI_FIXED_MARK : ""} ${inline(story?.name ?? root.anchor?.story.name ?? root.storyId)}（${inline(root.author)}・${formatDateTime(root.createdAt)}）${links}`;
   return [
     head,
     ...indentBody(root.body, "  "),
@@ -142,6 +142,9 @@ const threadLines = ({
     ]),
   ];
 };
+
+/** Issue の形で番号の後ろに添える印（名前の中の括弧を・にして、括弧を重ねない）: （AI 修正済み・確認待ち） */
+const AI_FIXED_MARK = `（${STATUS_LABELS["ai-fixed"].replace("（", "・").replace("）", "")}）`;
 
 /**
  * Issue の形で添える、ピンが指している要素の要約（AI・人が画面とコードの場所を特定できる最小限）

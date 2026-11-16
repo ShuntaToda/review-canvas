@@ -66,7 +66,43 @@ const base = {
   storybookBase: "http://localhost:4102/sb/",
 };
 
+/** 書き出しに出る形（利用者ID を除いたもの） */
+const exported = (c: Comment) => {
+  const { authorId: _authorId, aiFixedById: _aiFixedById, ...rest } = c;
+  return rest;
+};
+
 describe("buildExportData", () => {
+  test("[正常系]コメントの項目は挙げたものだけを写し、利用者ID と、挙げていない項目は出さない", () => {
+    const root = {
+      ...comment({
+        id: "01",
+        authorId: "auth0|secret-author",
+        status: "ai-fixed",
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "secret-client@clients",
+        aiFixedAt: "2026-11-13T11:00:00.000+09:00",
+      }),
+      // API にあとから足された項目のつもり
+      internalNote: "secret-note",
+    };
+    const reply = comment({
+      id: "02",
+      parentId: "01",
+      authorId: "auth0|secret-replier",
+    });
+
+    const text = buildExportJson({
+      ...base,
+      threads: buildThreads([root, reply]),
+    });
+
+    expect(text).not.toContain("secret-");
+    expect(text).not.toContain("authorId");
+    expect(text).not.toContain("aiFixedById");
+    expect(text).toContain("AI（fixer）");
+  });
+
   test("[正常系]スレッドごとに、通し番号・状態・ストーリー（ファイル）・開く URL・最初のコメントと返信をそのまま持つ", () => {
     const root = comment({ id: "01", body: "ボタンの文言が違う" });
     const reply = comment({ id: "02", parentId: "01", body: "直しました" });
@@ -108,8 +144,8 @@ describe("buildExportData", () => {
             storybook:
               "http://localhost:4102/sb/shop/?path=/story/features-search--default",
           },
-          root,
-          replies: [reply],
+          root: exported(root),
+          replies: [exported(reply)],
         },
         {
           number: 2,
@@ -130,7 +166,7 @@ describe("buildExportData", () => {
             storybook:
               "http://localhost:4102/sb/shop/?path=/story/features-search--default",
           },
-          root: fixed,
+          root: exported(fixed),
           replies: [],
         },
       ],
