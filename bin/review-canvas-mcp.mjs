@@ -13,8 +13,9 @@
 //                                  … Auth0 の client credentials で自分で取り、期限まで使い回す（docs/auth0.md）
 //   REVIEW_CANVAS_DEV_NAME         … 手元の擬似ログイン（API が localhost のときだけ）。「AI（<名前>）」として書く
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const SERVER_NAME = "review-canvas";
 export const SERVER_VERSION = "0.0.0";
@@ -255,6 +256,8 @@ export const buildTokenProvider = ({ env, fetch, now, local }) => {
             client_secret: clientSecret,
             audience,
           }),
+          // Client Secret を、テナントのドメインのほかへ持ち出さない（転送は追わない）
+          redirect: "error",
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
       } catch {
@@ -449,16 +452,38 @@ export const createServer = ({
       const commentId = commentIdOf(args);
       const branch = branchOf(args);
       const replyBody = optionalString(args, "reply");
+      const hasReply = replyBody !== undefined && replyBody.trim() !== "";
+      if (hasReply) {
+        // 解決済みには印を付けられない（409）。返信だけが残らないよう、書く前に確かめる
+        const thread = await call("GET", `/threads/${commentId}`, {
+          query: { branch },
+        });
+        if (thread?.status === "resolved") {
+          throw new ToolError(
+            "このスレッドは解決済みです。返信も印も付けていません（人が再開してから、もう一度呼んでください）",
+          );
+        }
+      }
       // 返信してから印を付ける（確かめる人が、印を見たときには何を直したかを読める）
-      const reply =
-        replyBody === undefined || replyBody.trim() === ""
-          ? undefined
-          : await call("POST", `/comments/${commentId}/replies`, {
-              body: { branch, body: replyBody },
-            });
-      const comment = await call("PUT", `/comments/${commentId}/ai-fixed`, {
-        body: { branch, aiFixed: true },
-      });
+      const reply = hasReply
+        ? await call("POST", `/comments/${commentId}/replies`, {
+            body: { branch, body: replyBody },
+          })
+        : undefined;
+      let comment;
+      try {
+        comment = await call("PUT", `/comments/${commentId}/ai-fixed`, {
+          body: { branch, aiFixed: true },
+        });
+      } catch (error) {
+        // 確かめたあとに人が解決にした、などで印だけが弾かれたとき。返信を重ねて書かせない
+        if (error instanceof ToolError && reply !== undefined) {
+          throw new ToolError(
+            `${error.message}。返信は投稿済みです（replyId: ${reply?.id}）。印は付いていません。同じ返信をもう一度書かないでください`,
+          );
+        }
+        throw error;
+      }
       return {
         status: comment?.status,
         aiFixedBy: comment?.aiFixedBy,
@@ -469,7 +494,11 @@ export const createServer = ({
   };
 
   const callTool = async (params) => {
-    const tool = tools[params?.name];
+    // 自分の道具だけを引く（"constructor"・"__proto__" などの継いだ名前を道具として呼ばない）
+    const tool =
+      typeof params?.name === "string" && Object.hasOwn(tools, params.name)
+        ? tools[params.name]
+        : undefined;
     if (tool === undefined) {
       return {
         content: [{ type: "text", text: `知らない道具です: ${params?.name}` }],
@@ -538,7 +567,9 @@ export const createServer = ({
       };
     }
     const isNotification = !("id" in message);
-    const method = methods[message.method];
+    const method = Object.hasOwn(methods, message.method)
+      ? methods[message.method]
+      : undefined;
     if (method === undefined) {
       return isNotification
         ? undefined
@@ -595,9 +626,16 @@ const main = () => {
   });
 };
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+/** このファイルが node に直接渡されたか（node_modules/.bin などのシンボリックリンク越しでも、実体で比べる） */
+export const isMain = (argv1, moduleUrl = import.meta.url) => {
+  if (argv1 === undefined) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+};
+
+if (isMain(process.argv[1])) {
   main();
 }

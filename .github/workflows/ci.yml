@@ -54,6 +54,14 @@ jobs:
       - name: CLI
         run: node bin/review-canvas.mjs --help
 
+      # MCP サーバーが、シンボリックリンク越し（node_modules/.bin と同じ形）に起こしても ping に答えることを確かめる（API にはつながない）
+      - name: MCP server
+        run: |
+          set -euo pipefail
+          ln -s "$PWD/bin/review-canvas-mcp.mjs" "$RUNNER_TEMP/review-canvas-mcp"
+          answer="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' | node "$RUNNER_TEMP/review-canvas-mcp")"
+          test "$answer" = '{"jsonrpc":"2.0","id":1,"result":{}}'
+
   # ワークフローの書き方と run のシェルを確かめる（shellcheck はランナーに入っているものを使う）
   actionlint:
     runs-on: ubuntu-latest

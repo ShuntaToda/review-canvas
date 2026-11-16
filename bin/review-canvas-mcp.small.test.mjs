@@ -1,8 +1,13 @@
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 import {
   buildDevToken,
   createServer,
   handleLine,
+  isMain,
   parseApiUrl,
   TOOLS,
 } from "./review-canvas-mcp.mjs";
@@ -135,6 +140,41 @@ describe("MCP の手続き", () => {
   });
 });
 
+describe("継いだ名前・起動の判定", () => {
+  test.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "[異常系]メソッド名 %s（オブジェクトが継いだ名前）は、知らないメソッドとして -32601 を返す",
+    async (method) => {
+      const { server } = setUp();
+
+      const response = await server.handle({ jsonrpc: "2.0", id: 9, method });
+
+      expect(response).toMatchObject({ id: 9, error: { code: -32601 } });
+    },
+  );
+
+  test("[正常系]シンボリックリンク越し（node_modules/.bin など）に起こしても、直接起こしたと判定する", () => {
+    const file = fileURLToPath(
+      new URL("./review-canvas-mcp.mjs", import.meta.url),
+    );
+    const dir = mkdtempSync(join(tmpdir(), "review-canvas-mcp-"));
+    try {
+      const link = join(dir, "review-canvas-mcp");
+      symlinkSync(file, link);
+
+      expect(isMain(link)).toBe(true);
+      expect(isMain(file)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("[異常系]ほかのファイルから読み込まれたとき・引数が無いとき・無いパスは、直接起こしたと判定しない", () => {
+    expect(isMain(fileURLToPath(import.meta.url))).toBe(false);
+    expect(isMain(undefined)).toBe(false);
+    expect(isMain("/no/such/file.mjs")).toBe(false);
+  });
+});
+
 describe("list_open_comments", () => {
   test("[正常系]既定では、git のブランチの未解決のスレッドを X-Authorization のトークンで読み、応答をそのまま返す", async () => {
     const threads = { branch: "feature/a", total: 0, items: [] };
@@ -176,6 +216,17 @@ describe("list_open_comments", () => {
       `https://canvas.example.com/api/threads?branch=arg-branch&status=ai-fixed&source=shop&storyId=pages-login--default&limit=5&cursor=${COMMENT_ID}`,
     );
     expect(request(1).url).toContain("branch=env-branch");
+  });
+
+  test("[正常系]status が all なら、状態で絞らずに読む（all をそのまま渡す）", async () => {
+    const { callTool, request } = setUp({ responses: [json(200, {})] });
+
+    const result = await callTool("list_open_comments", { status: "all" });
+
+    expect(result.isError).toBeUndefined();
+    expect(request().url).toBe(
+      "https://canvas.example.com/api/threads?branch=main&status=all",
+    );
   });
 
   test.each([
@@ -260,6 +311,7 @@ describe("get_comment・reply・mark_ai_fixed", () => {
   test("[正常系]mark_ai_fixed は、返信を書いてから印を付け、状態と付けた人を返す", async () => {
     const { callTool, request, fetch } = setUp({
       responses: [
+        json(200, { status: "open" }),
         json(201, { id: "REPLY" }),
         json(200, {
           status: "ai-fixed",
@@ -274,13 +326,17 @@ describe("get_comment・reply・mark_ai_fixed", () => {
       reply: "文言を直しました",
     });
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(request(0)).toMatchObject({
+      url: `https://canvas.example.com/api/threads/${COMMENT_ID}?branch=main`,
+      method: "GET",
+    });
+    expect(request(1)).toMatchObject({
       url: `https://canvas.example.com/api/comments/${COMMENT_ID}/replies`,
       method: "POST",
       body: { branch: "main", body: "文言を直しました" },
     });
-    expect(request(1)).toMatchObject({
+    expect(request(2)).toMatchObject({
       url: `https://canvas.example.com/api/comments/${COMMENT_ID}/ai-fixed`,
       method: "PUT",
       body: { branch: "main", aiFixed: true },
@@ -305,8 +361,11 @@ describe("get_comment・reply・mark_ai_fixed", () => {
   });
 
   test("[異常系]mark_ai_fixed の返信が失敗したら、印を付けない", async () => {
-    const { callTool, fetch } = setUp({
-      responses: [json(404, { error: "CommentNotFoundError", message: "" })],
+    const { callTool, fetch, request } = setUp({
+      responses: [
+        json(200, { status: "open" }),
+        json(404, { error: "CommentNotFoundError", message: "" }),
+      ],
     });
 
     const result = await callTool("mark_ai_fixed", {
@@ -315,7 +374,46 @@ describe("get_comment・reply・mark_ai_fixed", () => {
     });
 
     expect(result.isError).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(request(1).method).toBe("POST");
+  });
+
+  test("[異常系]mark_ai_fixed は、解決済みのスレッドには返信も印も書かない（返信だけが残らないように）", async () => {
+    const { callTool, fetch, request } = setUp({
+      responses: [json(200, { status: "resolved" })],
+    });
+
+    const result = await callTool("mark_ai_fixed", {
+      commentId: COMMENT_ID,
+      reply: "直しました",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("解決済み");
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(request(0).method).toBe("GET");
+  });
+
+  test("[異常系]mark_ai_fixed は、返信のあとで印が弾かれたら（409）、返信は投稿済みだと伝える", async () => {
+    const { callTool, fetch } = setUp({
+      responses: [
+        json(200, { status: "open" }),
+        json(201, { id: "REPLY" }),
+        json(409, { error: "CommentAlreadyResolvedError", message: "" }),
+      ],
+    });
+
+    const result = await callTool("mark_ai_fixed", {
+      commentId: COMMENT_ID,
+      reply: "直しました",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("409");
+    expect(result.content[0].text).toContain(
+      "返信は投稿済みです（replyId: REPLY）",
+    );
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   test.each([
@@ -324,6 +422,9 @@ describe("get_comment・reply・mark_ai_fixed", () => {
     ["reply", { commentId: COMMENT_ID }],
     ["mark_ai_fixed", {}],
     ["resolve", { commentId: COMMENT_ID }],
+    ["constructor", { commentId: COMMENT_ID }],
+    ["toString", {}],
+    ["__proto__", {}],
   ])(
     "[異常系]%s に誤った引数（%j）を渡すと、API を呼ばずに失敗を返す",
     async (name, args) => {
@@ -401,6 +502,8 @@ describe("API の URL とトークン", () => {
         audience: "https://review-canvas.example.com/api",
       },
     });
+    // Client Secret を載せた送信は、転送を追わない
+    expect(request(0).redirect).toBe("error");
     expect(request(1).headers["X-Authorization"]).toBe("Bearer m2m-token");
     expect(request(2).headers["X-Authorization"]).toBe("Bearer m2m-token");
   });
