@@ -45,6 +45,14 @@ describe("retryCommentsOnError", () => {
     expect(schedule).not.toHaveBeenCalled();
   });
 
+  test("[正常系]入力の誤り（400。受け付けないブランチ名など）は読み直さない", () => {
+    const schedule = vi.fn();
+
+    retryCommentsOnError(errorOf(400), vi.fn(), schedule);
+
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
   test("[正常系]本人ではない失敗（403・CommentNotAuthorError）は読み直す（ログインの問題ではない）", () => {
     const schedule = vi.fn();
 

@@ -10,7 +10,12 @@ import {
   type StorySource,
 } from "../model/sources";
 import { DEFAULT_STORYBOOK_BASE } from "../model/storybook";
-import { parseUrlState, type UrlState } from "../model/url-state";
+import {
+  buildSearch,
+  isBranchName,
+  parseUrlState,
+  type UrlState,
+} from "../model/url-state";
 import { ReviewWorkspace } from "./ReviewWorkspace";
 import { messages } from "@/constants/messages";
 import { LoginAgainButton, useAuth } from "@/support/auth";
@@ -37,7 +42,15 @@ export const ReviewPage = ({
   if (urlState.branch === undefined && meta.data !== undefined) {
     setUrlState({ ...urlState, branch: meta.data.defaultBranch });
   }
-  const branch = urlState.branch ?? meta.data?.defaultBranch;
+  // API が受け付けない名前（?branch= の打ち間違い等）は、読みに行かずに知らせる（API は毎回 400 を返すため）
+  const invalidBranch =
+    urlState.branch !== undefined && !isBranchName(urlState.branch)
+      ? urlState.branch
+      : undefined;
+  const branch =
+    invalidBranch === undefined
+      ? (urlState.branch ?? meta.data?.defaultBranch)
+      : undefined;
   const published =
     meta.data?.branches.find((b) => b.branch === branch) ?? null;
   // iframe・リンク・ストーリーの一覧は Storybook のオリジンから読む（キャンバスのオリジンでは配らない）
@@ -86,6 +99,31 @@ export const ReviewPage = ({
       >
         API に接続できません。手元では `pnpm run serve`（開発中は `pnpm run
         dev`）で起動しているか確かめてください。
+      </FullScreenMessage>
+    );
+  }
+  if (invalidBranch !== undefined) {
+    return (
+      <FullScreenMessage
+        action={
+          <button
+            type="button"
+            className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-panel-sub"
+            onClick={() => {
+              const { branch: _invalid, ...rest } = urlState;
+              window.history.replaceState(
+                null,
+                "",
+                `${window.location.pathname}${buildSearch(rest)}`,
+              );
+              setUrlState(rest);
+            }}
+          >
+            既定のブランチを開く
+          </button>
+        }
+      >
+        {messages.invalidBranch(invalidBranch)}
       </FullScreenMessage>
     );
   }

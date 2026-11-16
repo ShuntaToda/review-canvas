@@ -13,6 +13,9 @@ export const messages = {
   /** 使ってよい人ではない（ReviewerNotAllowedError。403） */
   notAllowed:
     "このアカウントでは使えません。招待されたアカウントでログインしてください",
+  /** URL の ?branch= が API の受け付けない名前 */
+  invalidBranch: (branch: string) =>
+    `ブランチ名「${branch}」は開けません。英数字で始まり、英数字と . _ - / だけの名前（.. を含まない・200 文字まで）にしてください`,
   /** 入力の誤り（400） */
   invalid: "入力を確かめてください",
   /** サーバーにつながらない（fetch そのものの失敗） */

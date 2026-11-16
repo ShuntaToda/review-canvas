@@ -14,6 +14,18 @@ export type UrlState = {
   comment?: string;
 };
 
+/** ブランチ名の長さの上限（API の branch と同じ） */
+const BRANCH_MAX_LENGTH = 200;
+
+/**
+ * API が受け付けるブランチ名か（API の comment-schema.ts の branch と同じ規則。英数字で始まり、英数字と「. _ - /」だけ・.. を含まない）。
+ * 受け付けない名前は API が毎回 400 を返すので、読みに行かずに画面で知らせる
+ */
+export const isBranchName = (branch: string): boolean =>
+  branch.length <= BRANCH_MAX_LENGTH &&
+  /^[A-Za-z0-9][A-Za-z0-9._\-/]*$/.test(branch) &&
+  !branch.includes("..");
+
 export const parseUrlState = (search: string): UrlState => {
   const params = new URLSearchParams(search);
   const page = params.get("page");

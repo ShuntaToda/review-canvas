@@ -2,6 +2,7 @@ import { useRef } from "react";
 import useSWR from "swr";
 import {
   buildReviewApi,
+  isInvalid,
   isReviewerNotAllowed,
   isUnauthorized,
 } from "../api/review-api";
@@ -85,7 +86,7 @@ export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
 
 /**
  * コメントの読み込みに失敗したときの読み直し。ログインし直しが要る失敗（401）と、使ってよい人ではない失敗（403 の ReviewerNotAllowedError）は
- * 読み直さない（別のアカウントでログインし直すまで通らないため）。
+ * 読み直さない（別のアカウントでログインし直すまで通らないため）。入力の誤り（400。受け付けないブランチ名など）も、読み直しても通らないので読み直さない。
  * それ以外（サーバーが落ちている等）は、定期の取り直しと同じ間隔で読み直し続ける
  */
 export const retryCommentsOnError = (
@@ -94,7 +95,8 @@ export const retryCommentsOnError = (
   schedule: (run: () => void, ms: number) => void = (run, ms) =>
     window.setTimeout(run, ms),
 ): void => {
-  if (isUnauthorized(error) || isReviewerNotAllowed(error)) return;
+  if (isUnauthorized(error) || isReviewerNotAllowed(error) || isInvalid(error))
+    return;
   schedule(revalidate, COMMENTS_REFRESH_INTERVAL);
 };
 
