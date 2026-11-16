@@ -1,5 +1,6 @@
 import {
   MAX_REVIEWER_TOKEN_LIFETIME_SECONDS,
+  looksLikeAiName,
   readReviewerClaims,
   REVIEWER_NAME_CLAIM,
 } from "./reviewer-claims";
@@ -60,6 +61,14 @@ describe("readReviewerClaims", () => {
       expected: "山田 田中",
     },
     {
+      name: "見えない文字（ゼロ幅の空白・接合子・ソフトハイフン・BOM・異体字セレクタ）は落とす",
+      claims: {
+        [REVIEWER_NAME_CLAIM]:
+          "山\u200b田\u200d\u00ad\ufeff太\ufe0f郎\u{e0100}",
+      },
+      expected: "山田太郎",
+    },
+    {
       name: "50文字を超える分は切る",
       claims: { [REVIEWER_NAME_CLAIM]: "あ".repeat(60) },
       expected: "あ".repeat(50),
@@ -74,7 +83,7 @@ describe("readReviewerClaims", () => {
   test("[正常系]reserveAiName を立てると「AI（…」に見える表示名を飛ばし、立てなければそのまま読む（擬似ログインの MCP サーバー）", () => {
     const payload = payloadFrom({
       [REVIEWER_NAME_CLAIM]: "AI（local）",
-      name: "ａｉ ( x )",
+      name: "Ａ\u200dＩ ( x )",
     });
 
     expect(readReviewerClaims(payload, now).name).toBe("AI（local）");
@@ -138,6 +147,27 @@ describe("readReviewerClaims", () => {
     "[異常系]$name なら 401（理由はログにだけ残す）",
     ({ payload, reason }) => {
       expect(reasonOf(() => readReviewerClaims(payload, now))).toBe(reason);
+    },
+  );
+});
+
+describe("looksLikeAiName", () => {
+  test.each([
+    "AI（fixer）",
+    "ＡＩ ( x )",
+    "A\u200bI\u00ad（x）",
+    "AI\ufe0f(x)",
+  ])(
+    "[正常系]%j は client の名前に見える（全角・空白・見えない文字を挟んでも）",
+    (name) => {
+      expect(looksLikeAiName(name)).toBe(true);
+    },
+  );
+
+  test.each(["Ai (Yamada)", "ai（愛）", "AIチーム（営業）", "山田（AI（x））"])(
+    "[正常系]%j は人の名前として通す",
+    (name) => {
+      expect(looksLikeAiName(name)).toBe(false);
     },
   );
 });

@@ -38,13 +38,23 @@ const CONTROL_CHARACTERS =
   // eslint-disable-next-line no-control-regex
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
+// 見えない文字（書式の文字 \p{Cf}: ゼロ幅の空白・接合子・ソフトハイフン・BOM など）と異体字セレクタ。
+// 名前に挟むと、見た目は同じまま別の文字列にできる（「A<ゼロ幅>I（…」で client の名前に見せる、など）
+const INVISIBLE_CHARACTERS = /[\p{Cf}\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/gu;
+
 /**
- * 表示名にできる値か。制御文字を空白にして前後の空白を落とし、上限で切る（書き出しの Markdown に改行を持ち込まない）。
+ * 表示名にできる値か。制御文字を空白にし、見えない文字を落として前後の空白を落とし、上限で切る
+ * （書き出しの Markdown に改行を持ち込まない・見た目と違う文字列を名前にしない）。
  * 文字列でない・空なら undefined
  */
 const toDisplayName = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
-  const name = Array.from(value.replace(CONTROL_CHARACTERS, " ").trim())
+  const name = Array.from(
+    value
+      .replace(CONTROL_CHARACTERS, " ")
+      .replace(INVISIBLE_CHARACTERS, "")
+      .trim(),
+  )
     .slice(0, REVIEWER_NAME_MAX_LENGTH)
     .join("")
     .trim();
@@ -55,10 +65,16 @@ const toDisplayName = (value: unknown): string | undefined => {
 export const AI_NAME_PREFIX = "AI（";
 
 /**
- * 表示名が client の名前（「AI（…」）に見えるか。全角・半角・大文字小文字・あいだの空白の違いは同じものとして比べる
+ * 表示名が client の名前（「AI（…」）に見えるか。全角・半角・あいだの空白・見えない文字の違いは同じものとして比べる。
+ * 大文字の AI だけを見る（「Ai (Yamada)」「ai（愛）」のような人の名前は止めない）。
+ * キリル文字などの似た字までは見分けない（画面は、client を表示名ではなく利用者ID で見分けて印を出す）
  */
 export const looksLikeAiName = (name: string): boolean =>
-  name.normalize("NFKC").replace(/\s/g, "").toLowerCase().startsWith("ai(");
+  name
+    .replace(INVISIBLE_CHARACTERS, "")
+    .normalize("NFKC")
+    .replace(/\s/g, "")
+    .startsWith("AI(");
 
 /**
  * 署名等を確かめた後のトークンのペイロードから、利用者を読み取る。

@@ -283,7 +283,21 @@ describe("Auth0ReviewerTokenVerifier", () => {
   });
 
   describe("verify（正常系）", () => {
-    test.each(["AI（fixer）", "ＡＩ (fixer)", "ai（なりすまし）"])(
+    test.each(["Ai (Yamada)", "ai（愛）", "AIチーム（営業）"])(
+      "[正常系]大文字の AI（ で始まらない人の名前（%s）は、そのまま表示名にする",
+      async (name) => {
+        const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+        const verifier = buildVerifier(fetcher);
+
+        const reviewer = await verifier.verify(
+          signToken({ payload: validPayload({ [REVIEWER_NAME_CLAIM]: name }) }),
+        );
+
+        expect(reviewer.name).toBe(name);
+      },
+    );
+
+    test.each(["AI（fixer）", "ＡＩ (fixer)", "A\u200bI\u00ad（なりすまし）"])(
       "[正常系]人のトークンの表示名が client の名前（%s）に見えるときは使わず、次の候補（メールアドレス）を表示名にする",
       async (name) => {
         const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));

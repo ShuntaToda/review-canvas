@@ -16,10 +16,6 @@ export type ExportFormat = MarkdownFormat | "json";
 export const EXPORT_JSON_VERSION = 1;
 
 /**
- * 書き出した JSON の 1 スレッド。API の `GET /api/threads` の 1 件（Thread）から利用者ID を除き、
- * ページの名前と、開くための URL を足したもの
- */
-/**
  * 書き出すコメント。項目を 1 つずつ挙げて写す（API に項目が足されても、決めずに書き出しへ出ていかない）。
  * 利用者ID（authorId・aiFixedById）は出さない。名前（author など）には、名前のクレームが無い人ではメールアドレスが入る
  */
@@ -48,6 +44,10 @@ const exportComment = (comment: Comment): ExportedComment => ({
   updatedAt: comment.updatedAt,
 });
 
+/**
+ * 書き出した JSON の 1 スレッド。API の `GET /api/threads` の 1 件（Thread）から利用者ID を除き、
+ * ページの名前と、開くための URL を足したもの
+ */
 export type ExportedThread = {
   number: number;
   status: ThreadStatus;

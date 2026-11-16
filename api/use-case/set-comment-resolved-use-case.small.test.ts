@@ -10,6 +10,8 @@ const now = new Date("2026-11-13T15:00:00.000+09:00");
 
 const buildUseCase = (found: ReturnType<typeof commentDummyFrom> | null) => {
   const save = vi.fn((c: unknown) => Promise.resolve(c));
+  const logger = new LoggerDummy();
+  const info = vi.spyOn(logger, "info");
   const findByBranchAndId = vi.fn().mockResolvedValue(found);
   const useCase = new SetCommentResolvedUseCaseImpl({
     commentRepository: {
@@ -17,9 +19,9 @@ const buildUseCase = (found: ReturnType<typeof commentDummyFrom> | null) => {
       findByBranchAndId,
     } as unknown as CommentRepository,
     fetchNow: buildFetchNowDummy(now),
-    logger: new LoggerDummy(),
+    logger,
   });
-  return { useCase, save };
+  return { useCase, save, info };
 };
 
 describe("SetCommentResolvedUseCase", () => {
@@ -38,6 +40,33 @@ describe("SetCommentResolvedUseCase", () => {
     expect(resolved.resolvedBy).toBe("鈴木");
     expect(resolved.resolvedAt).toBe(now);
     expect(save).toHaveBeenCalledWith(resolved);
+  });
+
+  test("[正常系]再開すると AI 修正済みの印が消えるので、再開した人と、印を付けていた人の利用者IDをログに残す", async () => {
+    const comment = commentDummyFrom({ authorId: YAMADA.id })
+      .setAiFixed({
+        aiFixed: true,
+        actor: { id: "abc123@clients", name: "AI（fixer）" },
+        now,
+      })
+      .setResolved({ resolved: true, actor: SUZUKI, now });
+    const { useCase, info } = buildUseCase(comment);
+
+    const { comment: reopened } = await useCase.execute({
+      branch: comment.branch,
+      commentId: comment.id,
+      resolved: false,
+      reviewer: SUZUKI,
+    });
+
+    expect(reopened.aiFixedById).toBeNull();
+    expect(info).toHaveBeenCalledWith(expect.any(String), {
+      branch: comment.branch,
+      commentId: comment.id,
+      resolved: false,
+      actorId: SUZUKI.id,
+      previousAiFixedById: "abc123@clients",
+    });
   });
 
   test("[異常系]見つからないとCommentNotFoundErrorになる", async () => {

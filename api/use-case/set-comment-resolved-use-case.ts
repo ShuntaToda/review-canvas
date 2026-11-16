@@ -75,7 +75,14 @@ export class SetCommentResolvedUseCaseImpl implements SetCommentResolvedUseCase 
     // 解決の状態だけを書き換える（同時に行われた本文の編集を消さない）
     const saved = await this.#commentRepository.updateResolution(updated);
 
-    this.#logger.debug("コメントの解決状態の変更完了", { commentId, resolved });
+    // 誰が解決・再開したかの痕跡（再開すると AI 修正済みの印が消えるので、その前に付けていた人をここに残す）
+    this.#logger.info("コメントの解決状態の変更完了", {
+      branch,
+      commentId,
+      resolved,
+      actorId: reviewer.id,
+      previousAiFixedById: comment.aiFixedById,
+    });
 
     return { comment: saved };
   }

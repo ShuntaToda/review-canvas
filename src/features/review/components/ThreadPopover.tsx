@@ -40,6 +40,19 @@ type ThreadPopoverProps = {
 };
 
 /**
+ * 許可した client（AI・CI）のトークンによるものだと示す印。表示名ではなく利用者ID で見分けたときだけ出す
+ * （人は表示名を似せられるが、この印は付けられない）
+ */
+const ClientMark = () => (
+  <span
+    className="rounded border border-ai-fixed/40 bg-panel px-1.5 py-0.5 text-ai-fixed"
+    title="許可した client（AI・CI）のトークンによるものです"
+  >
+    client
+  </span>
+);
+
+/**
  * ピンの横に出すスレッド。返信・解決／再開・AI 修正済みの差し戻し・自分のコメントの編集と削除ができる
  */
 export const ThreadPopover = ({
@@ -152,6 +165,12 @@ export const ThreadPopover = ({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-ai-fixed-soft px-3 py-1.5 text-xs text-ai-fixed">
           <p>
             AI 修正済み・確認待ち（{root.aiFixedBy}
+            {isClientReviewerId(root.aiFixedById) && (
+              <>
+                {" "}
+                <ClientMark />
+              </>
+            )}
             {root.aiFixedAt === null
               ? ""
               : `・${formatDateTime(root.aiFixedAt)}`}
@@ -174,6 +193,12 @@ export const ThreadPopover = ({
             ? ""
             : `・${formatDateTime(root.resolvedAt)}`}
           ）{root.aiFixedBy !== null && ` 修正: ${root.aiFixedBy}`}
+          {isClientReviewerId(root.aiFixedById) && (
+            <>
+              {" "}
+              <ClientMark />
+            </>
+          )}
         </p>
       )}
       {/* 要素を見つけて追従できているときは、幅が違ってもずれないので知らせない */}
@@ -274,14 +299,7 @@ const CommentItem = ({
     <li className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="font-bold text-ink">{comment.author}</span>
-        {isClientReviewerId(comment.authorId) && (
-          <span
-            className="rounded bg-ai-fixed-soft px-1.5 py-0.5 text-ai-fixed"
-            title="許可した client（AI・CI）のトークンで書かれました"
-          >
-            client
-          </span>
-        )}
+        {isClientReviewerId(comment.authorId) && <ClientMark />}
         <time dateTime={comment.createdAt} className="text-muted">
           {formatDateTime(comment.createdAt)}
         </time>

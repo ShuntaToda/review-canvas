@@ -97,6 +97,25 @@ describe("ThreadPopover", () => {
 
     renderPopover(root({ author: "AI（fixer）", authorId: "auth0|yamada" }));
     expect(screen.queryByText("client")).toBeNull();
+    cleanup();
+
+    // 印を付けた人も同じ（確認待ちの帯・解決済みの帯）。人が付けた印には出さない
+    renderPopover(root(AI_FIXED));
+    expect(screen.getAllByText("client")).toHaveLength(1);
+    cleanup();
+    renderPopover(root({ ...AI_FIXED, aiFixedById: "auth0|yamada" }));
+    expect(screen.queryByText("client")).toBeNull();
+    cleanup();
+    renderPopover(
+      root({
+        ...AI_FIXED,
+        status: "resolved",
+        resolved: true,
+        resolvedBy: "鈴木",
+        resolvedAt: "2026-11-13T12:00:00.000+09:00",
+      }),
+    );
+    expect(screen.getAllByText("client")).toHaveLength(1);
   });
 
   test("[正常系]未解決のスレッドには、確認待ちの知らせも差し戻しも出さない", () => {
