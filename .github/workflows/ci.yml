@@ -50,6 +50,30 @@ jobs:
           pnpm run infra:validate
           pnpm --dir examples/sample-storybook run validate
 
+  # ワークフローの書き方と run のシェルを確かめる（shellcheck はランナーに入っているものを使う）
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ACTIONLINT_VERSION: 1.7.7
+      ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 取ってきたものは、リリースの checksums と同じハッシュのときだけ使う
+      - name: Install actionlint
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+
+      - name: Actionlint
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -371,6 +371,8 @@ jobs:
       - name: Build Storybooks
         if: env.SKIP != 'true'
         run: |
+          # CONFIG はワークフローの env（inputs.config）から来る
+          # shellcheck disable=SC2153
           config="host/$CONFIG"
           if [ ! -f "$config" ]; then
             echo "::error::設定ファイル $CONFIG がありません（$BRANCH）"
@@ -380,13 +382,16 @@ jobs:
           mkdir -p "artifact/$base"
           cp "$config" "artifact/$CONFIG"
           git -C host rev-parse --short HEAD > artifact/COMMIT
-          mapfile -t entries < <(jq -r '.storybooks[] | [.id, .build, .outDir] | @tsv' "$config")
-          if [ "${#entries[@]}" -eq 0 ]; then
+          count="$(jq '.storybooks | length' "$config")"
+          if [ "$count" -eq 0 ]; then
             echo "::error::$CONFIG に storybooks がありません"
             exit 1
           fi
-          for entry in "${entries[@]}"; do
-            IFS=$'\t' read -r source build out_dir <<<"$entry"
+          # 値は 1 つずつ jq -r で読む（@tsv は \ を \\ に変えるため、build のコマンドが変わる）
+          for ((i = 0; i < count; i++)); do
+            source="$(jq -r --argjson i "$i" '.storybooks[$i].id' "$config")"
+            build="$(jq -r --argjson i "$i" '.storybooks[$i].build' "$config")"
+            out_dir="$(jq -r --argjson i "$i" '.storybooks[$i].outDir' "$config")"
             if ! [[ "$source" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; then
               echo "::error::Storybook の id は英小文字・数字・- の 32 文字までにしてください: $source"
               exit 1
