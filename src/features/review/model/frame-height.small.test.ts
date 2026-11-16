@@ -22,7 +22,7 @@ describe("iframeHeightFor", () => {
     expect(at({ generation: 1, width: 1280 }, 1280, 2)).toBe(BASE);
   });
 
-  test("[正常系]測った幅が無い（前の形の橋渡し）ときは合うとみなし、違う幅の知らせは合わないとする", () => {
+  test("[正常系]測った幅が無い（幅を送らない橋渡し）ときは合うとみなし、違う幅の知らせは合わないとする", () => {
     expect(matchesWidth(undefined, 1280)).toBe(true);
     expect(matchesWidth(1280.5, 1280)).toBe(true);
     expect(matchesWidth(1024, 1280)).toBe(false);

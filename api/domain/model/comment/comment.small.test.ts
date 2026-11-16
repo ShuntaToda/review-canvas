@@ -136,7 +136,7 @@ describe("Comment", () => {
       ).toThrow(CommentNotAuthorError);
     });
 
-    test("[異常系]利用者IDを持たない（認証を入れる前に書かれた）コメントは誰も書き換えられない", () => {
+    test("[異常系]利用者IDを持たないコメントは誰も書き換えられない", () => {
       const comment = commentDummyFrom({ author: "山田", authorId: "" });
 
       expect(() =>
@@ -199,7 +199,7 @@ describe("Comment", () => {
       ).toThrow(CommentNotAuthorError);
     });
 
-    test("[異常系]利用者IDを持たない（認証を入れる前に書かれた）コメントは誰も削除できない", () => {
+    test("[異常系]利用者IDを持たないコメントは誰も削除できない", () => {
       const comment = commentDummyFrom({ author: "山田", authorId: "" });
 
       expect(() => comment.assertDeletableBy({ id: "", name: "山田" })).toThrow(

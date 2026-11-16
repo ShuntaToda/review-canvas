@@ -13,7 +13,7 @@ export type MeasuredAt = { generation: number; width: number };
 /** 測り方の端数（px） */
 const TOLERANCE = 1;
 
-/** 橋渡しの測った幅が、いまの幅と合うか（前の形の橋渡しは幅を送らないので、合うとみなす） */
+/** 橋渡しの測った幅が、いまの幅と合うか（幅を送らない橋渡しでは、合うとみなす） */
 export const matchesWidth = (
   reportedWidth: number | undefined,
   width: number,

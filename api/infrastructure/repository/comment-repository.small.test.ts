@@ -77,7 +77,7 @@ describe("comment-repository", () => {
       ).toBeNull();
     });
 
-    test("[正常系]利用者IDを持たない（認証を入れる前に書かれた）項目は、利用者IDを空文字として読む", () => {
+    test("[正常系]利用者IDを持たない項目は、利用者IDを空文字として読む", () => {
       const { authorId: _authorId, ...legacy } =
         ddbItemFromDomain(commentDummyFrom());
 

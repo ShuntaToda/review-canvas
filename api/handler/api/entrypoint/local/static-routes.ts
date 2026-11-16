@@ -44,7 +44,7 @@ export const mountLocalStatic = ({
       404,
     );
   });
-  // Storybook はこのオリジンでは配らない（前の版の URL を開いても画面を返さない）
+  // Storybook はこのオリジンでは配らない（ストーリーのコードを画面と同じオリジンで動かさない）
   app.all("/sb/*", (c) => c.notFound());
 
   if (existsSync(join(distDir, "index.html"))) {

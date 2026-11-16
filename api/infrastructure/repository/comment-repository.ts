@@ -101,11 +101,11 @@ export const commentDdbItemSchema = z.object({
   x: z.number(),
   y: z.number(),
   frameWidth: z.number().nullable(),
-  // 要素の手がかり（DynamoDB のマップ）。手がかりを持つ前に書かれたコメントは持たない。null として読む
+  // 要素の手がかり（DynamoDB のマップ）。持たない項目は null として読む
   anchor: commentAnchorDdbSchema.nullable().default(null),
   body: z.string(),
   author: z.string(),
-  // 認証を入れる前に書かれたコメントは持たない。空文字（誰も編集・削除できない）として読む
+  // 利用者IDを持たない項目は、空文字（誰も編集・削除できない）として読む
   authorId: z.string().default(""),
   commit: z.string(),
   resolved: z.boolean(),
@@ -666,7 +666,7 @@ export class CommentRepositoryImpl implements CommentRepository {
   }
 
   #decrementCounterItem(branch: string, count: number): TransactItems[number] {
-    // 件数の項目の無い古いデータ（件数を持つ前に書かれたもの）は対象外。db:refresh で作り直す（docs/development.md）
+    // 件数の項目の無いパーティションは対象外。db:refresh で作り直す（docs/api.md）
     return {
       Update: {
         TableName: this.#commentTableName,

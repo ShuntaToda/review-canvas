@@ -98,7 +98,7 @@ const RETIRE_POLL_MS = 100;
  */
 const knownPlayFunctions = new Map<string, boolean>();
 /**
- * 橋渡しが無いと分かった Storybook（置き場ごと）。前の形で置いたブランチでは、1 枚目で時間切れになったら覚え、
+ * 橋渡しが無いと分かった Storybook（置き場ごと）。橋渡しを差し込まずに置いたブランチでは、1 枚目で時間切れになったら覚え、
  * 2 枚目からは返事を待たずに読み込みの枠を返す（1 枚ごとに 4 秒待って、順番待ちが詰まらないように）
  */
 const storybooksWithoutBridge = new Set<string>();
@@ -153,7 +153,7 @@ export const Frame = ({
   const [generation, setGeneration] = useState(0);
   // play 関数の途中で入力欄へフォーカスを取り返した（Storybook と違う状態かもしれない）
   const [interrupted, setInterrupted] = useState(false);
-  // 中の橋渡しとつながった・橋渡しが無かった（前の形で置いた Storybook）
+  // 中の橋渡しとつながった・橋渡しが無かった（橋渡しを差し込まずに置いた Storybook）
   const [bridgeReady, setBridgeReady] = useState(false);
   const [bridgeMissing, setBridgeMissing] = useState(false);
   const [previousMounted, setPreviousMounted] = useState(mounted);
@@ -531,7 +531,7 @@ export const Frame = ({
           else settle();
         },
         onMissing: () => {
-          // 前の形で置いた Storybook（橋渡しが無い）。中の様子が分からないので、枠を返して次へ進める
+          // 橋渡しの無い Storybook。中の様子が分からないので、枠を返して次へ進める
           storybooksWithoutBridge.add(bridgeKey);
           setBridgeMissing(true);
           releaseSlot();
@@ -621,7 +621,7 @@ export const Frame = ({
           {bridgeMissing && (
             <span
               className="shrink-0 rounded px-1 text-warn"
-              title="このブランチの Storybook は前の形で置かれています。置き直すと、高さの測り直し・ピンの要素への追従・要素の手がかりが効きます"
+              title="このブランチの Storybook には橋渡しがありません。review-canvas の手順で置き直すと、高さの測り直し・ピンの要素への追従・要素の手がかりが効きます"
             >
               置き直しが必要
             </span>

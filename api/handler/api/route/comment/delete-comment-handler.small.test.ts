@@ -13,7 +13,7 @@ describe("DELETE /api/comments/{commentId}", () => {
       { reviewer: SUZUKI },
     );
 
-    // 以前の画面が送っていた author は読まない（操作した人はトークンで決まる）
+    // リクエストに author があっても読まない（操作した人はトークンで決まる）
     const response = await app.request(
       `/api/comments/01J1H3V7X4K9QW2RT8ZB5C6DYF?branch=feature%2Fa&author=${encodeURIComponent("山田")}`,
       { method: "DELETE", headers: AUTH_HEADERS },

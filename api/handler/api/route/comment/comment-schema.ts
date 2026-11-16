@@ -176,7 +176,7 @@ export const CommentResponseSchema = z
     }),
     authorId: z.string().openapi({
       description:
-        "書いた人の利用者ID（トークンの sub）。認証を入れる前に書かれたコメントは空文字",
+        "書いた人の利用者ID（トークンの sub）。利用者IDを持たない項目は空文字",
       example: "auth0|6543210fedcba9876543210f",
     }),
     commit: z.string().openapi({ example: "c9ebd82" }),

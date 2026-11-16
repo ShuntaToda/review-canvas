@@ -72,7 +72,7 @@ export type BridgeKey = {
 export type BridgeMessage =
   /**
    * つないだ（hello への返事）。いまの描画の様子・中にフォーカスがあるか・中身の高さ。
-   * width は測ったときの画面の幅（前の形の橋渡しは送らない）
+   * width は測ったときの画面の幅（送らない橋渡しもある）
    */
   | {
       type: "ready";
@@ -315,7 +315,7 @@ const isStringRecord = (value: unknown, max: number): boolean =>
 
 /**
  * 橋渡しが集めた手がかりの形を確かめる（形が違う・大きすぎるなら null。null ならコメントは手がかりなしで送る）。
- * 中身の長さ・文字の確かめは API が行う（ここは古い・別の版の橋渡しから届いたものを、送る前に落とすため）
+ * 中身の長さ・文字の確かめは API が行う（ここは別の版の橋渡しから届いた形の違うものを、送る前に落とすため）
  */
 export const parseAnchor = (value: unknown): CommentAnchor | null => {
   if (!isObject(value)) return null;

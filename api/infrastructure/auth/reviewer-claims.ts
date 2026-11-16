@@ -13,7 +13,7 @@ export const REVIEWER_NAME_CLAIM = "https://review-canvas/name";
  */
 export const MAX_REVIEWER_TOKEN_LIFETIME_SECONDS = 86400;
 
-/** 表示名の上限の文字数（コメントに残す名前。以前の名前の入力欄と同じ） */
+/** 表示名の上限の文字数（コメントに残す名前） */
 export const REVIEWER_NAME_MAX_LENGTH = 50;
 
 /**

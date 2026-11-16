@@ -10,7 +10,7 @@ import {
   toParentEnvelope,
 } from "./protocol";
 
-/** つないでから返事（ready）を待つ上限(ms)。過ぎたら、橋渡しの無い（前の形で置いた）Storybook とみなす */
+/** つないでから返事（ready）を待つ上限(ms)。過ぎたら、橋渡しの無い Storybook とみなす */
 export const BRIDGE_CONNECT_TIMEOUT_MS = 4_000;
 
 /** hello を送り直す時刻(ms)。読み込みの知らせと橋渡しの準備の順が前後しても、つながるように */
@@ -21,7 +21,7 @@ export const BRIDGE_REQUEST_TIMEOUT_MS = 1_500;
 
 export type FrameBridgeHandlers = {
   /** つながった（いまの描画の様子・中にフォーカスがあるか・中身の高さ） */
-  /** width は測ったときの画面の幅（前の形の橋渡しは送らないので undefined） */
+  /** width は測ったときの画面の幅（送らない橋渡しもあるので undefined を許す） */
   onReady: (ready: {
     render: RenderState;
     focused: boolean;

@@ -9,7 +9,7 @@ import {
  */
 export const DEV_SESSION_STORAGE_KEY = "review-canvas.devAuth.name";
 
-/** 以前の画面（名前を決めるダイアログ）が覚えていた名前のキー。擬似ログインの画面の初期値にだけ使う */
+/** 名前を決めるダイアログが覚えた名前のキー。擬似ログインの画面の初期値にだけ使う */
 export const LEGACY_AUTHOR_STORAGE_KEY = "review-canvas.author";
 
 /** 名前の上限の文字数（API が表示名を切る長さと同じ） */
@@ -42,6 +42,6 @@ export const clearDevSession = (): void => {
   }
 };
 
-/** 擬似ログインの画面の名前の初期値（以前に決めた名前があればそれ） */
+/** 擬似ログインの画面の名前の初期値（名前を決めるダイアログで決めた名前があればそれ） */
 export const readInitialDevName = (): string =>
   readLocalStorage(LEGACY_AUTHOR_STORAGE_KEY) ?? "";
