@@ -5,7 +5,8 @@
  * - 画面の高さ（100vh など）に合わせて伸びるストーリーは、知らせた高さで iframe が伸びると中身もまた伸び、際限なく伸びる。
  *   画面の高さが変わったのと同じだけ中身が伸びた（画面の高さから下へはみ出す量が前と同じ）ときは、画面の高さに引きずられたとみなして知らせない。
  *   はみ出す量が違っても、画面の高さが変わるたびに伸び続けるときは、決まった回数で打ち切る
- * - 画面の高さが変わったのと同時に中身も伸びた（play 関数など）ときは、画面の高さの変わった分を除いた高さを知らせる
+ * - 画面の高さが変わったのと同時に中身も伸びた（play 関数など）とき、引きずられた伸びを知らせずにいるあいだに中身が変わったときは、
+ *   知らせた高さの元になった画面の高さからの伸びを除いた高さを知らせる
  */
 
 /** 画面の中で測った値 */
@@ -24,6 +25,8 @@ export type MeasureState = {
   width: number;
   /** 最後に見た画面の高さ */
   viewport: number;
+  /** 知らせた高さの元になった画面の高さ（画面の高さに引きずられた分を除くときの起点） */
+  baseViewport: number;
   /** 最後に知らせたときの、画面の高さからはみ出す量 */
   excess: number;
   /** 画面の高さが変わるたびに続けて伸びた回数 */
@@ -52,6 +55,7 @@ export const decideSize = (
   const reported = (
     follows: number,
     height: number = current.height,
+    baseViewport: number = current.viewport,
   ): {
     report: number;
     state: MeasureState;
@@ -61,6 +65,7 @@ export const decideSize = (
       height,
       width: current.width,
       viewport: current.viewport,
+      baseViewport,
       excess: current.height - current.viewport,
       follows,
       ignored: null,
@@ -73,18 +78,20 @@ export const decideSize = (
     report: force ? next.height : null,
     state: next,
   });
+  // 知らせた高さの元になった画面の高さから、いまの画面の高さが伸びた分（100vh の帯がその分だけ伸びている）
+  const followedHeight =
+    current.height - (current.viewport - state.baseViewport);
   if (viewportChanged && grew) {
     const sameExcess = near(current.height - current.viewport, state.excess);
     const follows = state.follows + 1;
     // 画面の高さが変わったのと同時に中身も伸びた（play 関数など）。画面の高さに引きずられた分を除いた高さを知らせる
     // （そのまま知らせると、100vh の帯がその分だけ伸びたまま残る）。除くと前より伸びていないときは、画面の高さに合わせて伸びる中身ではない
-    const followed = current.height - (current.viewport - state.viewport);
     if (
       !sameExcess &&
       follows <= MAX_VIEWPORT_FOLLOWS &&
-      followed > state.height + TOLERANCE
+      followedHeight > state.height + TOLERANCE
     ) {
-      return reported(follows, followed);
+      return reported(follows, followedHeight, state.baseViewport);
     }
     if (sameExcess || follows > MAX_VIEWPORT_FOLLOWS) {
       // 画面の高さに引きずられて伸びた（知らせた高さのまま）
@@ -101,5 +108,15 @@ export const decideSize = (
     near(state.height, current.height) ||
     (state.ignored !== null && near(state.ignored, current.height));
   if (unchanged) return keep({ ...state, viewport: current.viewport });
+  // 画面の高さに引きずられた伸びを知らせずにいるあいだに、同じ画面の高さのまま中身が変わった（play 関数など）。
+  // 中身がまだ画面の高さより高ければ（帯が画面の高さに合っている）、引きずられた分を除いた高さを知らせる
+  if (
+    state.ignored !== null &&
+    !viewportChanged &&
+    current.height > current.viewport + TOLERANCE &&
+    !near(current.viewport, state.baseViewport)
+  ) {
+    return reported(state.follows, followedHeight, state.baseViewport);
+  }
   return reported(viewportChanged ? state.follows : 0);
 };

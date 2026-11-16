@@ -57,6 +57,30 @@ describe("decideSize", () => {
     expect(state?.height).toBe(800 + 120 + 300);
   });
 
+  test.each([
+    // 実ブラウザで測った列: 入力したあと（Filled）・送ったあと
+    { label: "入力したあと", grown: 1788, expected: 1319 },
+    { label: "送ったあと", grown: 1812, expected: 1343 },
+  ])(
+    "[異常系]100vh の帯の画面が、iframe が伸びて引きずられたあと同じ画面の高さのまま伸びても（$label）、帯の伸びた分を足さない",
+    ({ grown, expected }) => {
+      const at = (
+        state: MeasureState | null,
+        height: number,
+        viewport: number,
+      ) => decideSize(state, { height, width: 375, viewport }, false);
+      const first = at(null, 1281, 812);
+      expect(first.report).toBe(1281);
+      const followed = at(first.state, 1750, 1281);
+      expect(followed.report).toBeNull();
+      const played = at(followed.state, grown, 1281);
+      expect(played.report).toBe(expected);
+      // 知らせた高さで iframe が伸び、帯もまた伸びても、それ以上は伸ばさない
+      const applied = at(played.state, grown + (expected - 1281), expected);
+      expect(applied.report).toBeNull();
+    },
+  );
+
   test("[正常系]高さの決まった中身が、画面の高さが変わるのと同時に伸びたら、伸びた高さを知らせる", () => {
     const { reports } = run((viewport) => (viewport > 800 ? 2000 : 1500));
 
