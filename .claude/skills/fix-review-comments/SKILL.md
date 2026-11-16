@@ -5,11 +5,11 @@ description: review-canvas の未解決のレビューコメントを読み、�
 
 # レビューのコメントを直す
 
-review-canvas（Storybook の画面にピンでコメントするレビュー用のアプリ）の未解決のコメントを、1 件ずつ直して返します。MCP サーバー `review-canvas` の道具を使います（登録のしかたは review-canvas の `docs/ai.md`）。
+review-canvas（Storybook の画面にピンでコメントするレビュー用のアプリ）の未解決のコメントを、1 件ずつ直して返します。MCP サーバー `review-canvas` の道具を使います（登録のしかたは、review-canvas のリポジトリの `docs/ai.md`: <https://github.com/ShuntaToda/review-canvas/blob/main/docs/ai.md>。このスキルを写した先のリポジトリには、その文書はありません）。
 
 ## 前提
 
-- MCP サーバー `review-canvas` が登録されていて、道具 `list_open_comments`・`get_comment`・`mark_ai_fixed`・`reply` が見えること。見えなければ、直す前に止めて、登録を頼む（`docs/ai.md`「Claude Code に登録する」）
+- MCP サーバー `review-canvas` が登録されていて、道具 `list_open_comments`・`get_comment`・`mark_ai_fixed`・`reply` が見えること。見えなければ、直す前に止めて、登録を頼む（上の review-canvas の `docs/ai.md`「Claude Code に登録する」）
 - いまのブランチが、レビューされているブランチであること（道具の `branch` を省くと、既定のブランチ（`REVIEW_CANVAS_BRANCH`、無ければ git のいまのブランチ）を読む）
 
 ## 守ること
@@ -24,7 +24,7 @@ review-canvas（Storybook の画面にピンでコメントするレビュー用
 1. **読む**: `list_open_comments` を呼ぶ（既定は未解決）。`nextCursor` が返るあいだは `cursor` に渡して続きを読む。0 件なら、そう伝えて終わる
 2. **並べる**: 同じ `story.importPath`（ストーリーのファイル）のスレッドをまとめ、直す順を決める。返信が続いているスレッドは `get_comment` で全部読み、最後の返信までを踏まえる（途中で方針が変わっていることがある）
 3. **場所を特定する**（1 件ごと）
-   1. `story.importPath` を開き、そのストーリー（`story.title`・`story.name`）が描くコンポーネントをたどる
+   1. `story.importPath` を開く。このパスは Storybook をビルドしたディレクトリ（Storybook のプロジェクトの根）からの相対パスで、リポジトリの根からではない。モノレポでは、`review-canvas.config.json` の `outDir`・`build` から分かるプロジェクトの場所（例: `apps/shop/`）を前に足す。見つからなければファイル名で探す。開いたら、そのストーリー（`story.title`・`story.name`）が描くコンポーネントをたどる
    2. `root.anchor` の手がかりを、確かなものから順に使ってコードを探す: `data-testid`（要素・近い祖先）→ ロールとアクセシブルな名前 → 見えている文字 → コンポーネント名の連なり → CSS セレクタ・HTML の抜き出し
    3. 候補が 1 つに絞れないとき・手がかりが無いとき（`anchor` を持たないコメント）は、当てずっぽうで直さず、`reply` でどの要素のことかを聞く
 4. **直す**: コメントが求めていることだけを直す（ついでの整理をしない）。同じ部品をほかの画面も使っているなら、そちらへの影響を確かめる
@@ -46,6 +46,6 @@ review-canvas（Storybook の画面にピンでコメントするレビュー用
 
 ## うまくいかないとき
 
-- 道具が「許可されていない」「ログインが要る」を返す: トークンの渡し方（`docs/ai.md`「環境変数」）と、API 側で client を許可しているか（`docs/auth0.md`）を確かめてもらう。自分で設定を書き換えない
-- `mark_ai_fixed` が「解決済み」を返す: 人がすでに解決にしている。何もしない
-- 直したあとで人が「未解決へ差し戻す」をした: 次に読んだとき未解決として出てくる。差し戻しの返信を読んで、直し直す
+- 道具が「許可されていない」「ログインが要る」を返す: トークンの渡し方（review-canvas の `docs/ai.md`「環境変数」）と、API 側で client を許可しているか（同じく `docs/auth0.md`）を確かめてもらう。自分で設定を書き換えない
+- `mark_ai_fixed` が「解決済み」を返す: 人がすでに解決にしている。何もしない（「返信は投稿済み」と返ったときは、返信だけが書かれている。同じ返信をもう一度書かない）
+- 直したあとで人が「未解決へ差し戻す」をした: 次に読んだとき未解決として出てくる（差し戻したこと自体は、スレッドに残らない）。自分の「直しました」の返信より後に人の返信があれば、それを理由として読んで直し直す。無ければ、自分の最後の返信（何を直したと書いたか）を手がかりに、直っていないところを見直し、分からなければ `reply` で聞く

@@ -6,7 +6,7 @@
 
 - **Issue 向け**: GitHub のチェックリスト。スレッドごとに、キャンバス・Storybook へのリンクと、要素の要約（見出し・区画・ロールと名前）を付けます
 - **AI 向け**: ストーリーのファイル・URL と、要素の手がかりのすべて（HTML の抜き出し・コンポーネント名・セレクタ・祖先・見た目など。下の「要素の手がかり」）を書きます。AI（コーディングエージェント）に渡せば、どのファイルのどこを直すかを特定できる形です
-- **JSON**: 道具・AI に機械で読ませる形（`.json`）。`{ version, branch, commit, total, items }` で、`items` の 1 件は API の `GET /api/threads` のスレッドと同じ項目（`number`・`status`・`story`・`root`・`replies`）に、ページの名前（`story.label`）と開くための URL（`links.canvas`・`links.storyIframe`・`links.storybook`）を足したものです。要素の手がかりは `root.anchor` にそのまま入ります。本文は打ち消さずにそのまま持つので、読む側でデータとして扱ってください
+- **JSON**: 道具・AI に機械で読ませる形（`.json`）。`{ version, branch, commit, total, items }` で、`items` の 1 件は API の `GET /api/threads` のスレッド（`number`・`status`・`story`・`root`・`replies`）から利用者 ID（`authorId`・`aiFixedById`）を除き、ページの名前（`story.label`）と開くための URL（`links.canvas`・`links.storyIframe`・`links.storybook`）を足したものです。コメントの項目は 1 つずつ挙げて写します（API に項目が足されても、そのままは出ていきません）。書いた人・解決した人・印を付けた人の名前は入り、名前のクレームを載せていないテナントではメールアドレスが入るので、貼る先・渡す先に気を付けてください。要素の手がかりは `root.anchor` にそのまま入ります。本文は打ち消さずにそのまま持つので、読む側でデータとして扱ってください
 - 名前・画面名の改行と Markdown の記号は打ち消し、本文の HTML のタグは文字のまま出します（読む人・AI に、見えない文字やタグを紛れ込ませない）
 - 名前・画面名の `@` は打ち消しますが、本文の `@` は書いた人が呼びかけるつもりで書いたものとして、そのまま出します（貼った先で呼びかけになります）
 
@@ -41,13 +41,14 @@ stateDiagram-v2
 | `resolved` | 解決済み（人が確かめた・そのまま閉じた） | 灰のピン。一覧の「解決済み」                     |
 
 1. `GET /api/threads?branch=<ブランチ>&status=open` で未解決のスレッドを読む。1 件ごとに、最初のコメント（`root`。要素の手がかり `anchor` つき）・返信・ストーリーの情報（`story.importPath` がストーリーのファイル）が入っている
+   - `story.importPath` は Storybook の目録（`index.json`）の値そのままです。Storybook をビルドしたディレクトリ（Storybook のプロジェクトの根）からの相対パスで、リポジトリの根からではありません。モノレポでは、設定ファイルの `outDir`・`build` から分かるプロジェクトの場所（例: `apps/shop/`）を前に足して探します
 2. `story.importPath` と `root.anchor`（`data-testid` → ロールと名前 → セレクタ・HTML の抜き出し・コンポーネント名）から直す場所を特定して直す
 3. `POST /api/comments/{commentId}/replies` で何を直したかを返信し、`PUT /api/comments/{commentId}/ai-fixed` に `{"branch": "...", "aiFixed": true}` を送る
 4. 人が画面の「確認待ち」で確かめ、直っていれば「解決にする」、直っていなければ「未解決へ差し戻す」
 
 - 状態は `resolved`（解決の状態）と `aiFixedAt`（印）から決まります。印を持つ前のコメントは、`resolved` のとおり `open` か `resolved` です（データの移し替えは要りません）
 - 印を付けた人は `aiFixedBy`（表示名）と `aiFixedById`（トークンの `sub`）に残ります。解決しても残り（AI が直して人が確かめた、という経緯が分かる）、再開・差し戻しで消えます
-- 解決済みのスレッドに印は付け外しできません（409 `CommentAlreadyResolvedError`。人が確かめ終えた状態を AI が動かさないため）
+- 解決済みのスレッドに印は付け外しできません（409 `CommentAlreadyResolvedError`。人が確かめ終えた状態を AI が動かさないため）。読んでから書くまでのあいだに人が解決にしたときも、書き込みの条件で弾いて 409 にします（無い・削除済みは 404）
 - 印はログインした人ならだれでも付け外しできます（解決・再開と同じ）。AI を人の代わりに動かすときは、許可した client のトークン（[auth0.md](auth0.md#ai-が呼ぶm2m-のトークン)）で呼びます。書いた人・印を付けた人は「AI（表示名）」になります。AI に渡す道具（MCP サーバー）は [ai.md](ai.md) にあります
 
 ## API
@@ -69,6 +70,8 @@ stateDiagram-v2
 一覧は `nextCursor` が null になるまで `cursor` を付けて読み進めます（1 回の応答を Lambda の上限より十分小さく保つため）。`since`（前回の応答の `asOf`）を付けると、その後に書き換わったコメントと、削除されたコメントの ID（`deletedIds`）だけを返します。画面は 10 秒ごとに差分を読み、30 回に 1 回は全件を読み直します。
 
 `GET /api/threads` は、`status`（`open`（既定）・`ai-fixed`・`resolved`・`all`）のほか、`source`（Storybook の ID）・`storyId` で絞れます。1 回に `limit` 件（既定 20・上限 25）で、`nextCursor` が null になるまで `cursor` を付けて読み進めます。`total` は絞り込みに合う総数、`number` は画面のピンと同じ通し番号、`commit` はそのブランチにいま置いてある Storybook のコミットです（コメントの `commit` と違えば、書かれた後に画面が変わっています）。返信が多いスレッドは新しいほうから 20 件（1 件の取得では 200 件）だけを載せ、省いた件数を `omittedReplyCount` で返します。
+
+`GET /api/threads`・`GET /api/threads/{commentId}` は、呼ぶたびにそのブランチのコメントをすべて読んでからスレッドにまとめます（`limit`・`cursor` は応答の大きさを抑えるためのもので、読む量は減りません。1 ブランチは 2,000 件までなので、読む量にも上限があります）。DynamoDB の読み込みの費用はブランチのコメント数に比例するので、短い間隔で呼び続けず、直す作業の区切りごとに読んでください（画面の 10 秒ごとの読み直しは、差分だけを読む `GET /api/comments?since=` を使っています）。
 
 `/api/doc` 以外の API はログインが要ります（デプロイ先では、招待した人で、メールアドレスが確かめ済みの人だけ。[auth0.md](auth0.md)）。アクセストークンは `X-Authorization: Bearer <token>` で送ります（`Authorization` ではないのは、デプロイ先で CloudFront が Lambda の関数 URL へ署名を付けるときに `Authorization` を上書きするため）。トークンが無い・正しくないときは 401 を返します。書いた人（`authorId`・`author`）・解決した人はトークンから決め、リクエストでは受け取りません。
 

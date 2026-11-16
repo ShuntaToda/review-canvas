@@ -97,8 +97,8 @@ Post Login の Action（上）は**必ず置いてください**。API が読む
 
 AI（コーディングエージェント）・CI が、人の代わりに API を呼ぶ（未解決のコメントを読む・返信する・「AI 修正済み」の印を付ける。[api.md](api.md#ai-が直して返すスレッドの状態)）ときは、人のログインを使い回さず、Auth0 の **Machine to Machine（client credentials）** のトークンを使います。既定ではどの client も通しません。**テナントで許可し、さらに review-canvas の設定に挙げた client だけ**が通ります。
 
-1. **Machine to Machine Application を作る**（Applications → Create Application → Machine to Machine Applications）。名前は用途が分かるもの（例: `review-canvas-fixer`）。使う API に上の 1. の API を選ぶ（Permissions は要りません）
-   - これで Applications → APIs → 1. の API → Application Access で、その Application の **Client Access** が Authorized になります（外すとトークンを取れなくなります）
+1. **Machine to Machine Application を作る**（Applications → Create Application → Machine to Machine Applications）。名前は用途が分かるもの（例: `review-canvas-fixer`）。使う API に、このページの最初（「Auth0 の設定」の 1.）で作った review-canvas の API を選ぶ（Permissions は要りません）
+   - これで Applications → APIs → その API → Application Access で、その Application の **Client Access** が Authorized になります（外すとトークンを取れなくなります）
    - Client ID と Client Secret を控える。**Client Secret は秘密**です（リポジトリ・設定ファイル・書き出しに置かない。CI のシークレットや手元の環境変数で渡す）
 2. **review-canvas に client を挙げる**: `REVIEW_CANVAS_M2M_CLIENTS`（`-c m2mClients=`）に `<Client ID>:<表示名>` をカンマ区切りで指定して出し直す（[deploy.md](deploy.md)）
 

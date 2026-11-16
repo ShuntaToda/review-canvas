@@ -51,7 +51,7 @@
     "sort": "sort-package-json",
     "synth": "pnpm --dir infra run synth",
     "check:all": "run-s validate infra:validate",
-    "validate:cspell": "cspell '**/*.{ts,tsx,md,yml,yaml,json,mjs}' --dot --cache --gitignore --no-progress",
+    "validate:cspell": "cspell '**/*.{ts,tsx,md,yml,yaml,json,mjs}' llms.txt --dot --cache --gitignore --no-progress",
     "validate:eslint": "eslint --cache --max-warnings 0 '**/*.{ts,tsx}' 'bin/*.mjs'",
     "validate:format": "prettier --cache -c '**/*.{ts,tsx,css,json,md,yml,yaml,mjs}'",
     "validate:schema": "pnpm run api ./api/handler/api/entrypoint/cli/generate-config-schema.ts --check",

@@ -10,7 +10,7 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `src/` — 画面（React・vite・Tailwind CSS）。`src/features/review/bridge/` は Storybook の iframe に差し込む橋渡し
 - `infra/` — CDK（コンストラクト `ReviewCanvas`・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト
 - `bin/` — CLI（`review-canvas.mjs`）と、AI がコメントを読んで返すための MCP サーバー（`review-canvas-mcp.mjs`。依存を持たない JavaScript。docs/ai.md）
-- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル。`llms.txt` は AI 向けの文書の入口（文書を足したら載せる）
+- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル。`llms.txt` は AI 向けの文書の入口
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
 - `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー
 
@@ -22,6 +22,7 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - 例に使う名前・ドメインは架空のもの（`example.com`・`example.co.jp`・山田 太郎・サンプルのショップ）にする
 - ワークフローの Action はコミットの SHA で固定する。資格情報（`id-token: write`）は AWS を使うジョブにだけ付け、そのジョブで信頼しないブランチのコードを動かさない
 - スタックの論理 ID・出力の名前・ワークフローの入力・S3 の置き場の形・コメントの項目は、使う側が頼っているので崩さない（docs/development.md「リリースと互換性」）
+- 文書（`docs/` など）を足した・消した・名前を変えたときは、README の「ドキュメント」の表と `llms.txt` の両方を直す
 - コミットのメッセージは日本語で短く 1 行。箇条書き・AI の署名（Co-Authored-By 等）は付けない（lefthook が止める）
 
 ## 確かめる
