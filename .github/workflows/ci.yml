@@ -103,6 +103,19 @@ jobs:
           REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: repo:example/app
         run: pnpm run synth --quiet
 
+      # 使う側の CDK アプリに ReviewCanvas を組み込んだ形も組み立てる（infra の外から、pnpm を介さずに動かす）
+      - name: Synth embedded
+        env:
+          REVIEW_CANVAS_AUTH0_DOMAIN: tenant.example.com
+          REVIEW_CANVAS_AUTH0_CLIENT_ID: dummy-client-id
+          REVIEW_CANVAS_AUTH0_AUDIENCE: https://review-canvas.example.com/api
+          REVIEW_CANVAS_GITHUB_OIDC_PROVIDER: create
+          REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: repo:example/app
+        working-directory: ${{ runner.temp }}
+        run: |
+          node -r "$GITHUB_WORKSPACE/infra/node_modules/esbuild-register" "$GITHUB_WORKSPACE/infra/test/embedded-app.ts" embedded.out
+          test -s embedded.out/ToolsStack.template.json
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
