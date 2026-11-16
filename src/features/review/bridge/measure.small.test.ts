@@ -81,6 +81,51 @@ describe("decideSize", () => {
     },
   );
 
+  test.each([
+    {
+      label: "帯＋足 120px が play 関数で 300px 伸びた",
+      phases: [(v: number) => v + 120, (v: number) => v + 420],
+      reports: [932, 1232, 1080, 1500],
+    },
+    {
+      label: "帯＋足 469px",
+      phases: [(v: number) => v + 469],
+      reports: [1281, 1031, 1500],
+    },
+    {
+      label: "画面の高さに比例して伸びる",
+      phases: [(v: number) => Math.round(v * 1.1)],
+      reports: [893, 901, 1411, 1500],
+    },
+  ])(
+    "[正常系]$label 画面が、帯の消えた決まった高さ（1500px）の中身に変わったら、1500px に落ち着き下を切らない",
+    ({ phases, reports: expected }) => {
+      // 段ごとに、知らせた高さを iframe に付けて測り直すのを繰り返す
+      let state: MeasureState | null = null;
+      let viewport = 812;
+      const reports: number[] = [];
+      for (const contentOf of [...phases, () => 1500]) {
+        for (let i = 0; i < 10; i += 1) {
+          const decided = decideSize(
+            state,
+            { height: contentOf(viewport), width: 375, viewport },
+            false,
+          );
+          state = decided.state;
+          if (decided.report !== null) {
+            reports.push(decided.report);
+            viewport = decided.report;
+          }
+        }
+      }
+
+      // 帯が消えた直後の 1 回（帯か決まった高さかをまだ見分けられない）のあとは、画面の高さが変わっても
+      // 中身の高さが変わらないので、引きずられた分を除かずに 1500px を知らせて止まる
+      expect(reports).toStrictEqual(expected);
+      expect(viewport).toBe(1500);
+    },
+  );
+
   test("[正常系]高さの決まった中身が、画面の高さが変わるのと同時に伸びたら、伸びた高さを知らせる", () => {
     const { reports } = run((viewport) => (viewport > 800 ? 2000 : 1500));
 

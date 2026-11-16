@@ -7,6 +7,7 @@
  *   はみ出す量が違っても、画面の高さが変わるたびに伸び続けるときは、決まった回数で打ち切る
  * - 画面の高さが変わったのと同時に中身も伸びた（play 関数など）とき、引きずられた伸びを知らせずにいるあいだに中身が変わったときは、
  *   知らせた高さの元になった画面の高さからの伸びを除いた高さを知らせる
+ * - 画面の高さが変わっても中身の高さが前に測ったときのままなら（決まった高さの中身）、除かずにそのままの高さを知らせる
  */
 
 /** 画面の中で測った値 */
@@ -27,6 +28,8 @@ export type MeasureState = {
   viewport: number;
   /** 知らせた高さの元になった画面の高さ（画面の高さに引きずられた分を除くときの起点） */
   baseViewport: number;
+  /** 最後に測った中身の高さ（知らせたかどうかによらない） */
+  measured: number;
   /** 最後に知らせたときの、画面の高さからはみ出す量 */
   excess: number;
   /** 画面の高さが変わるたびに続けて伸びた回数 */
@@ -66,6 +69,7 @@ export const decideSize = (
       width: current.width,
       viewport: current.viewport,
       baseViewport,
+      measured: current.height,
       excess: current.height - current.viewport,
       follows,
       ignored: null,
@@ -76,8 +80,16 @@ export const decideSize = (
   const grew = current.height > state.height + TOLERANCE;
   const keep = (next: MeasureState) => ({
     report: force ? next.height : null,
-    state: next,
+    state: { ...next, measured: current.height },
   });
+  // 画面の高さが変わったのに中身の高さが前に測ったときのままなら、中身は画面の高さに合わせて伸びていない（決まった高さ）。
+  // 引きずられた分を除かずに、そのままの高さを知らせる
+  if (viewportChanged && near(current.height, state.measured)) {
+    if (near(state.height, current.height)) {
+      return keep({ ...state, viewport: current.viewport });
+    }
+    return reported(0);
+  }
   // 知らせた高さの元になった画面の高さから、いまの画面の高さが伸びた分（100vh の帯がその分だけ伸びている）
   const followedHeight =
     current.height - (current.viewport - state.baseViewport);
