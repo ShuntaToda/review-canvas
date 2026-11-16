@@ -105,7 +105,7 @@ node bin/review-canvas.mjs dev --config ../my-app/review-canvas.config.json
 
 ## ワークフローから置く
 
-使う側のリポジトリに、次のようなワークフローを置きます（`<コミット>` は review-canvas の 40 桁のコミットの SHA。`uses:` と `review_canvas_ref` に同じものを書く）。
+使う側のリポジトリに、次のようなワークフローを置きます（`<コミット>` は review-canvas の 40 桁のコミットの SHA。`uses:` と `review_canvas_ref` に同じものを書く）。review-canvas をフォークして使うときは、`uses:` のリポジトリと `review_canvas_repository` をフォークにそろえます。
 
 ```yaml
 # .github/workflows/review-canvas.yml
@@ -151,6 +151,7 @@ jobs:
 | 入力                              | 既定                                  | 内容                                                                                  |
 | --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
 | `review_canvas_ref`               | （必須）                              | 置く手順を取り出す review-canvas のコミット（40 桁の SHA でなければ止める）           |
+| `review_canvas_repository`        | `ShuntaToda/review-canvas`            | 置く手順を取り出す review-canvas のリポジトリ（`uses:` の `@` の前と同じもの）        |
 | `config`                          | `review-canvas.config.json`           | 使う側のリポジトリの根からの設定ファイルの場所                                        |
 | `role_arn`                        | 空                                    | 既定のブランチ以外を置くロール（出力 `PublishRoleArn`）。空ならどのジョブも動かさない |
 | `main_role_arn`                   | 空                                    | 既定のブランチを置くロール（出力 `PublishMainRoleArn`）                               |

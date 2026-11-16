@@ -33,6 +33,6 @@
    - `REVIEW_CANVAS_AWS_ROLE_ARN`・`REVIEW_CANVAS_AWS_MAIN_ROLE_ARN`: 出力の `PublishRoleArn`・`PublishMainRoleArn`
    - `REVIEW_CANVAS_DEFAULT_BRANCH`: スタックの既定のブランチを `main` から変えたとき
    - `REVIEW_CANVAS_STACK_NAME`・`REVIEW_CANVAS_AWS_REGION`: スタックを `ReviewCanvas` 以外の名前・`ap-northeast-1` 以外のリージョンに出したとき
-4. **Actions の許可**: 組織・リポジトリで使える Action を絞っているときは、`ShuntaToda/review-canvas` の再利用ワークフローと、`publish.yml` が使う Action（`actions/checkout`・`actions/setup-node`・`actions/upload-artifact`・`actions/download-artifact`・`pnpm/action-setup`・`aws-actions/configure-aws-credentials`。どれもコミットの SHA で固定）を許す
+4. **Actions の許可**: 組織・リポジトリで使える Action を絞っているときは、`ShuntaToda/review-canvas`（フォークを使うときはそのリポジトリ。`review_canvas_repository` にも同じものを渡す）の再利用ワークフローと、`publish.yml` が使う Action（`actions/checkout`・`actions/setup-node`・`actions/upload-artifact`・`actions/download-artifact`・`pnpm/action-setup`・`aws-actions/configure-aws-credentials`。どれもコミットの SHA で固定）を許す
 
 ロールの ARN・アカウント ID は秘密ではありませんが、公開リポジトリから呼ぶときは変数に入れ、ワークフローのファイルに直に書かないでおくと出し直したときに直しやすくなります。

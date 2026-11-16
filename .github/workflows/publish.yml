@@ -14,7 +14,7 @@ name: review-canvas-publish
 #   Environment に「既定のブランチからだけ動かせる」制限を付ける）
 # - それ以外: environment environment・role_arn（既定のブランチの置き場は書けない）
 #
-# 置く手順（スクリプト・橋渡し）は review-canvas のリポジトリの review_canvas_ref（コミットの SHA）から取り出す（tool/）。
+# 置く手順（スクリプト・橋渡し）は review-canvas のリポジトリ（review_canvas_repository）の review_canvas_ref（コミットの SHA）から取り出す（tool/）。
 # 置くブランチは使う側のリポジトリから別の場所（host/）へ取り出してビルドする。
 # ビルド（置くブランチのコードを動かす）と置く（AWS の資格情報を持つ）はジョブを分け、成果物で受け渡す。
 # 既定のブランチだけは、置くジョブが既定のブランチのチェックアウト（信頼できるもの）から自分でビルドする。
@@ -29,6 +29,11 @@ on:
         description: 置く手順を取り出す review-canvas のコミット（40 桁の SHA。uses の @ と同じものにする）
         required: true
         type: string
+      review_canvas_repository:
+        description: 置く手順を取り出す review-canvas のリポジトリ（owner/name。uses の @ の前と同じものにする。フォークを使うときに変える）
+        required: false
+        type: string
+        default: ShuntaToda/review-canvas
       config:
         description: 使う側のリポジトリの根からの、設定ファイル（review-canvas.config.json）の場所
         required: false
@@ -103,6 +108,7 @@ defaults:
 env:
   CONFIG: ${{ inputs.config }}
   TOOL_REF: ${{ inputs.review_canvas_ref }}
+  TOOL_REPOSITORY: ${{ inputs.review_canvas_repository }}
   AWS_REGION: ${{ inputs.aws_region }}
   REVIEW_CANVAS_STACK_NAME: ${{ inputs.stack_name }}
   # 置くスクリプトはいつもスタックの出力（DefaultBranch）を読み、これと食い違えば止める
@@ -130,6 +136,10 @@ jobs:
         run: |
           if ! [[ "$TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
+            exit 1
+          fi
+          if ! [[ "$TOOL_REPOSITORY" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::review_canvas_repository は owner/name の形にしてください: $TOOL_REPOSITORY"
             exit 1
           fi
           case "$CONFIG" in
@@ -202,12 +212,16 @@ jobs:
             echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
             exit 1
           fi
+          if ! [[ "$TOOL_REPOSITORY" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::review_canvas_repository は owner/name の形にしてください: $TOOL_REPOSITORY"
+            exit 1
+          fi
 
       - name: Checkout review-canvas
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          repository: ShuntaToda/review-canvas
+          repository: ${{ inputs.review_canvas_repository }}
           ref: ${{ inputs.review_canvas_ref }}
           path: tool
 
@@ -271,7 +285,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          repository: ShuntaToda/review-canvas
+          repository: ${{ inputs.review_canvas_repository }}
           ref: ${{ inputs.review_canvas_ref }}
           path: tool
 
@@ -459,12 +473,16 @@ jobs:
             echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
             exit 1
           fi
+          if ! [[ "$TOOL_REPOSITORY" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::review_canvas_repository は owner/name の形にしてください: $TOOL_REPOSITORY"
+            exit 1
+          fi
 
       - name: Checkout review-canvas
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          repository: ShuntaToda/review-canvas
+          repository: ${{ inputs.review_canvas_repository }}
           ref: ${{ inputs.review_canvas_ref }}
           path: tool
 
@@ -594,12 +612,16 @@ jobs:
             echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
             exit 1
           fi
+          if ! [[ "$TOOL_REPOSITORY" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::review_canvas_repository は owner/name の形にしてください: $TOOL_REPOSITORY"
+            exit 1
+          fi
 
       - name: Checkout review-canvas
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          repository: ShuntaToda/review-canvas
+          repository: ${{ inputs.review_canvas_repository }}
           ref: ${{ inputs.review_canvas_ref }}
           path: tool
 
