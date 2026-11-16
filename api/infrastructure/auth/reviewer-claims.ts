@@ -51,18 +51,30 @@ const toDisplayName = (value: unknown): string | undefined => {
   return name === "" ? undefined : name;
 };
 
+/** client（AI・CI）の表示名の頭。「AI（<設定の表示名>）」の形は、許可した client にだけ付ける */
+export const AI_NAME_PREFIX = "AI（";
+
+/**
+ * 表示名が client の名前（「AI（…」）に見えるか。全角・半角・大文字小文字・あいだの空白の違いは同じものとして比べる
+ */
+export const looksLikeAiName = (name: string): boolean =>
+  name.normalize("NFKC").replace(/\s/g, "").toLowerCase().startsWith("ai(");
+
 /**
  * 署名等を確かめた後のトークンのペイロードから、利用者を読み取る。
  * 擬似（ローカル）と Auth0 の検証の両方がこの関数を通し、同じクレームを同じ規則で読む。
  *
  * - sub・iat・exp は必須。iat は今以前、exp は今より後で、exp - iat は上限以内（時計のずれは見込まない）
  * - 表示名は REVIEWER_NAME_CLAIM・name・email の順に最初に読めたもの。どれも無ければ sub
+ * - reserveAiName を立てると、「AI（…」に見える表示名は読まずに次の候補へ進む（人が、自分で決められる表示名で client を名乗れないように。
+ *   Auth0 の人のトークンで立てる。擬似ログインは、手元の MCP サーバーが「AI（<名前>）」を名乗るので立てない）
  *
  * @throws {TokenVerificationFailedError} 必須のクレームが無い・不正、発行時刻が未来、期限切れ、有効期限が上限を超える
  */
 export const readReviewerClaims = (
   payload: Record<string, unknown>,
   now: Date,
+  { reserveAiName = false }: { reserveAiName?: boolean } = {},
 ): Reviewer => {
   const { sub, iat, exp } = payload;
   if (typeof sub !== "string" || sub === "") {
@@ -89,11 +101,19 @@ export const readReviewerClaims = (
     );
   }
 
+  const usable = (value: unknown): string | undefined => {
+    const candidate = toDisplayName(value);
+    return candidate !== undefined &&
+      reserveAiName &&
+      looksLikeAiName(candidate)
+      ? undefined
+      : candidate;
+  };
   const name =
-    toDisplayName(payload[REVIEWER_NAME_CLAIM]) ??
-    toDisplayName(payload["name"]) ??
-    toDisplayName(payload["email"]) ??
-    toDisplayName(sub) ??
+    usable(payload[REVIEWER_NAME_CLAIM]) ??
+    usable(payload["name"]) ??
+    usable(payload["email"]) ??
+    usable(sub) ??
     sub;
 
   return { id: sub, name };

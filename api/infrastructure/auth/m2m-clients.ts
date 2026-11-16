@@ -1,6 +1,9 @@
 import type { Reviewer } from "@/domain/model/reviewer/reviewer";
 import { ReviewerNotAllowedError } from "@/domain/support/auth/reviewer-token-verifier";
-import { readReviewerClaims } from "@/infrastructure/auth/reviewer-claims";
+import {
+  AI_NAME_PREFIX,
+  readReviewerClaims,
+} from "@/infrastructure/auth/reviewer-claims";
 import type { M2mClient } from "@/infrastructure/config/m2m-clients-setting";
 
 /** client credentials のトークンの grant type（Auth0 が載せる gty） */
@@ -21,7 +24,7 @@ export const isM2mPayload = (payload: Record<string, unknown>): boolean =>
 
 /** client のトークンで呼んだ利用者の表示名 */
 export const m2mReviewerName = (clientName: string): string =>
-  `AI（${clientName}）`;
+  `${AI_NAME_PREFIX}${clientName}）`;
 
 /**
  * client credentials のトークンのペイロードから、利用者を読み取る。

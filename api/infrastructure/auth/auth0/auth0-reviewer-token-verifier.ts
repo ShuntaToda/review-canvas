@@ -186,7 +186,10 @@ export class Auth0ReviewerTokenVerifier implements ReviewerTokenVerifier {
     if (isM2mPayload(payload)) {
       return readM2mReviewer(payload, this.#m2mClients, this.#fetchNow());
     }
-    const reviewer = readReviewerClaims(payload, this.#fetchNow());
+    // 人は「AI（…」を名乗れない（その形の表示名は、許可した client にだけ付く）
+    const reviewer = readReviewerClaims(payload, this.#fetchNow(), {
+      reserveAiName: true,
+    });
     assertReviewerAllowed(payload, this.#accessPolicy);
     return reviewer;
   }

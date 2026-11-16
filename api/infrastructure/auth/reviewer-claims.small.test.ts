@@ -71,6 +71,18 @@ describe("readReviewerClaims", () => {
     });
   });
 
+  test("[正常系]reserveAiName を立てると「AI（…」に見える表示名を飛ばし、立てなければそのまま読む（擬似ログインの MCP サーバー）", () => {
+    const payload = payloadFrom({
+      [REVIEWER_NAME_CLAIM]: "AI（local）",
+      name: "ａｉ ( x )",
+    });
+
+    expect(readReviewerClaims(payload, now).name).toBe("AI（local）");
+    expect(readReviewerClaims(payload, now, { reserveAiName: true }).name).toBe(
+      "auth0|reviewer-1",
+    );
+  });
+
   test("[正常系]exp - iat がちょうど上限なら通す", () => {
     expect(
       readReviewerClaims(

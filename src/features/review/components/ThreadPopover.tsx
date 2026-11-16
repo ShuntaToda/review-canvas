@@ -4,7 +4,12 @@ import { useRestoreFocus } from "../hooks/useRestoreFocus";
 import { describeAnchor } from "../model/anchor-describe";
 import { POPOVER_WIDTH } from "../model/popover";
 import type { Story } from "../model/storybook";
-import { type Comment, isStaleCommit, type Thread } from "../model/threads";
+import {
+  type Comment,
+  isClientReviewerId,
+  isStaleCommit,
+  type Thread,
+} from "../model/threads";
 import { CommentForm } from "./CommentForm";
 import { focusCanvas } from "./canvas-dom";
 import { formatDateTime } from "@/utils/time";
@@ -269,6 +274,14 @@ const CommentItem = ({
     <li className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="font-bold text-ink">{comment.author}</span>
+        {isClientReviewerId(comment.authorId) && (
+          <span
+            className="rounded bg-ai-fixed-soft px-1.5 py-0.5 text-ai-fixed"
+            title="許可した client（AI・CI）のトークンで書かれました"
+          >
+            client
+          </span>
+        )}
         <time dateTime={comment.createdAt} className="text-muted">
           {formatDateTime(comment.createdAt)}
         </time>

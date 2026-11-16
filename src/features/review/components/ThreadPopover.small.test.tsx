@@ -90,6 +90,15 @@ describe("ThreadPopover", () => {
     expect(onToggleResolved).toHaveBeenCalledTimes(1);
   });
 
+  test("[正常系]client のトークンで書かれたコメントには、利用者IDで見分けて印を出す（表示名が「AI（…」でも、人の利用者IDなら出さない）", () => {
+    renderPopover(root({ author: "AI（fixer）", authorId: "abc123@clients" }));
+    expect(screen.getByText("client")).not.toBeNull();
+    cleanup();
+
+    renderPopover(root({ author: "AI（fixer）", authorId: "auth0|yamada" }));
+    expect(screen.queryByText("client")).toBeNull();
+  });
+
   test("[正常系]未解決のスレッドには、確認待ちの知らせも差し戻しも出さない", () => {
     renderPopover(root());
 

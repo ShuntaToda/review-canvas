@@ -19,6 +19,13 @@ export type Thread = {
 /** スレッドの状態（API の契約。open=未解決 / ai-fixed=AI 修正済み・確認待ち / resolved=解決済み） */
 export type ThreadStatus = Comment["status"];
 
+/**
+ * 許可した client（AI・CI）のトークンで書かれたか。表示名ではなく利用者ID（`<Client ID>@clients`）で見分ける
+ * （表示名は人が決められるが、利用者ID はトークンの sub で、人の sub はこの形にならない）
+ */
+export const isClientReviewerId = (id: string | null): boolean =>
+  id?.endsWith("@clients") === true;
+
 export type StatusFilter = ThreadStatus | "all";
 
 /** 状態の名前（一覧の印・書き出し） */
