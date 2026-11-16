@@ -7,6 +7,7 @@ import {
   LOGGER,
 } from "@/di-container/service-id";
 import type { Logger } from "@/domain/support/logger";
+import { applyLocalAwsEnv } from "@/handler/api/entrypoint/local/local-aws-env";
 import {
   buildCommentTableParams,
   refreshTable,
@@ -16,7 +17,7 @@ import {
  * ローカルのDynamoDBのコメントのテーブルを作り直す（書いたコメントは消える）。
  * 起動（pnpm run local）は無いときだけ作るので、ふだんは使わなくてよい
  */
-config();
+applyLocalAwsEnv(process.env, config().parsed ?? {});
 
 if (process.env["STAGE_NAME"] !== "LOCAL") {
   // 誤ってAWS環境に対して実行しないようにする安全弁

@@ -1,2 +1,4 @@
 import { config } from "dotenv";
-config();
+import { applyLocalAwsEnv } from "./local-aws-env";
+
+applyLocalAwsEnv(process.env, config().parsed ?? {});
