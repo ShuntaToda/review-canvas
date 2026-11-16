@@ -40,29 +40,45 @@ const fields = {
   id: z
     .string()
     .regex(SOURCE_ID_PATTERN)
-    .describe(
-      "Storybook の ID（英小文字・数字・-、32 文字まで）。URL とコメントに残る。あとから変えると、その ID のコメントは画面に並ばなくなる",
-    ),
+    .meta({
+      description:
+        "Storybook の ID（英小文字・数字・-、32 文字まで）。置き場の URL（/sb/<ブランチ>/<id>/）と、コメントの source に残る。API・MCP の道具・書き出しでは、この値で絞り込む。あとから変えると、その ID のコメントは画面に並ばなくなる",
+      examples: ["shop", "admin-console"],
+    }),
   label: z
     .string()
     .min(1)
     .max(40)
-    .describe("画面に出す名前（ページの切り替え・Markdown の見出し）"),
+    .meta({
+      description:
+        "画面に出す名前（ページの切り替え・コメント一覧・書き出しの見出し）。40 文字まで",
+      examples: ["ショップ"],
+    }),
   widths: z
     .array(widthSchema)
     .min(1)
     .max(8)
-    .describe("切り替えられる画面の幅(px)"),
-  defaultWidth: widthSchema.describe("既定の画面の幅(px)。widths のどれか"),
+    .meta({
+      description:
+        "切り替えられる画面の幅(px。200〜4000 の整数を 1〜8 個)。ストーリーの iframe をこの幅で並べる。コメントには書いたときの幅（frameWidth）が残る",
+      examples: [[375, 768, 1280]],
+    }),
+  defaultWidth: widthSchema.meta({
+    description:
+      "開いたときの画面の幅(px)。widths のどれかにする（違うと読み込みで止まる）",
+    examples: [375],
+  }),
   baseHeight: z
     .number()
     .int()
     .min(200)
     .max(4000)
     .default(DEFAULT_BASE_HEIGHT)
-    .describe(
-      "中身を測る前の画面の高さ(px)。測った高さがこれより低くても、これより低くはしない",
-    ),
+    .meta({
+      description:
+        "中身を測る前の画面の高さ(px。200〜4000。省くと 800)。読み込んだあとは中身の高さに合わせるが、これより低くはしない",
+      examples: [812],
+    }),
 };
 
 const defaultWidthInWidths = {
@@ -85,41 +101,51 @@ export const StorybookEntrySchema = z
     build: z
       .string()
       .min(1)
-      .describe(
-        "Storybook をビルドするコマンド（設定ファイルのあるディレクトリで、シェルで動かす）",
-      ),
+      .meta({
+        description:
+          "Storybook をビルドするコマンド（設定ファイルのあるディレクトリで、シェルで動かす）。置くスクリプト・ワークフローが動かす。--test のビルドを推奨",
+        examples: ["pnpm --dir apps/shop run build-storybook --test"],
+      }),
     outDir: z
       .string()
       .refine(isSafeRelativePath, {
         message:
           "outDir は設定ファイルのあるディレクトリからの相対パスにしてください（絶対パス・.. は使えません）",
       })
-      .describe(
-        "ビルド結果（index.json・iframe.html のあるディレクトリ）。設定ファイルのあるディレクトリからの相対パス",
-      ),
+      .meta({
+        description:
+          "ビルド結果（index.json・iframe.html のあるディレクトリ）。設定ファイルのあるディレクトリからの相対パス（絶対パス・.. は使えない。置くチェックアウトの外を上げさせないため）",
+        examples: ["apps/shop/storybook-static"],
+      }),
   })
   .refine(defaultWidthInWidths.check, defaultWidthInWidths.params);
 
 export const ReviewCanvasConfigSchema = z
   .object({
-    $schema: z.string().optional(),
-    storybooks: z
-      .array(StorybookEntrySchema)
-      .min(1)
-      .max(MAX_STORYBOOKS)
-      .describe("キャンバスに並べる Storybook（1 つ目が開いたときのページ）"),
+    $schema: z.string().optional().meta({
+      description:
+        "この JSON Schema の場所（エディタの補完・検証用。review-canvas は読まない）。review-canvas のコミットを指す URL か、取り出した場所への相対パス",
+    }),
+    storybooks: z.array(StorybookEntrySchema).min(1).max(MAX_STORYBOOKS).meta({
+      description:
+        "キャンバスに並べる Storybook（1〜8 個。1 つ目が開いたときのページ）。1 つが 1 ページになり、id は重ねられない",
+    }),
     excludeTitlePrefixes: z
       .array(z.string().min(1))
       .default([])
-      .describe(
-        "既定では並べないストーリーのタイトルの頭（例: Components/）。画面の「部品も表示」で並べる",
-      ),
+      .meta({
+        description:
+          "既定では並べないストーリーのタイトル（Storybook の title）の頭。部品のストーリーを外して画面だけを並べるときに使う。画面の「部品も表示」で並べられる。省くと何も外さない",
+        examples: [["Components/"]],
+      }),
     watchPaths: z
       .array(z.string().min(1))
       .default([])
-      .describe(
-        "push のときに置き直すきっかけのパス（リポジトリの根から。git diff に渡す）",
-      ),
+      .meta({
+        description:
+          "push のときに置き直すきっかけのパス（リポジトリの根から。git diff に渡す）。ここに挙げたパスが変わった push でだけ、ワークフローが Storybook をビルドして置き直す。ワークフローで push から置き直すなら要る（空のままだと push の実行は失敗する）",
+        examples: [["apps/shop/", "review-canvas.config.json"]],
+      }),
   })
   .refine(
     (c) => new Set(c.storybooks.map((s) => s.id)).size === c.storybooks.length,
@@ -202,4 +228,6 @@ export const parseSourcesEnv = (raw: string): SourcesSetting => {
 export const reviewCanvasConfigJsonSchema = (): Record<string, unknown> => ({
   ...z.toJSONSchema(ReviewCanvasConfigSchema, { io: "input" }),
   title: "review-canvas の設定（review-canvas.config.json）",
+  description:
+    "使う側のリポジトリに置く設定。キャンバスに並べる Storybook（ID・名前・作り方・置き場・幅）と、置き直すきっかけのパスを書く。手元の API・置くスクリプト・ワークフロー・CDK が読む（docs/host-setup.md）",
 });

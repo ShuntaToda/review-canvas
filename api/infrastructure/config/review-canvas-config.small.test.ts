@@ -96,4 +96,56 @@ describe("review-canvas.config.schema.json", () => {
     );
     expect(committed).toStrictEqual(reviewCanvasConfigJsonSchema());
   });
+  test("[正常系]どの項目にも説明があり、例は設定として読める（エディタの補完と AI が形を読むため）", () => {
+    const schema = reviewCanvasConfigJsonSchema() as {
+      description?: string;
+      properties: Record<
+        string,
+        {
+          description?: string;
+          items?: {
+            properties?: Record<
+              string,
+              { description?: string; examples?: unknown[] }
+            >;
+          };
+          examples?: unknown[];
+        }
+      >;
+    };
+    const storybook = schema.properties["storybooks"]?.items?.properties ?? {};
+    const described = [
+      ["(root)", schema.description],
+      ...Object.entries(schema.properties).map(
+        ([key, value]) => [key, value.description] as const,
+      ),
+      ...Object.entries(storybook).map(
+        ([key, value]) => [`storybooks[].${key}`, value.description] as const,
+      ),
+    ];
+    expect(Object.keys(storybook).length).toBeGreaterThan(0);
+    expect(
+      described
+        .filter(([, text]) => text === undefined || text === "")
+        .map(([key]) => key),
+    ).toEqual([]);
+
+    // 例をそのまま組み立てた設定が通る（例が古くなったら落ちる）
+    const example = Object.fromEntries(
+      Object.entries(storybook)
+        .filter(([, value]) => value.examples?.[0] !== undefined)
+        .map(([key, value]) => [key, value.examples?.[0]]),
+    );
+    const config = parseReviewCanvasConfig({
+      storybooks: [example],
+      excludeTitlePrefixes:
+        schema.properties["excludeTitlePrefixes"]?.examples?.[0],
+      watchPaths: schema.properties["watchPaths"]?.examples?.[0],
+    });
+    expect(config.storybooks[0]?.id).toBe("shop");
+    expect(config.watchPaths).toEqual([
+      "apps/shop/",
+      "review-canvas.config.json",
+    ]);
+  });
 });

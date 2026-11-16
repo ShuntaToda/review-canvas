@@ -79,6 +79,17 @@ claude mcp add review-canvas \
 
 登録できたら、Claude Code で `/mcp` を開くと `review-canvas` と 4 つの道具が見えます。「review-canvas の未解決のコメントを直して」と頼むか、同梱のスキル（下）を使います。
 
+### スキル（`fix-review-comments`）
+
+未解決のコメントを直して返すまでの手順を、Claude Code のスキルにしてあります（[.claude/skills/fix-review-comments/SKILL.md](../.claude/skills/fix-review-comments/SKILL.md)）。使う側のリポジトリの `.claude/skills/fix-review-comments/` に写すと、「レビューのコメントを直して」や `/fix-review-comments` で動きます。
+
+```bash
+mkdir -p .claude/skills/fix-review-comments
+cp <review-canvas>/.claude/skills/fix-review-comments/SKILL.md .claude/skills/fix-review-comments/
+```
+
+スキルは、読む（`list_open_comments`）→ `story.importPath` と `anchor` から場所を特定する → 直す → 検査を通す → `mark_ai_fixed` で何を直したかを返す、の順に進めます。直せないものは `reply` で理由を返し、未解決のまま残します。
+
 ### ほかのクライアント・動作の確かめ
 
 MCP の stdio（1 行に 1 つの JSON-RPC）を話すクライアントなら同じように登録できます。手で確かめるときは、標準入力に知らせを流します。
