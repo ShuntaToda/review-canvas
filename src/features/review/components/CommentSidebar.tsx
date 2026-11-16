@@ -6,14 +6,17 @@ import { storyKey } from "../model/storybook";
 import {
   emptyListMessage,
   isStaleCommit,
+  STATUS_LABELS,
   type StatusFilter,
   type Thread,
 } from "../model/threads";
-import { MissingMark } from "./Pin";
+import { MissingMark, PIN_COLORS } from "./Pin";
 import { formatDateTime } from "@/utils/time";
 
 const STATUS_TABS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: "open", label: "未解決" },
+  // AI が直したと知らせたスレッド。人が確かめて解決にする
+  { value: "ai-fixed", label: "確認待ち" },
   { value: "resolved", label: "解決済み" },
   { value: "all", label: "すべて" },
 ];
@@ -103,7 +106,7 @@ export const CommentSidebar = ({
             role="tab"
             aria-selected={status === value}
             className={[
-              "flex-1 rounded-md px-2 py-1 text-xs",
+              "flex-1 rounded-md px-1 py-1 text-xs whitespace-nowrap",
               status === value
                 ? "bg-accent-soft font-bold text-accent"
                 : "text-ink-sub hover:bg-panel-sub",
@@ -180,7 +183,7 @@ export const CommentSidebar = ({
                     <span
                       className={[
                         "inline-flex size-5 shrink-0 items-center justify-center rounded-full rounded-bl-none text-[10px] font-bold text-white",
-                        root.resolved ? "bg-resolved" : "bg-accent",
+                        PIN_COLORS[root.status],
                       ].join(" ")}
                     >
                       {thread.number}
@@ -200,7 +203,12 @@ export const CommentSidebar = ({
                     {thread.replies.length > 0 && (
                       <span>返信 {thread.replies.length}</span>
                     )}
-                    {root.resolved && <span>解決済み</span>}
+                    {root.status === "resolved" && <span>解決済み</span>}
+                    {root.status === "ai-fixed" && (
+                      <span className="rounded bg-ai-fixed-soft px-1 text-ai-fixed">
+                        {STATUS_LABELS["ai-fixed"]}
+                      </span>
+                    )}
                     {missingThreadIds.has(root.id) && (
                       <span className="inline-flex items-center gap-1">
                         <MissingMark />

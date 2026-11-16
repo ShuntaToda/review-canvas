@@ -75,6 +75,7 @@ import {
   buildThreads,
   type Comment,
   type CommentAnchor,
+  countByStatus,
   filterThreads,
   type StatusFilter,
   type Thread,
@@ -213,7 +214,8 @@ export const ReviewWorkspace = ({
       cameras,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
-      resolved: thread?.root.resolved ?? false,
+      // 未解決でない（確認待ち・解決済み）スレッドへのリンクは、一覧を「すべて」にして開く
+      resolved: thread !== undefined && thread.root.status !== "open",
       showComponents:
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
@@ -556,6 +558,18 @@ export const ReviewWorkspace = ({
     showToast(resolved ? "解決にしました" : "再開しました");
   };
 
+  const revertAiFixed = async (thread: Thread) => {
+    await report(() =>
+      reviewApi.setAiFixed({
+        branch,
+        commentId: thread.root.id,
+        aiFixed: false,
+      }),
+    );
+    await refresh();
+    showToast("未解決へ差し戻しました");
+  };
+
   // キーボードの操作（入力欄にいるときは Esc 以外を効かせない）
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -666,7 +680,7 @@ export const ReviewWorkspace = ({
       id: thread.root.id,
       number: thread.number,
       ...pinPointOf(thread),
-      resolved: thread.root.resolved,
+      status: thread.root.status,
       mismatched,
       anchor: thread.root.anchor,
       missing,
@@ -695,11 +709,7 @@ export const ReviewWorkspace = ({
     title: titleFilter,
     stories: storiesByKey,
   });
-  const counts: Record<StatusFilter, number> = {
-    open: titleThreads.filter((t) => !t.root.resolved).length,
-    resolved: titleThreads.filter((t) => t.root.resolved).length,
-    all: titleThreads.length,
-  };
+  const counts = countByStatus(titleThreads);
   const listed = filterThreads(titleThreads, { status, stories: storiesByKey });
   const titles = [
     ...new Set(
@@ -913,6 +923,7 @@ export const ReviewWorkspace = ({
                   onEdit={editComment}
                   onDelete={deleteComment}
                   onToggleResolved={() => toggleResolved(activeThread)}
+                  onRevertAiFixed={() => revertAiFixed(activeThread)}
                   onCopyLink={() =>
                     copyLink({ page, comment: activeThread.root.id })
                   }

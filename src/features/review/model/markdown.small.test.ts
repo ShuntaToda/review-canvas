@@ -18,9 +18,20 @@ const comment = (props: Partial<Comment> & Pick<Comment, "id">): Comment => ({
   resolved: false,
   resolvedBy: null,
   resolvedAt: null,
+  aiFixedBy: null,
+  aiFixedById: null,
+  aiFixedAt: null,
   createdAt: "2026-11-13T10:00:00.000+09:00",
   updatedAt: "2026-11-13T10:00:00.000+09:00",
   ...props,
+  // API と同じ決め方（解決が AI 修正済みの印より優先する）
+  status:
+    props.status ??
+    (props.resolved === true
+      ? "resolved"
+      : props.aiFixedAt != null
+        ? "ai-fixed"
+        : "open"),
 });
 
 const stories = new Map<string, Story>([
@@ -110,6 +121,32 @@ describe("buildMarkdown", () => {
         "  > 消えた画面",
         "",
       ].join("\n"),
+    );
+  });
+
+  test("[正常系]AI 修正済み（確認待ち）のスレッドは、Issue の形ではチェックを付けずに印を添え、AI 向けの形では見出しに状態を書く", () => {
+    const threads = buildThreads([
+      comment({
+        id: "01",
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "abc123@clients",
+        aiFixedAt: "2026-11-13T11:00:00.000+09:00",
+      }),
+    ]);
+    const input = {
+      threads,
+      stories,
+      sources,
+      branch: "feature/a",
+      commit: "def5678",
+      origin: "http://localhost:4100",
+    };
+
+    expect(buildMarkdown(input)).toContain(
+      "- [ ] **#1**（AI 修正済み（確認待ち）） Default（山田",
+    );
+    expect(buildMarkdown({ ...input, format: "ai" })).toContain(
+      "## #1 AI 修正済み（確認待ち）: サンプルショップ / Features/Search / Default",
     );
   });
 

@@ -1,6 +1,7 @@
 import {
   buildThreads,
   type Comment,
+  countByStatus,
   emptyListMessage,
   filterThreads,
   isStaleCommit,
@@ -22,9 +23,20 @@ const comment = (props: Partial<Comment> & Pick<Comment, "id">): Comment => ({
   resolved: false,
   resolvedBy: null,
   resolvedAt: null,
+  aiFixedBy: null,
+  aiFixedById: null,
+  aiFixedAt: null,
   createdAt: "2026-11-13T10:00:00.000+09:00",
   updatedAt: "2026-11-13T10:00:00.000+09:00",
   ...props,
+  // API と同じ決め方（解決が AI 修正済みの印より優先する）
+  status:
+    props.status ??
+    (props.resolved === true
+      ? "resolved"
+      : props.aiFixedAt != null
+        ? "ai-fixed"
+        : "open"),
 });
 
 describe("buildThreads", () => {
@@ -51,6 +63,13 @@ describe("filterThreads", () => {
     comment({ id: "01", resolved: true }),
     comment({ id: "02", source: "blog", storyId: "entry--default" }),
     comment({ id: "03", storyId: "detail--default" }),
+    comment({
+      id: "04",
+      storyId: "detail--default",
+      aiFixedBy: "AI（fixer）",
+      aiFixedById: "abc123@clients",
+      aiFixedAt: "2026-11-13T11:00:00.000+09:00",
+    }),
   ]);
   const stories = new Map([
     [
@@ -67,8 +86,9 @@ describe("filterThreads", () => {
 
   test.each([
     { status: "open" as const, expected: ["02", "03"] },
+    { status: "ai-fixed" as const, expected: ["04"] },
     { status: "resolved" as const, expected: ["01"] },
-    { status: "all" as const, expected: ["01", "02", "03"] },
+    { status: "all" as const, expected: ["01", "02", "03", "04"] },
   ])(
     "[正常系]status=$status で解決の状態を絞り込む",
     ({ status, expected }) => {
@@ -87,6 +107,24 @@ describe("filterThreads", () => {
         stories,
       }).map((t) => t.root.id),
     ).toStrictEqual(["01"]);
+  });
+});
+
+describe("countByStatus", () => {
+  test("[正常系]状態ごとの件数と全体の件数を数える（確認待ちは未解決に数えない）", () => {
+    const threads = buildThreads([
+      comment({ id: "01", resolved: true }),
+      comment({ id: "02" }),
+      comment({ id: "03", aiFixedAt: "2026-11-13T11:00:00.000+09:00" }),
+      comment({ id: "04", parentId: "02" }),
+    ]);
+
+    expect(countByStatus(threads)).toStrictEqual({
+      open: 1,
+      "ai-fixed": 1,
+      resolved: 1,
+      all: 3,
+    });
   });
 });
 
@@ -124,17 +162,22 @@ describe("emptyListMessage", () => {
   test.each([
     {
       status: "open",
-      counts: { open: 0, resolved: 2, all: 2 },
+      counts: { open: 0, "ai-fixed": 0, resolved: 2, all: 2 },
       expected: "未解決のコメントはありません",
     },
     {
+      status: "ai-fixed",
+      counts: { open: 1, "ai-fixed": 0, resolved: 0, all: 1 },
+      expected: "確認待ちのコメントはありません",
+    },
+    {
       status: "resolved",
-      counts: { open: 1, resolved: 0, all: 1 },
+      counts: { open: 1, "ai-fixed": 0, resolved: 0, all: 1 },
       expected: "解決済みのコメントはありません",
     },
     {
       status: "open",
-      counts: { open: 0, resolved: 0, all: 0 },
+      counts: { open: 0, "ai-fixed": 0, resolved: 0, all: 0 },
       expected: null,
     },
   ] as const)(

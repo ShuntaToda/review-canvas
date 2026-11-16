@@ -117,6 +117,34 @@ describe("buildReviewApi", () => {
     });
   });
 
+  test("[正常系]AI 修正済みの印を外すときは、ブランチと印だけを送る（操作した人は送らない）", async () => {
+    const { api, lastRequest } = setUp(json(200, { id: "01" }));
+
+    await api.setAiFixed({ branch: "main", commentId: "01", aiFixed: false });
+
+    const request = lastRequest();
+    expect(request.method).toBe("PUT");
+    expect(new URL(request.url).pathname).toBe("/api/comments/01/ai-fixed");
+    expect(await request.json()).toStrictEqual({
+      branch: "main",
+      aiFixed: false,
+    });
+  });
+
+  test("[異常系]解決済みのスレッドの印の付け外し（409）は、解決済みと伝える文言にする", async () => {
+    const { api } = setUp(
+      json(409, { error: "CommentAlreadyResolvedError", message: "..." }),
+    );
+
+    await expect(
+      api.setAiFixed({ branch: "main", commentId: "01", aiFixed: false }),
+    ).rejects.toMatchObject({
+      status: 409,
+      errorName: "CommentAlreadyResolvedError",
+      message: "このスレッドはすでに解決済みです",
+    });
+  });
+
   test("[異常系]401はログインし直しを促す文言にする", async () => {
     const { api } = setUp(
       json(401, { error: "NoAuthorizationHeaderError", message: "..." }),

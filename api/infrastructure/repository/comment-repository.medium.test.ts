@@ -69,6 +69,9 @@ const readAll = async (
 
 const deletedAt = new Date("2026-11-13T12:00:00.000+09:00");
 
+/** M2M のトークンで呼んだ AI（表示名は「AI（client の名前）」） */
+const AI = { id: "abc123@clients", name: "AI（fixer）" };
+
 beforeEach(async () => {
   await refreshTable(buildCommentTableParams({ ddb, commentTableName }));
 });
@@ -452,6 +455,108 @@ describe("CommentRepository", () => {
         resolved: true,
         resolvedBy: "鈴木",
       });
+    });
+
+    test("[正常系]AI 修正済みの印と解決が重なっても、両方が残る（解決が印を古い値で消さない）", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+      await commentRepository.create(comment);
+      const now = new Date("2026-11-13T11:00:00.000+09:00");
+
+      // どちらも同じ（古い）状態から作った変更を、印→解決の順に書く
+      const fixed = await commentRepository.updateAiFixed(
+        comment.setAiFixed({ aiFixed: true, actor: AI, now }),
+      );
+      expect(fixed.status).toBe("ai-fixed");
+      await commentRepository.updateResolution(
+        comment.setResolved({ resolved: true, actor: SUZUKI, now }),
+      );
+
+      const saved = await commentRepository.findByBranchAndId({
+        branch: "feature/a",
+        commentId: comment.id,
+      });
+      expect(saved).toMatchObject({
+        resolved: true,
+        resolvedBy: "鈴木",
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "abc123@clients",
+        aiFixedAt: now,
+      });
+      expect(saved?.status).toBe("resolved");
+    });
+
+    test("[正常系]再開は印も消して未解決に戻し、印の付け外しは本文の編集を消さない", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+      await commentRepository.create(comment);
+      const now = new Date("2026-11-13T11:00:00.000+09:00");
+
+      await commentRepository.updateBody(
+        comment.editBody({ body: "直しました", editor: YAMADA, now }),
+      );
+      await commentRepository.updateAiFixed(
+        comment.setAiFixed({ aiFixed: true, actor: AI, now }),
+      );
+      const resolved = await commentRepository.updateResolution(
+        comment.setResolved({ resolved: true, actor: SUZUKI, now }),
+      );
+      const reopened = await commentRepository.updateResolution(
+        resolved.setResolved({ resolved: false, actor: SUZUKI, now }),
+      );
+
+      expect(reopened).toMatchObject({
+        body: "直しました",
+        resolved: false,
+        aiFixedBy: null,
+        aiFixedById: null,
+        aiFixedAt: null,
+      });
+      expect(reopened.status).toBe("open");
+    });
+
+    test("[正常系]印を持つ前に書かれた項目（属性が無い）にも印を付けられる", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+      const {
+        aiFixedBy: _aiFixedBy,
+        aiFixedById: _aiFixedById,
+        aiFixedAt: _aiFixedAt,
+        ...legacy
+      } = ddbItemFromDomain(comment);
+      await ddbDoc.send(
+        new PutCommand({ TableName: commentTableName, Item: legacy }),
+      );
+      const now = new Date("2026-11-13T11:00:00.000+09:00");
+
+      const found = await commentRepository.findByBranchAndId({
+        branch: "feature/a",
+        commentId: comment.id,
+      });
+      expect(found?.status).toBe("open");
+      const fixed = await commentRepository.updateAiFixed(
+        found!.setAiFixed({ aiFixed: true, actor: AI, now }),
+      );
+
+      expect(fixed.status).toBe("ai-fixed");
+      expect(fixed.aiFixedById).toBe("abc123@clients");
+    });
+
+    test("[異常系]削除済みのコメントには印を付けず CommentNotFoundError", async () => {
+      const { commentRepository } = setUpDependencies();
+      const comment = commentDummyFrom({ branch: "feature/a" });
+      await commentRepository.create(comment);
+      await commentRepository.markDeleted({
+        branch: "feature/a",
+        commentIds: [comment.id],
+        deletedAt,
+      });
+
+      await expect(
+        commentRepository.updateAiFixed(
+          comment.setAiFixed({ aiFixed: true, actor: AI, now: deletedAt }),
+        ),
+      ).rejects.toThrow(CommentNotFoundError);
     });
 
     test("[異常系]削除済み・無いコメントは書き換えず CommentNotFoundError（削除と重なっても生き返らない）", async () => {

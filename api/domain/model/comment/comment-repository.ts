@@ -92,11 +92,18 @@ export type CommentRepository = {
   updateBody(comment: Comment): Promise<Comment>;
 
   /**
-   * 解決の状態と更新日時だけを書き換える（同時に行われた本文の編集を消さない）。
+   * 解決の状態と更新日時だけを書き換える（同時に行われた本文の編集を消さない）。再開のときは AI 修正済みの印も消す。
    * コメントが無い・削除済みなら CommentNotFoundError
    * @returns 書き換えた後のコメント
    */
   updateResolution(comment: Comment): Promise<Comment>;
+
+  /**
+   * AI 修正済みの印（付けた人・日時）と更新日時だけを書き換える（同時に行われた本文の編集・解決を消さない）。
+   * コメントが無い・削除済みなら CommentNotFoundError
+   * @returns 書き換えた後のコメント
+   */
+  updateAiFixed(comment: Comment): Promise<Comment>;
 
   /**
    * コメントを削除済みにする（ほかの人の画面が差分の取り直しで削除を知れるよう、印を残す）。

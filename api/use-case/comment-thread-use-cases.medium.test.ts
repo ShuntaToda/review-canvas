@@ -2,7 +2,9 @@ import { DeleteTableCommand } from "@aws-sdk/client-dynamodb";
 import { CreateCommentUseCaseImpl } from "./create-comment-use-case";
 import { DeleteCommentUseCaseImpl } from "./delete-comment-use-case";
 import { ListCommentsUseCaseImpl } from "./list-comments-use-case";
+import { ListThreadsUseCaseImpl } from "./list-threads-use-case";
 import { ReplyToCommentUseCaseImpl } from "./reply-to-comment-use-case";
+import { SetCommentAiFixedUseCaseImpl } from "./set-comment-ai-fixed-use-case";
 import { SetCommentResolvedUseCaseImpl } from "./set-comment-resolved-use-case";
 import { CommentNotFoundError } from "@/domain/model/comment/comment-errors";
 import type { CommentRepository } from "@/domain/model/comment/comment-repository";
@@ -50,6 +52,8 @@ const setUpDependencies = ({
     resolve: new SetCommentResolvedUseCaseImpl(common),
     remove: new DeleteCommentUseCaseImpl(common),
     list: new ListCommentsUseCaseImpl(common),
+    markAiFixed: new SetCommentAiFixedUseCaseImpl(common),
+    listThreads: new ListThreadsUseCaseImpl(common),
   };
 };
 
@@ -131,6 +135,86 @@ describe("コメントのスレッドの一連の操作", () => {
     expect(rest.comments.map((c) => c.id)).toStrictEqual([
       other.comment.id,
       otherReply.comment.id,
+    ]);
+  });
+
+  test("[正常系]AI が未解決を読む→返信して AI 修正済みにする→人が確かめて解決する、が DynamoDB で往復する", async () => {
+    const { create, reply, resolve, markAiFixed, listThreads } =
+      setUpDependencies();
+    const branch = "main";
+    const AI = { id: "abc123@clients", name: "AI（fixer）" };
+    const threadsOf = async (status: "open" | "ai-fixed" | "resolved") =>
+      (
+        await listThreads.execute({
+          branch,
+          status,
+          source: null,
+          storyId: null,
+          limit: 20,
+          cursor: null,
+        })
+      ).threads.map((t) => [t.number, t.root.id, t.replies.map((r) => r.body)]);
+
+    const newPin = (body: string) =>
+      create.execute({
+        branch,
+        source: "shop",
+        storyId: "pages-login--default",
+        x: 10,
+        y: 20,
+        frameWidth: 390,
+        anchor: null,
+        body,
+        reviewer: YAMADA,
+      });
+    const { comment: first } = await newPin("余白が狭い");
+    const { comment: second } = await newPin("文言が違う");
+    expect(await threadsOf("open")).toStrictEqual([
+      [1, first.id, []],
+      [2, second.id, []],
+    ]);
+
+    // AI が 2 件目を直し、返信してから印を付ける
+    await reply.execute({
+      branch,
+      parentId: second.id,
+      body: "文言を直しました",
+      reviewer: AI,
+    });
+    const { comment: fixed } = await markAiFixed.execute({
+      branch,
+      commentId: second.id,
+      aiFixed: true,
+      reviewer: AI,
+    });
+    expect(fixed.aiFixedById).toBe(AI.id);
+    expect(await threadsOf("open")).toStrictEqual([[1, first.id, []]]);
+    expect(await threadsOf("ai-fixed")).toStrictEqual([
+      [2, second.id, ["文言を直しました"]],
+    ]);
+
+    // 人が確かめて解決する（印は経緯として残る）
+    const { comment: resolved } = await resolve.execute({
+      branch,
+      commentId: second.id,
+      resolved: true,
+      reviewer: YAMADA,
+    });
+    expect(resolved.aiFixedBy).toBe("AI（fixer）");
+    expect(await threadsOf("ai-fixed")).toStrictEqual([]);
+    expect(await threadsOf("resolved")).toStrictEqual([
+      [2, second.id, ["文言を直しました"]],
+    ]);
+
+    // 直っていなければ再開する。印も消えて未解決に戻る
+    await resolve.execute({
+      branch,
+      commentId: second.id,
+      resolved: false,
+      reviewer: YAMADA,
+    });
+    expect((await threadsOf("open")).map(([number]) => number)).toStrictEqual([
+      1, 2,
     ]);
   });
 

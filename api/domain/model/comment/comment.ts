@@ -1,5 +1,6 @@
 import type { CommentAnchor } from "./comment-anchor";
 import {
+  CommentAlreadyResolvedError,
   CommentNotAuthorError,
   CommentNotThreadRootError,
 } from "./comment-errors";
@@ -12,6 +13,22 @@ import type { Reviewer } from "@/domain/model/reviewer/reviewer";
  */
 export const STORY_SOURCE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export type StorySource = string;
+
+/**
+ * スレッドの状態。解決の状態（resolved）と AI の修正の印（aiFixedAt）から決まる（別の項目としては保存しない）。
+ * - open: 未解決
+ * - ai-fixed: AI（か、AI を動かした人）が直したと知らせた。人の確認待ち
+ * - resolved: 人が確かめて解決した
+ */
+export const COMMENT_STATUSES = ["open", "ai-fixed", "resolved"] as const;
+export type CommentStatus = (typeof COMMENT_STATUSES)[number];
+
+/** AI 修正済みの印が無い状態 */
+const CLEARED_AI_FIXED = {
+  aiFixedBy: null,
+  aiFixedById: null,
+  aiFixedAt: null,
+} as const;
 
 /**
  * Comment プロパティ
@@ -33,6 +50,9 @@ export type CommentProps = {
   resolved: boolean;
   resolvedBy: string | null;
   resolvedAt: Date | null;
+  aiFixedBy: string | null;
+  aiFixedById: string | null;
+  aiFixedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -144,12 +164,29 @@ export class Comment {
   readonly resolvedAt: Date | null;
 
   /**
+   * 「AI 修正済み（確認待ち）」の印を付けた人の表示名（印が無ければnull）。M2M のトークンなら「AI（client の名前）」
+   */
+  readonly aiFixedBy: string | null;
+
+  /**
+   * 印を付けた人の利用者ID（トークンの sub。あとから誰が付けたかを確かめるために残す。印が無ければnull）
+   *
+   * @example 'abc123@clients'
+   */
+  readonly aiFixedById: string | null;
+
+  /**
+   * 印を付けた日時（印が無ければnull）。解決しても残し（AI が直してから人が確かめた、という経緯が分かる）、再開・差し戻しで消える
+   */
+  readonly aiFixedAt: Date | null;
+
+  /**
    * 作成日時
    */
   readonly createdAt: Date;
 
   /**
-   * 更新日時（本文の編集・解決・再開で進む）
+   * 更新日時（本文の編集・解決・再開・AI 修正済みの印で進む）
    */
   readonly updatedAt: Date;
 
@@ -172,6 +209,9 @@ export class Comment {
     this.resolved = props.resolved;
     this.resolvedBy = props.resolvedBy;
     this.resolvedAt = props.resolvedAt;
+    this.aiFixedBy = props.aiFixedBy;
+    this.aiFixedById = props.aiFixedById;
+    this.aiFixedAt = props.aiFixedAt;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -225,6 +265,9 @@ export class Comment {
       resolved: false,
       resolvedBy: null,
       resolvedAt: null,
+      aiFixedBy: null,
+      aiFixedById: null,
+      aiFixedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -244,6 +287,14 @@ export class Comment {
    */
   isThreadRoot(): boolean {
     return this.parentId === null;
+  }
+
+  /**
+   * スレッドの状態（最初のコメントだけが意味を持つ。返信は常に open）。解決が AI 修正済みの印より優先する
+   */
+  get status(): CommentStatus {
+    if (this.resolved) return "resolved";
+    return this.aiFixedAt === null ? "open" : "ai-fixed";
   }
 
   /**
@@ -285,6 +336,9 @@ export class Comment {
       resolved: false,
       resolvedBy: null,
       resolvedAt: null,
+      aiFixedBy: null,
+      aiFixedById: null,
+      aiFixedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -308,7 +362,8 @@ export class Comment {
 
   /**
    * 解決・再開した新しいCommentを返す。誰でもできる（Figma と同じ）。
-   * 解決の状態はスレッドの最初のコメントだけが持つため、返信に対して呼ぶと CommentNotThreadRootError
+   * 解決の状態はスレッドの最初のコメントだけが持つため、返信に対して呼ぶと CommentNotThreadRootError。
+   * 再開すると AI 修正済みの印も消し、未解決（open）に戻す（直っていなかった、という判断のため）。解決では印を残す
    */
   setResolved({
     resolved,
@@ -329,6 +384,40 @@ export class Comment {
       resolved,
       resolvedBy: resolved ? actor.name : null,
       resolvedAt: resolved ? now : null,
+      ...(resolved ? {} : CLEARED_AI_FIXED),
+      updatedAt: now,
+    });
+  }
+
+  /**
+   * 「AI 修正済み（確認待ち）」の印を付けた・外した（差し戻した）新しいCommentを返す。誰でもできる（解決と同じ）。
+   * 付けた人は表示名と利用者IDで残す。最初のコメントだけが持つため、返信に対して呼ぶと CommentNotThreadRootError。
+   * 解決済みのスレッドには付け外しできない（CommentAlreadyResolvedError。人が確かめ終えた状態を AI が動かさない）
+   */
+  setAiFixed({
+    aiFixed,
+    actor,
+    now,
+  }: {
+    aiFixed: boolean;
+    actor: Reviewer;
+    now: Date;
+  }): Comment {
+    if (!this.isThreadRoot()) {
+      throw new CommentNotThreadRootError({
+        context: { branch: this.branch, commentId: this.id },
+      });
+    }
+    if (this.resolved) {
+      throw new CommentAlreadyResolvedError({
+        context: { branch: this.branch, commentId: this.id },
+      });
+    }
+    return new Comment({
+      ...this.#props(),
+      ...(aiFixed
+        ? { aiFixedBy: actor.name, aiFixedById: actor.id, aiFixedAt: now }
+        : CLEARED_AI_FIXED),
       updatedAt: now,
     });
   }
@@ -367,6 +456,9 @@ export class Comment {
       resolved: this.resolved,
       resolvedBy: this.resolvedBy,
       resolvedAt: this.resolvedAt,
+      aiFixedBy: this.aiFixedBy,
+      aiFixedById: this.aiFixedById,
+      aiFixedAt: this.aiFixedAt,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };

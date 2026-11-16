@@ -6,6 +6,8 @@ export const messages = {
   notAuthor: "自分が書いたコメントだけを編集・削除できます",
   /** ブランチのコメント数の上限（CommentLimitExceededError） */
   limitExceeded: "このブランチのコメント数が上限に達しています",
+  /** 解決済みのスレッドへの AI 修正済みの印の付け外し（CommentAlreadyResolvedError） */
+  alreadyResolved: "このスレッドはすでに解決済みです",
   /** 対象のコメントが無い（404） */
   notFound: "このコメントは削除されました",
   /** 開いていた・リンクで開いたスレッドが、いまのブランチのコメントに無い */

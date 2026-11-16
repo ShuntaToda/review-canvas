@@ -111,6 +111,10 @@ export const commentDdbItemSchema = z.object({
   resolved: z.boolean(),
   resolvedBy: z.string().nullable(),
   resolvedAt: z.iso.datetime({ offset: true }).nullable(),
+  // AI 修正済みの印。印を持つ前に書かれた項目は属性が無いので、null（印なし）として読む
+  aiFixedBy: z.string().nullable().default(null),
+  aiFixedById: z.string().nullable().default(null),
+  aiFixedAt: z.iso.datetime({ offset: true }).nullable().default(null),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -154,6 +158,8 @@ export const ddbItemToDomain = (ddbItem: CommentDdbItem): Comment =>
       ddbItem.resolvedAt === null
         ? null
         : dateFromIsoString(ddbItem.resolvedAt),
+    aiFixedAt:
+      ddbItem.aiFixedAt === null ? null : dateFromIsoString(ddbItem.aiFixedAt),
     createdAt: dateFromIsoString(ddbItem.createdAt),
     updatedAt: dateFromIsoString(ddbItem.updatedAt),
   });
@@ -176,6 +182,10 @@ export const ddbItemFromDomain = (comment: Comment): CommentDdbItem => ({
   resolvedBy: comment.resolvedBy,
   resolvedAt:
     comment.resolvedAt === null ? null : dateToIsoString(comment.resolvedAt),
+  aiFixedBy: comment.aiFixedBy,
+  aiFixedById: comment.aiFixedById,
+  aiFixedAt:
+    comment.aiFixedAt === null ? null : dateToIsoString(comment.aiFixedAt),
   createdAt: dateToIsoString(comment.createdAt),
   updatedAt: dateToIsoString(comment.updatedAt),
 });
@@ -628,6 +638,24 @@ export class CommentRepositoryImpl implements CommentRepository {
       resolved: ddbItem.resolved,
       resolvedBy: ddbItem.resolvedBy,
       resolvedAt: ddbItem.resolvedAt,
+      // 再開のときだけ AI 修正済みの印を消す（解決では触らず、同時に付けられた印を古い値で消さない）
+      ...(ddbItem.resolved
+        ? {}
+        : { aiFixedBy: null, aiFixedById: null, aiFixedAt: null }),
+      updatedAt: ddbItem.updatedAt,
+    });
+  }
+
+  async updateAiFixed(comment: Comment): Promise<Comment> {
+    this.#logger.debug("コメントのAI修正済みの印の更新開始", {
+      branch: comment.branch,
+      commentId: comment.id,
+    });
+    const ddbItem = commentDdbItemSchema.parse(ddbItemFromDomain(comment));
+    return this.#updateAttributes(comment, {
+      aiFixedBy: ddbItem.aiFixedBy,
+      aiFixedById: ddbItem.aiFixedById,
+      aiFixedAt: ddbItem.aiFixedAt,
       updatedAt: ddbItem.updatedAt,
     });
   }

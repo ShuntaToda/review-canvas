@@ -17,12 +17,14 @@ export type CommentPage = components["schemas"]["CommentList"];
 export type BusinessErrorName = NonNullable<
   | components["schemas"]["CommentNotAuthorErrorResponse"]["error"]
   | components["schemas"]["CommentLimitExceededErrorResponse"]["error"]
+  | components["schemas"]["CommentAlreadyResolvedErrorResponse"]["error"]
   | components["schemas"]["ReviewerNotAllowedErrorResponse"]["error"]
 >;
 
 const BUSINESS_ERROR_MESSAGES = {
   CommentNotAuthorError: messages.notAuthor,
   CommentLimitExceededError: messages.limitExceeded,
+  CommentAlreadyResolvedError: messages.alreadyResolved,
   ReviewerNotAllowedError: messages.notAllowed,
 } as const satisfies Record<BusinessErrorName, string>;
 
@@ -213,6 +215,23 @@ export const buildReviewApi = (client: ApiClient) => ({
       client.PUT("/api/comments/{commentId}/resolution", {
         params: { path: { commentId } },
         body: { branch, resolved },
+      }),
+    ),
+
+  /** 「AI 修正済み（確認待ち）」の印を付ける・外す（画面からは、直っていないときに外して未解決へ差し戻す） */
+  setAiFixed: ({
+    branch,
+    commentId,
+    aiFixed,
+  }: {
+    branch: string;
+    commentId: string;
+    aiFixed: boolean;
+  }): Promise<Comment> =>
+    call(() =>
+      client.PUT("/api/comments/{commentId}/ai-fixed", {
+        params: { path: { commentId } },
+        body: { branch, aiFixed },
       }),
     ),
 

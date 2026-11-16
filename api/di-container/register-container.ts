@@ -43,9 +43,12 @@ import { CreateCommentUseCaseImpl } from "@/use-case/create-comment-use-case";
 import { DeleteCommentUseCaseImpl } from "@/use-case/delete-comment-use-case";
 import { EditCommentUseCaseImpl } from "@/use-case/edit-comment-use-case";
 import { GetReviewMetaUseCaseImpl } from "@/use-case/get-review-meta-use-case";
+import { GetThreadUseCaseImpl } from "@/use-case/get-thread-use-case";
 import { ListBranchesUseCaseImpl } from "@/use-case/list-branches-use-case";
 import { ListCommentsUseCaseImpl } from "@/use-case/list-comments-use-case";
+import { ListThreadsUseCaseImpl } from "@/use-case/list-threads-use-case";
 import { ReplyToCommentUseCaseImpl } from "@/use-case/reply-to-comment-use-case";
+import { SetCommentAiFixedUseCaseImpl } from "@/use-case/set-comment-ai-fixed-use-case";
 import { SetCommentResolvedUseCaseImpl } from "@/use-case/set-comment-resolved-use-case";
 
 /**
@@ -405,6 +408,49 @@ export const registerContainer = ({
             serviceId.COMMENT_REPOSITORY,
           ),
           fetchNow: ctx.container.get<FetchNow>(serviceId.FETCH_NOW),
+          logger: ctx.container.get<Logger>(serviceId.LOGGER),
+        }),
+    )
+    .inSingletonScope();
+  container
+    .bind(serviceId.SET_COMMENT_AI_FIXED_USE_CASE)
+    .toDynamicValue(
+      (ctx) =>
+        new SetCommentAiFixedUseCaseImpl({
+          commentRepository: ctx.container.get<CommentRepository>(
+            serviceId.COMMENT_REPOSITORY,
+          ),
+          fetchNow: ctx.container.get<FetchNow>(serviceId.FETCH_NOW),
+          logger: ctx.container.get<Logger>(serviceId.LOGGER),
+        }),
+    )
+    .inSingletonScope();
+  container
+    .bind(serviceId.LIST_THREADS_USE_CASE)
+    .toDynamicValue(
+      (ctx) =>
+        new ListThreadsUseCaseImpl({
+          commentRepository: ctx.container.get<CommentRepository>(
+            serviceId.COMMENT_REPOSITORY,
+          ),
+          publishedStorybooks: ctx.container.get<PublishedStorybooks>(
+            serviceId.PUBLISHED_STORYBOOKS,
+          ),
+          logger: ctx.container.get<Logger>(serviceId.LOGGER),
+        }),
+    )
+    .inSingletonScope();
+  container
+    .bind(serviceId.GET_THREAD_USE_CASE)
+    .toDynamicValue(
+      (ctx) =>
+        new GetThreadUseCaseImpl({
+          commentRepository: ctx.container.get<CommentRepository>(
+            serviceId.COMMENT_REPOSITORY,
+          ),
+          publishedStorybooks: ctx.container.get<PublishedStorybooks>(
+            serviceId.PUBLISHED_STORYBOOKS,
+          ),
           logger: ctx.container.get<Logger>(serviceId.LOGGER),
         }),
     )

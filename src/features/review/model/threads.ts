@@ -16,7 +16,26 @@ export type Thread = {
   number: number;
 };
 
-export type StatusFilter = "open" | "resolved" | "all";
+/** スレッドの状態（API の契約。open=未解決 / ai-fixed=AI 修正済み・確認待ち / resolved=解決済み） */
+export type ThreadStatus = Comment["status"];
+
+export type StatusFilter = ThreadStatus | "all";
+
+/** 状態の名前（一覧の印・書き出し） */
+export const STATUS_LABELS = {
+  open: "未解決",
+  "ai-fixed": "AI 修正済み（確認待ち）",
+  resolved: "解決済み",
+} as const satisfies Record<ThreadStatus, string>;
+
+/** 状態ごとの件数（一覧のタブに出す） */
+export const countByStatus = (
+  threads: ReadonlyArray<Thread>,
+): Record<StatusFilter, number> => {
+  const counts = { open: 0, "ai-fixed": 0, resolved: 0, all: threads.length };
+  for (const { root } of threads) counts[root.status]++;
+  return counts;
+};
 
 /**
  * コメントの一覧（書いた順。返信を含む）をスレッドにまとめる。
@@ -62,7 +81,7 @@ export const filterThreads = (
 ): Thread[] =>
   threads.filter(
     ({ root }) =>
-      (status === "all" || root.resolved === (status === "resolved")) &&
+      (status === "all" || root.status === status) &&
       (source === undefined || root.source === source) &&
       (title === undefined ||
         stories.get(storyKey(root.source, root.storyId))?.title === title),
@@ -78,6 +97,7 @@ export const emptyListMessage = (
 ): string | null => {
   if (counts.all === 0) return null;
   if (status === "open") return "未解決のコメントはありません";
+  if (status === "ai-fixed") return "確認待ちのコメントはありません";
   if (status === "resolved") return "解決済みのコメントはありません";
   return null;
 };

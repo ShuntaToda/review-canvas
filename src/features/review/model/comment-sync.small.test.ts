@@ -22,6 +22,10 @@ const comment = (id: string, body = "本文"): Comment => ({
   resolved: false,
   resolvedBy: null,
   resolvedAt: null,
+  status: "open",
+  aiFixedBy: null,
+  aiFixedById: null,
+  aiFixedAt: null,
   createdAt: "2026-11-13T10:00:00.000+09:00",
   updatedAt: "2026-11-13T10:00:00.000+09:00",
 });

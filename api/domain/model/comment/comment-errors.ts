@@ -50,6 +50,18 @@ export class CommentNotThreadRootError extends InvalidError {
 }
 
 /**
+ * 解決済みのスレッドに、AI 修正済みの印を付け外ししようとしたときのエラー（再開してから行う）
+ */
+export class CommentAlreadyResolvedError extends ConflictError {
+  /** API契約(レスポンススキーマのenum)と共有するエラー名の正本 */
+  static readonly errorName = "CommentAlreadyResolvedError";
+  override name = CommentAlreadyResolvedError.errorName;
+  constructor(options?: ConstructorParameters<typeof ConflictError>[1]) {
+    super("このスレッドはすでに解決済みです", options);
+  }
+}
+
+/**
  * ブランチのコメント数が上限に達しているときのエラー
  */
 export class CommentLimitExceededError extends ConflictError {

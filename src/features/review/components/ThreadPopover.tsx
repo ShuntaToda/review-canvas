@@ -29,11 +29,13 @@ type ThreadPopoverProps = {
   onEdit: (commentId: string, body: string) => Promise<void>;
   onDelete: (comment: Comment) => Promise<void>;
   onToggleResolved: () => Promise<void>;
+  /** 「AI 修正済み（確認待ち）」の印を外し、未解決へ差し戻す（直っていなかったとき） */
+  onRevertAiFixed: () => Promise<void>;
   onCopyLink: () => void;
 };
 
 /**
- * ピンの横に出すスレッド。返信・解決／再開・自分のコメントの編集と削除ができる
+ * ピンの横に出すスレッド。返信・解決／再開・AI 修正済みの差し戻し・自分のコメントの編集と削除ができる
  */
 export const ThreadPopover = ({
   thread,
@@ -51,6 +53,7 @@ export const ThreadPopover = ({
   onEdit,
   onDelete,
   onToggleResolved,
+  onRevertAiFixed,
   onCopyLink,
 }: ThreadPopoverProps) => {
   const { root } = thread;
@@ -61,11 +64,11 @@ export const ThreadPopover = ({
   // （続けて押されると表示が変わる前に届くため、印は ref でも持つ）
   const [resolving, setResolving] = useState(false);
   const resolvingRef = useRef(false);
-  const toggleResolved = () => {
+  const changeStatus = (change: () => Promise<void>) => () => {
     if (resolvingRef.current) return;
     resolvingRef.current = true;
     setResolving(true);
-    onToggleResolved()
+    change()
       .catch(() => {
         // 失敗は呼び出し側が知らせる
       })
@@ -74,6 +77,8 @@ export const ThreadPopover = ({
         setResolving(false);
       });
   };
+  const toggleResolved = changeStatus(onToggleResolved);
+  const revertAiFixed = changeStatus(onRevertAiFixed);
   return (
     <section
       ref={ref}
@@ -138,13 +143,32 @@ export const ThreadPopover = ({
           )}
         </div>
       )}
+      {root.status === "ai-fixed" && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-ai-fixed-soft px-3 py-1.5 text-xs text-ai-fixed">
+          <p>
+            AI 修正済み・確認待ち（{root.aiFixedBy}
+            {root.aiFixedAt === null
+              ? ""
+              : `・${formatDateTime(root.aiFixedAt)}`}
+            ）。直っていれば「解決にする」を押してください
+          </p>
+          <button
+            type="button"
+            disabled={resolving}
+            className="shrink-0 rounded border border-ai-fixed/40 bg-panel px-1.5 py-0.5 font-medium whitespace-nowrap hover:bg-panel-sub disabled:cursor-wait disabled:opacity-50"
+            onClick={revertAiFixed}
+          >
+            未解決へ差し戻す
+          </button>
+        </div>
+      )}
       {root.resolved && (
         <p className="border-b border-line bg-panel-sub px-3 py-1.5 text-xs text-ink-sub">
           解決済み（{root.resolvedBy}
           {root.resolvedAt === null
             ? ""
             : `・${formatDateTime(root.resolvedAt)}`}
-          ）
+          ）{root.aiFixedBy !== null && ` 修正: ${root.aiFixedBy}`}
         </p>
       )}
       {/* 要素を見つけて追従できているときは、幅が違ってもずれないので知らせない */}

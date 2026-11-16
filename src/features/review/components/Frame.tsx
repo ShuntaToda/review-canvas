@@ -31,7 +31,7 @@ import {
   STORY_SETTLE_TIMEOUT_MS,
 } from "../model/story-render";
 import { storybookUrl, storyIframeUrl } from "../model/storybook";
-import type { CommentAnchor } from "../model/threads";
+import type { CommentAnchor, ThreadStatus } from "../model/threads";
 import { Pin } from "./Pin";
 import {
   focusCanvas,
@@ -47,7 +47,7 @@ export type PinView = {
   number: number;
   x: number;
   y: number;
-  resolved: boolean;
+  status: ThreadStatus;
   /** いまと違う幅の表示で書かれた（位置がずれているかもしれない） */
   mismatched: boolean;
   /** 指していた要素の手がかり（持たないコメントは無い） */
@@ -707,7 +707,7 @@ export const Frame = ({
             x={pin.x}
             y={pin.y}
             zoom={zoom}
-            resolved={pin.resolved}
+            status={pin.status}
             mismatched={pin.mismatched}
             missing={pin.missing}
             active={pin.id === activeThreadId}
@@ -726,7 +726,7 @@ export const Frame = ({
             x={draftPin.x}
             y={draftPin.y}
             zoom={zoom}
-            resolved={false}
+            status="open"
             active
             label="書きかけのコメント"
           />

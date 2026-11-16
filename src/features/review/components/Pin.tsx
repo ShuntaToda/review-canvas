@@ -1,10 +1,13 @@
+import type { ThreadStatus } from "../model/threads";
+
 type PinProps = {
   number: number | null;
   /** 画面（フレーム）の左上からの位置 */
   x: number;
   y: number;
   zoom: number;
-  resolved: boolean;
+  /** スレッドの状態（色で見分ける。置く途中のピンは open） */
+  status: ThreadStatus;
   /** いまと違う幅の表示で書かれた（点線の縁で見分ける） */
   mismatched?: boolean;
   /** 指していた要素が見つからない（置いたときの位置に出している。点線の丸の印で見分ける） */
@@ -15,6 +18,13 @@ type PinProps = {
   /** 指した・外れた（指している要素を枠で示すため） */
   onHoverChange?: (hovered: boolean) => void;
 };
+
+/** 状態ごとのピンの色（一覧の番号の丸も同じ色） */
+export const PIN_COLORS = {
+  open: "bg-accent",
+  "ai-fixed": "bg-ai-fixed",
+  resolved: "bg-resolved",
+} as const satisfies Record<ThreadStatus, string>;
 
 /** キーボードで移ってきたフォーカスか（:focus-visible を読めない環境では、そうとみなす） */
 const isFocusVisible = (element: Element): boolean => {
@@ -33,7 +43,7 @@ export const Pin = ({
   x,
   y,
   zoom,
-  resolved,
+  status,
   mismatched = false,
   missing = false,
   active,
@@ -50,7 +60,7 @@ export const Pin = ({
     data-missing={missing || undefined}
     className={[
       "absolute flex size-7 items-center justify-center rounded-full rounded-bl-none border-2 border-white text-xs font-bold text-white shadow-md",
-      resolved ? "bg-resolved" : "bg-accent",
+      PIN_COLORS[status],
       active ? "ring-4 ring-accent/40" : "",
       onOpen === undefined ? "cursor-default" : "cursor-pointer",
     ].join(" ")}

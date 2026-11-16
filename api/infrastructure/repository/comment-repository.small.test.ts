@@ -21,6 +21,9 @@ describe("comment-repository", () => {
         resolved: true,
         resolvedBy: "鈴木",
         resolvedAt: new Date("2026-11-13T03:00:00.000Z"),
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "abc123@clients",
+        aiFixedAt: new Date("2026-11-13T02:30:00.000Z"),
         createdAt: new Date("2026-11-13T01:00:00.000Z"),
         updatedAt: new Date("2026-11-13T02:00:00.000Z"),
       });
@@ -42,6 +45,9 @@ describe("comment-repository", () => {
         resolved: true,
         resolvedBy: "鈴木",
         resolvedAt: "2026-11-13T12:00:00.000+09:00",
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "abc123@clients",
+        aiFixedAt: "2026-11-13T11:30:00.000+09:00",
         createdAt: "2026-11-13T10:00:00.000+09:00",
         updatedAt: "2026-11-13T11:00:00.000+09:00",
       });
@@ -84,6 +90,50 @@ describe("comment-repository", () => {
       expect(ddbItemToDomain(commentDdbItemSchema.parse(legacy)).authorId).toBe(
         "",
       );
+    });
+  });
+
+  describe("ddbItemToDomain（AI 修正済みの印）", () => {
+    test("[正常系]印を持つコメントも、変換の往復で復元される", () => {
+      const comment = commentDummyFrom({
+        aiFixedBy: "AI（fixer）",
+        aiFixedById: "abc123@clients",
+        aiFixedAt: new Date("2026-11-13T02:30:00.000Z"),
+      });
+
+      const restored = ddbItemToDomain(
+        commentDdbItemSchema.parse(ddbItemFromDomain(comment)),
+      );
+
+      expect(restored).toStrictEqual(comment);
+      expect(restored.status).toBe("ai-fixed");
+    });
+
+    test("[正常系]印を持つ前に書かれた項目（属性が無い）は、印なしとして読み、状態は解決の状態だけで決まる", () => {
+      const strip = (comment: ReturnType<typeof commentDummyFrom>) => {
+        const {
+          aiFixedBy: _aiFixedBy,
+          aiFixedById: _aiFixedById,
+          aiFixedAt: _aiFixedAt,
+          ...legacy
+        } = ddbItemFromDomain(comment);
+        return ddbItemToDomain(commentDdbItemSchema.parse(legacy));
+      };
+
+      const open = strip(commentDummyFrom());
+      expect(open.aiFixedBy).toBeNull();
+      expect(open.aiFixedById).toBeNull();
+      expect(open.aiFixedAt).toBeNull();
+      expect(open.status).toBe("open");
+      expect(
+        strip(
+          commentDummyFrom({
+            resolved: true,
+            resolvedBy: "鈴木",
+            resolvedAt: new Date("2026-11-13T03:00:00.000Z"),
+          }),
+        ).status,
+      ).toBe("resolved");
     });
   });
 

@@ -3,6 +3,7 @@ import type { Container } from "inversify";
 import { createHono } from "./hono";
 import { buildCommentRouter } from "./route/comment";
 import { buildMetaRouter } from "./route/meta";
+import { buildThreadRouter } from "./route/thread";
 
 /**
  * 全ルートを集約する。app.ts で `app.route("/api", buildRoutes({ container }))` の1行で装着する
@@ -15,6 +16,7 @@ export const buildRoutes = ({
   const app = createHono({ container });
 
   app.route("/comments", buildCommentRouter({ container }));
+  app.route("/threads", buildThreadRouter({ container }));
   app.route("/", buildMetaRouter({ container }));
 
   return app;

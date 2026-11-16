@@ -6,6 +6,7 @@ import { buildGetCommentsHandler } from "./get-comments-handler";
 import { buildPatchCommentHandler } from "./patch-comment-handler";
 import { buildPostCommentHandler } from "./post-comment-handler";
 import { buildPostReplyHandler } from "./post-reply-handler";
+import { buildPutAiFixedHandler } from "./put-ai-fixed-handler";
 import { buildPutResolutionHandler } from "./put-resolution-handler";
 
 /**
@@ -25,6 +26,7 @@ export const buildCommentRouter = ({
   buildPostReplyHandler({ router, container });
   buildPatchCommentHandler({ router, container });
   buildPutResolutionHandler({ router, container });
+  buildPutAiFixedHandler({ router, container });
   buildDeleteCommentHandler({ router, container });
 
   return router;

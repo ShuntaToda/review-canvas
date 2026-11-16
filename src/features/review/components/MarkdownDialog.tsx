@@ -62,6 +62,7 @@ export const MarkdownDialog = ({
               }
             >
               <option value="open">未解決</option>
+              <option value="ai-fixed">AI 修正済み（確認待ち）</option>
               <option value="resolved">解決済み</option>
               <option value="all">すべて</option>
             </select>

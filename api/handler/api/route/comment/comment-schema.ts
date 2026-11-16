@@ -6,11 +6,13 @@ import {
 import { commentAnchorRequestSchema } from "./comment-anchor-schema";
 import {
   type Comment,
+  COMMENT_STATUSES,
   STORY_SOURCE_PATTERN,
 } from "@/domain/model/comment/comment";
 import { COMMENT_ANCHOR_MAX_BYTES } from "@/domain/model/comment/comment-anchor";
 import {
   COMMENT_BODY_MAX_LENGTH,
+  CommentAlreadyResolvedError,
   CommentLimitExceededError,
   CommentNotAuthorError,
 } from "@/domain/model/comment/comment-errors";
@@ -19,7 +21,7 @@ import { dateToIsoString } from "@/util/date-util";
 /**
  * ブランチ名。Git のブランチ名に使われる英数字と「. _ - /」だけを受ける（改行・空白・記号を書き出しやリンクに持ち込まない）
  */
-const branchSchema = z
+export const branchSchema = z
   .string()
   .min(1)
   .max(200)
@@ -47,7 +49,7 @@ const bodySchema = z
   .openapi({ example: "ボタンの文言がモックと違います" });
 
 /** コメントのID（ULID） */
-const commentIdSchema = z
+export const commentIdSchema = z
   .string()
   // ULID の文字（I・L・O・U を除く英大文字と数字）の26文字
   // cspell:disable-next-line
@@ -155,6 +157,26 @@ export const SetCommentResolvedRequestBodySchema = z
   .openapi("SetCommentResolvedRequestBody");
 
 /**
+ * 「AI 修正済み（確認待ち）」の印の付け外しのリクエストボディ
+ */
+export const SetCommentAiFixedRequestBodySchema = z
+  .object({
+    branch: branchSchema,
+    aiFixed: z.boolean().openapi({
+      description: "true=印を付ける / false=印を外す（未解決へ差し戻す）",
+      example: true,
+    }),
+  })
+  .openapi("SetCommentAiFixedRequestBody");
+
+/** スレッドの状態 */
+export const CommentStatusSchema = z.enum(COMMENT_STATUSES).openapi({
+  description:
+    "スレッドの状態。open=未解決 / ai-fixed=AI 修正済み（人の確認待ち）/ resolved=解決済み。返信は常に open",
+  example: "open",
+});
+
+/**
  * コメントのレスポンス（APIコントラクト）
  */
 export const CommentResponseSchema = z
@@ -183,6 +205,18 @@ export const CommentResponseSchema = z
     resolved: z.boolean().openapi({ example: false }),
     resolvedBy: z.string().nullable().openapi({ example: null }),
     resolvedAt: z.string().nullable().openapi({ example: null }),
+    status: CommentStatusSchema,
+    aiFixedBy: z.string().nullable().openapi({
+      description:
+        "「AI 修正済み」の印を付けた人の表示名（M2M のトークンなら「AI（client の名前）」）。印が無ければ null",
+      example: null,
+    }),
+    aiFixedById: z.string().nullable().openapi({
+      description:
+        "印を付けた人の利用者ID（トークンの sub）。印が無ければ null",
+      example: null,
+    }),
+    aiFixedAt: z.string().nullable().openapi({ example: null }),
     createdAt: z.string().openapi({ example: "2026-11-13T10:00:00.000+09:00" }),
     updatedAt: z.string().openapi({ example: "2026-11-13T10:00:00.000+09:00" }),
   })
@@ -232,6 +266,10 @@ export const CommentForbiddenErrorResponseSchema = z.union([
   ReviewerNotAllowedErrorResponseSchema,
 ]);
 
+/** 解決済みのスレッドへの AI 修正済みの印の付け外し(409)のエラーレスポンス */
+export const CommentAlreadyResolvedErrorResponseSchema =
+  businessErrorResponseSchema(CommentAlreadyResolvedError.errorName);
+
 /** コメント数の上限(409)のエラーレスポンス */
 export const CommentLimitExceededErrorResponseSchema =
   businessErrorResponseSchema(CommentLimitExceededError.errorName);
@@ -259,6 +297,11 @@ export const toCommentResponse = (
   resolvedBy: comment.resolvedBy,
   resolvedAt:
     comment.resolvedAt === null ? null : dateToIsoString(comment.resolvedAt),
+  status: comment.status,
+  aiFixedBy: comment.aiFixedBy,
+  aiFixedById: comment.aiFixedById,
+  aiFixedAt:
+    comment.aiFixedAt === null ? null : dateToIsoString(comment.aiFixedAt),
   createdAt: dateToIsoString(comment.createdAt),
   updatedAt: dateToIsoString(comment.updatedAt),
 });

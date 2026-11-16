@@ -131,6 +131,33 @@
             "nullable": true,
             "example": null
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "ai-fixed",
+              "resolved"
+            ],
+            "description": "スレッドの状態。open=未解決 / ai-fixed=AI 修正済み（人の確認待ち）/ resolved=解決済み。返信は常に open",
+            "example": "open"
+          },
+          "aiFixedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "「AI 修正済み」の印を付けた人の表示名（M2M のトークンなら「AI（client の名前）」）。印が無ければ null",
+            "example": null
+          },
+          "aiFixedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "印を付けた人の利用者ID（トークンの sub）。印が無ければ null",
+            "example": null
+          },
+          "aiFixedAt": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
           "createdAt": {
             "type": "string",
             "example": "2026-11-13T10:00:00.000+09:00"
@@ -156,6 +183,10 @@
           "resolved",
           "resolvedBy",
           "resolvedAt",
+          "status",
+          "aiFixedBy",
+          "aiFixedById",
+          "aiFixedAt",
           "createdAt",
           "updatedAt"
         ]
@@ -664,6 +695,46 @@
           "resolved"
         ]
       },
+      "CommentAlreadyResolvedErrorResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "CommentAlreadyResolvedError"
+                ],
+                "example": "CommentAlreadyResolvedError"
+              }
+            }
+          }
+        ]
+      },
+      "SetCommentAiFixedRequestBody": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/order-search"
+          },
+          "aiFixed": {
+            "type": "boolean",
+            "description": "true=印を付ける / false=印を外す（未解決へ差し戻す）",
+            "example": true
+          }
+        },
+        "required": [
+          "branch",
+          "aiFixed"
+        ]
+      },
       "DeleteCommentResult": {
         "type": "object",
         "properties": {
@@ -679,6 +750,152 @@
         },
         "required": [
           "deletedIds"
+        ]
+      },
+      "ThreadList": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/order-search"
+          },
+          "commit": {
+            "type": "string",
+            "description": "そのブランチに置いてある Storybook のコミット（置いていなければ unknown）。各コメントの commit と違えば、書かれた後に画面が変わっている",
+            "example": "c9ebd82"
+          },
+          "total": {
+            "type": "number",
+            "description": "絞り込みに合うスレッドの総数（ページをまたいだ数）",
+            "example": 1
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Thread"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "続きの位置。最後なら null",
+            "example": null
+          }
+        },
+        "required": [
+          "branch",
+          "commit",
+          "total",
+          "items",
+          "nextCursor"
+        ]
+      },
+      "Thread": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "number",
+            "description": "ブランチの中で書いた順の通し番号（画面のピン・書き出しの番号と同じ。コメントが消えると詰まる）",
+            "example": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "ai-fixed",
+              "resolved"
+            ],
+            "description": "スレッドの状態。open=未解決 / ai-fixed=AI 修正済み（人の確認待ち）/ resolved=解決済み。返信は常に open",
+            "example": "open"
+          },
+          "story": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "example": "shop"
+              },
+              "storyId": {
+                "type": "string",
+                "example": "pages-login--default"
+              },
+              "title": {
+                "type": "string",
+                "nullable": true,
+                "example": "Pages/Login"
+              },
+              "name": {
+                "type": "string",
+                "nullable": true,
+                "example": "Default"
+              },
+              "importPath": {
+                "type": "string",
+                "nullable": true,
+                "description": "ストーリーのファイル（Storybook を置いたリポジトリの中の道筋）。要素の手がかりを持たないコメントは null",
+                "example": "./src/pages/Login.stories.tsx"
+              }
+            },
+            "required": [
+              "source",
+              "storyId",
+              "title",
+              "name",
+              "importPath"
+            ],
+            "description": "指摘されたストーリー。title・name・importPath は要素の手がかり（root.anchor.story）から写す"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Comment"
+          },
+          "replies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            },
+            "description": "返信（書いた順。多いときは新しいほうから上限まで）"
+          },
+          "omittedReplyCount": {
+            "type": "number",
+            "description": "載せなかった（古いほうの）返信の件数",
+            "example": 0
+          }
+        },
+        "required": [
+          "number",
+          "status",
+          "story",
+          "root",
+          "replies",
+          "omittedReplyCount"
+        ]
+      },
+      "ThreadDetail": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/order-search"
+          },
+          "commit": {
+            "type": "string",
+            "description": "そのブランチに置いてある Storybook のコミット（置いていなければ unknown）。各コメントの commit と違えば、書かれた後に画面が変わっている",
+            "example": "c9ebd82"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/Thread"
+          }
+        },
+        "required": [
+          "branch",
+          "commit",
+          "thread"
         ]
       },
       "ReviewMeta": {
@@ -1425,6 +1642,361 @@
           },
           "404": {
             "description": "コメントが見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{commentId}/ai-fixed": {
+      "put": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "スレッドに「AI 修正済み（確認待ち）」の印を付ける・外す（誰でもできる。付けた人を残す）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCommentAiFixedRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "印を付けた・外したスレッドの最初のコメント",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "コメントが見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "スレッドがすでに解決済み（再開してから行う）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentAlreadyResolvedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads": {
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "ブランチのスレッドを状態で絞って一覧する（AI・外部の道具向け。要素の手がかりとストーリーの情報つき。既定は未解決）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+              "example": "feature/order-search"
+            },
+            "required": true,
+            "name": "branch",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "ai-fixed",
+                "resolved",
+                "all"
+              ],
+              "default": "open",
+              "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+              "example": "open"
+            },
+            "required": false,
+            "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+              "description": "Storybook の ID（設定ファイルの storybooks[].id）で絞る",
+              "example": "shop"
+            },
+            "required": false,
+            "description": "Storybook の ID（設定ファイルの storybooks[].id）で絞る",
+            "name": "source",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[a-z0-9-]+$",
+              "description": "ストーリーID で絞る",
+              "example": "pages-login--default"
+            },
+            "required": false,
+            "description": "ストーリーID で絞る",
+            "name": "storyId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 20,
+              "description": "1回に返すスレッド数（既定 20・上限 25）",
+              "example": 20
+            },
+            "required": false,
+            "description": "1回に返すスレッド数（既定 20・上限 25）",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF",
+              "description": "前の応答の nextCursor"
+            },
+            "required": false,
+            "description": "前の応答の nextCursor",
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "スレッドの一覧（書いた順）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{commentId}": {
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "スレッドを1件読む（最初のコメントのIDで指す。返信・要素の手がかり・ストーリーの情報つき）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+              "example": "feature/order-search"
+            },
+            "required": true,
+            "name": "branch",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "スレッド",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "スレッドが見つからない（無いID・返信のID・別のブランチ）",
             "content": {
               "application/json": {
                 "schema": {

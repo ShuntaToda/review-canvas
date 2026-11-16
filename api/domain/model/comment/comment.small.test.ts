@@ -1,6 +1,7 @@
 import { Comment } from "./comment";
 import { commentAnchorDummyFrom } from "./comment-anchor.dummy";
 import {
+  CommentAlreadyResolvedError,
   CommentNotAuthorError,
   CommentNotThreadRootError,
 } from "./comment-errors";
@@ -45,6 +46,9 @@ describe("Comment", () => {
         resolved: false,
         resolvedBy: null,
         resolvedAt: null,
+        aiFixedBy: null,
+        aiFixedById: null,
+        aiFixedAt: null,
         createdAt: now,
         updatedAt: now,
       });
@@ -87,6 +91,9 @@ describe("Comment", () => {
         resolved: false,
         resolvedBy: null,
         resolvedAt: null,
+        aiFixedBy: null,
+        aiFixedById: null,
+        aiFixedAt: null,
         createdAt: now,
         updatedAt: now,
       });
@@ -182,6 +189,97 @@ describe("Comment", () => {
 
       expect(() =>
         reply.setResolved({ resolved: true, actor: YAMADA, now: new Date() }),
+      ).toThrow(CommentNotThreadRootError);
+    });
+  });
+
+  describe("setAiFixed・status", () => {
+    const fixedAt = new Date("2026-11-13T13:00:00.000+09:00");
+    const AI = { id: "abc123@clients", name: "AI（fixer）" };
+
+    test("[正常系]印を付けると ai-fixed になり、付けた人の表示名・利用者ID・日時が残る（解決の状態は変わらない）", () => {
+      const comment = commentDummyFrom();
+      expect(comment.status).toBe("open");
+
+      const fixed = comment.setAiFixed({
+        aiFixed: true,
+        actor: AI,
+        now: fixedAt,
+      });
+
+      expect(fixed.status).toBe("ai-fixed");
+      expect(fixed.aiFixedBy).toBe("AI（fixer）");
+      expect(fixed.aiFixedById).toBe("abc123@clients");
+      expect(fixed.aiFixedAt).toBe(fixedAt);
+      expect(fixed.updatedAt).toBe(fixedAt);
+      expect(fixed.resolved).toBe(false);
+    });
+
+    test("[正常系]印を外す（差し戻す）と open に戻り、付けた人・日時が消える", () => {
+      const fixed = commentDummyFrom().setAiFixed({
+        aiFixed: true,
+        actor: AI,
+        now: fixedAt,
+      });
+      const revertedAt = new Date("2026-11-13T14:00:00.000+09:00");
+
+      const reverted = fixed.setAiFixed({
+        aiFixed: false,
+        actor: YAMADA,
+        now: revertedAt,
+      });
+
+      expect(reverted.status).toBe("open");
+      expect(reverted.aiFixedBy).toBeNull();
+      expect(reverted.aiFixedById).toBeNull();
+      expect(reverted.aiFixedAt).toBeNull();
+      expect(reverted.updatedAt).toBe(revertedAt);
+    });
+
+    test("[正常系]印の付いたスレッドを解決すると resolved になり、印は経緯として残る。再開すると印も消えて open に戻る", () => {
+      const fixed = commentDummyFrom().setAiFixed({
+        aiFixed: true,
+        actor: AI,
+        now: fixedAt,
+      });
+
+      const resolved = fixed.setResolved({
+        resolved: true,
+        actor: YAMADA,
+        now: new Date("2026-11-13T14:00:00.000+09:00"),
+      });
+      expect(resolved.status).toBe("resolved");
+      expect(resolved.aiFixedBy).toBe("AI（fixer）");
+      expect(resolved.aiFixedAt).toBe(fixedAt);
+
+      const reopened = resolved.setResolved({
+        resolved: false,
+        actor: YAMADA,
+        now: new Date("2026-11-13T15:00:00.000+09:00"),
+      });
+      expect(reopened.status).toBe("open");
+      expect(reopened.aiFixedBy).toBeNull();
+      expect(reopened.aiFixedById).toBeNull();
+      expect(reopened.aiFixedAt).toBeNull();
+    });
+
+    test("[異常系]解決済みのスレッドには印を付け外しできない（CommentAlreadyResolvedError）", () => {
+      const resolved = commentDummyFrom({ resolved: true });
+
+      for (const aiFixed of [true, false]) {
+        expect(() =>
+          resolved.setAiFixed({ aiFixed, actor: AI, now: fixedAt }),
+        ).toThrow(CommentAlreadyResolvedError);
+      }
+    });
+
+    test("[異常系]返信に印を付けようとするとCommentNotThreadRootErrorになる", () => {
+      const reply = commentDummyFrom({
+        parentId: "01J1H3V7X4K9QW2RT8ZB5C6DYF",
+      });
+
+      expect(() =>
+        reply.setAiFixed({ aiFixed: true, actor: AI, now: fixedAt }),
       ).toThrow(CommentNotThreadRootError);
     });
   });

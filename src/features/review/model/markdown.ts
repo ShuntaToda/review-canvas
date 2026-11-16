@@ -10,7 +10,7 @@ import {
   storyIframeUrl,
   storyKey,
 } from "./storybook";
-import type { CommentAnchor, Thread } from "./threads";
+import { type CommentAnchor, STATUS_LABELS, type Thread } from "./threads";
 import { buildSearch } from "./url-state";
 import { formatDateTime } from "@/utils/time";
 
@@ -37,7 +37,7 @@ type BuildMarkdownInput = {
 
 /**
  * スレッドを GitHub の Issue にそのまま貼れる Markdown にする。
- * ページ → 画面（タイトル）→ スレッドの順に並べ、未解決は「- [ ]」、解決済みは「- [x]」のチェックリストにする。
+ * ページ → 画面（タイトル）→ スレッドの順に並べ、未解決と AI 修正済み（確認待ち。印を添える）は「- [ ]」、解決済みは「- [x]」のチェックリストにする。
  * 各スレッドに Storybook とキャンバスのリンクを付け、ピンが指している要素が分かっていれば、その要素の要約を添える
  * （origin はリンクの頭。共有する URL と同じにする）。format が ai のときは buildAiMarkdown の形にする
  */
@@ -124,7 +124,8 @@ const threadLines = ({
           `[Storybook](${storybookUrl(storybookBase, root.source, root.storyId)})`,
         ]),
   ].join(" ");
-  const head = `- [${root.resolved ? "x" : " "}] **#${number}** ${inline(story?.name ?? root.anchor?.story.name ?? root.storyId)}（${inline(root.author)}・${formatDateTime(root.createdAt)}）${links}`;
+  // AI 修正済み（確認待ち）は、まだ人が確かめていないのでチェックを付けず、印だけ添える
+  const head = `- [${root.resolved ? "x" : " "}] **#${number}**${root.status === "ai-fixed" ? `（${STATUS_LABELS["ai-fixed"]}）` : ""} ${inline(story?.name ?? root.anchor?.story.name ?? root.storyId)}（${inline(root.author)}・${formatDateTime(root.createdAt)}）${links}`;
   return [
     head,
     ...indentBody(root.body, "  "),
@@ -268,7 +269,7 @@ const aiThreadLines = ({
     comment: root.id,
   })}`;
   return [
-    `## #${number} ${root.resolved ? "解決済み" : "未解決"}: ${inline(sources.get(root.source).label)} / ${inline(title)} / ${inline(name)}`,
+    `## #${number} ${STATUS_LABELS[root.status]}: ${inline(sources.get(root.source).label)} / ${inline(title)} / ${inline(name)}`,
     "",
     `- ストーリー: ${code(root.storyId)}${importPath === null ? "" : `（ファイル ${code(importPath)}）`}`,
     ...(storybookBase === null
