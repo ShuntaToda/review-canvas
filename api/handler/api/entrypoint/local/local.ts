@@ -32,7 +32,7 @@ import {
 
 /**
  * ローカルの起動。API とキャンバスの画面を 1 つのオリジン（既定 http://localhost:4100）で、
- * Storybook を別のオリジン（既定 http://localhost:4102。STORYBOOK_PORT）で配る（デプロイ先と同じく、ストーリーのコードをキャンバスと分ける）。
+ * Storybook を別のオリジン（http://localhost:4102。画面の config.localhost.ts の storybookOrigin と合わせる）で配る（デプロイ先と同じく、ストーリーのコードをキャンバスと分ける）。
  * 開発中（pnpm run dev）は vite が 4100 で画面を配り、API はここを PORT=4101 で起こして vite から転送する
  */
 const container = registerContainer();
@@ -86,7 +86,8 @@ app.route("/", buildApp({ container }));
 mountLocalStatic({ app, distDir });
 
 const port = Number(process.env["PORT"] ?? 4100);
-const storybookPort = Number(process.env["STORYBOOK_PORT"] ?? 4102);
+// 画面の config.localhost.ts の storybookOrigin がこのポートを指すため、変えられるようにしない
+const storybookPort = 4102;
 // 橋渡しがつないでよいキャンバスのオリジン（画面はどちらの名前でも開ける。開発中も vite が 4100 で配る）
 const canvasOrigins = (
   process.env["CANVAS_ORIGINS"] ?? "http://localhost:4100,http://127.0.0.1:4100"
@@ -102,8 +103,8 @@ mountLocalStorybook({
   canvasOrigins,
 });
 
-// ローカルは擬似ログイン（誰でも好きな名前でログインできる）のため、既定では自分の端末からだけ開ける。同じネットワークの別の端末から見たいときだけ HOST=0.0.0.0 にする（docs/development.md）
-const hostname = process.env["HOST"] ?? "127.0.0.1";
+// ローカルは擬似ログイン（誰でも好きな名前でログインできる）ため、自分の端末からだけ開ける
+const hostname = "127.0.0.1";
 serve({ fetch: app.fetch, port, hostname }, () => {
   // 起動を知らせる1行は、人が読むためにログの形にせずに出す
   console.log(
