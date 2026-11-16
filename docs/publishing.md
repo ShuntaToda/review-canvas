@@ -21,7 +21,7 @@
 
 ## 手元から置く・消す
 
-review-canvas を取り出した場所で `pnpm install` しておき、使う側のリポジトリの中から CLI を動かします（`bin/review-canvas.mjs`。`node <review-canvas>/bin/review-canvas.mjs` か、`pnpm link` で `review-canvas` として呼ぶ）。
+review-canvas を取り出した場所で `pnpm install` しておき、使う側のリポジトリの中から CLI を動かします（`bin/review-canvas.mjs`。`node <review-canvas>/bin/review-canvas.mjs` か、取り出した場所で `pnpm link --global` して `review-canvas` として呼ぶ）。
 
 ```bash
 # いまのチェックアウトの Storybook を設定ファイルのとおりにビルドし、いまのブランチとして置く
