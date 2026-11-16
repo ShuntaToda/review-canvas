@@ -83,8 +83,8 @@ switch (command) {
         : resolve(cwd, config);
     run([
       "--silent",
-      "-F",
-      "review-canvas-infra",
+      "--dir",
+      "infra",
       "run",
       "branch-storybooks",
       "publish",
@@ -101,8 +101,8 @@ switch (command) {
   case "is-published":
     run([
       "--silent",
-      "-F",
-      "review-canvas-infra",
+      "--dir",
+      "infra",
       "run",
       "branch-storybooks",
       command,
