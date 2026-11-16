@@ -428,13 +428,13 @@ const fenced = (text: string, language: string, indent: string): string[] => {
 
 /**
  * 1行に収める文字（名前・画面の名前）。改行は空白にまとめ、Markdown の記号は打ち消して文字のまま見せる
- * （見出しやリストの行を壊したり、リンク・強調として解釈されたりしないように）
+ * （見出しやリストの行を壊したり、リンク・強調・@ の呼びかけ（貼った先で人に知らせが飛ぶ）として解釈されたりしないように）
  */
 export const inline = (text: string): string =>
   withoutInvisible(text)
     .replace(/\s*[\r\n]+\s*/g, " ")
     .trim()
-    .replace(/[\\`*_[\]<>#|~!]/g, (symbol) => `\\${symbol}`);
+    .replace(/[\\`*_[\]<>#|~!@]/g, (symbol) => `\\${symbol}`);
 
 /**
  * 本文を引用にして字下げする（複数行・Markdown の記号を含んでも、リストを壊さない）。

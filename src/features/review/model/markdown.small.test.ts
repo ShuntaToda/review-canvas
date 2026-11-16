@@ -389,6 +389,7 @@ describe("inline", () => {
     ["*強調* _下線_ `コード`", "\\*強調\\* \\_下線\\_ \\`コード\\`"],
     ["<b>|表|</b>", "\\<b\\>\\|表\\|\\</b\\>"],
     ["Pattern\u202eB\u2066 画面", "PatternB 画面"],
+    ["@yamada 確認", "\\@yamada 確認"],
   ])("[正常系]%j は %j になる", (text, expected) => {
     expect(inline(text)).toBe(expected);
   });
