@@ -5,6 +5,7 @@ import {
   componentChainOf,
   cssSelectorOf,
   fitAnchor,
+  headingBefore,
   hitTest,
   nthPathOf,
   pickTarget,
@@ -292,6 +293,25 @@ describe("cssSelectorOf・nthPathOf", () => {
     expect(nthPathOf(span)).toBe(
       "html > body > div:nth-of-type(1) > span:nth-of-type(1)",
     );
+  });
+});
+
+describe("headingBefore", () => {
+  test("[正常系]要素の内に見出しがあれば、前の要素の見出しではなく内の最初の見出しを拾う", () => {
+    document.body.innerHTML = `
+      <h2>おすすめ</h2>
+      <article id="card"><img alt=""><h3>白いマグカップ</h3><h4>在庫あり</h4></article>`;
+
+    expect(headingBefore(byId("card"))).toBe("白いマグカップ");
+  });
+
+  test("[正常系]内に見出しが無ければ、前にあるいちばん近い見出しを拾う（要素が入っている見出しも含む）", () => {
+    document.body.innerHTML = `
+      <h2>おすすめ</h2><h3><span id="inside">白いマグカップ</span></h3>
+      <button id="buy">カートに入れる</button>`;
+
+    expect(headingBefore(byId("buy"))).toBe("白いマグカップ");
+    expect(headingBefore(byId("inside"))).toBe("白いマグカップ");
   });
 });
 

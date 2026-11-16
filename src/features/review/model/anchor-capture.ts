@@ -272,7 +272,10 @@ export const nthPathOf = (element: Element): string => {
   return segments.join(" > ");
 };
 
-/** 前にあるいちばん近い見出し（中に入っている見出しも含む） */
+/**
+ * 要素の見出し。要素の内に見出しがあれば、その最初のもの（カード・区画を押したとき、その見出しで呼ぶ）。
+ * 無ければ前にあるいちばん近い見出し（要素が入っている見出しも含む）
+ */
 export const headingBefore = (element: Element): string | null => {
   const headings = queryAll(
     element.ownerDocument,
@@ -282,6 +285,8 @@ export const headingBefore = (element: Element): string | null => {
   for (const heading of headings) {
     if (heading === element) continue;
     const position = heading.compareDocumentPosition(element);
+    // 要素が見出しを中に持つ（8=CONTAINS）。並びは文書の順なので、最初に当たったものが内の最初の見出し
+    if ((position & 8) !== 0) return visibleText(heading);
     // 見出しの後ろにある（4=FOLLOWING）か、見出しの中にある（16=CONTAINED_BY）
     if ((position & 4) !== 0 || (position & 16) !== 0) found = heading;
   }
