@@ -1,0 +1,627 @@
+name: review-canvas-publish
+
+# ブランチの Storybook を review-canvas の配信（S3・CloudFront。キャンバスと別のオリジン）へ置く・消す、使う側から呼ぶワークフロー（workflow_call）。
+# 呼び方は docs/host-setup.md「ワークフローから置く」。使う側のワークフローは push・delete・workflow_dispatch で動かし、
+# そのイベントのまま、このワークフローを呼ぶ（github.* は呼んだ側のもの）。
+# - workflow_dispatch: branch のブランチを置く。all を付けると、いま置いてあるブランチを全部置き直す
+# - push: そのブランチが置いてあり、Storybook に関わるパス（設定ファイルの watchPaths）が変わったときだけ置き直す
+# - ブランチを消した（delete）: 消す（置いていなくても動かす。途中まで置いたものも残さない）
+# role_arn が空なら、どのジョブも動かさない（スキップで終わる）。
+#
+# 既定のブランチとそれ以外で、GitHub Environment と AWS のロールを分ける（infra/lib/github-publish-role.ts）。
+# - 既定のブランチ（default_branch。無ければリポジトリの既定のブランチ。スタックの既定のブランチと同じにする）:
+#   environment main_environment・main_role_arn（既定のブランチの置き場と共有のサービスワーカーだけを書ける。
+#   Environment に「既定のブランチからだけ動かせる」制限を付ける）
+# - それ以外: environment environment・role_arn（既定のブランチの置き場は書けない）
+#
+# 置く手順（スクリプト・橋渡し）は review-canvas のリポジトリの review_canvas_ref（コミットの SHA）から取り出す（tool/）。
+# 置くブランチは使う側のリポジトリから別の場所（host/）へ取り出してビルドする。
+# ビルド（置くブランチのコードを動かす）と置く（AWS の資格情報を持つ）はジョブを分け、成果物で受け渡す。
+# 既定のブランチだけは、置くジョブが既定のブランチのチェックアウト（信頼できるもの）から自分でビルドする。
+#
+# Action はコミットの SHA で固定する（タグの付け替えで中身が変わらないように。認証情報を扱うため）。
+# 認証情報を扱うジョブでは、ほかのジョブが書いたキャッシュ（pnpm のキャッシュ等）を読まない。
+
+on:
+  workflow_call:
+    inputs:
+      review_canvas_ref:
+        description: 置く手順を取り出す review-canvas のコミット（40 桁の SHA。uses の @ と同じものにする）
+        required: true
+        type: string
+      config:
+        description: 使う側のリポジトリの根からの、設定ファイル（review-canvas.config.json）の場所
+        required: false
+        type: string
+        default: review-canvas.config.json
+      role_arn:
+        description: 既定のブランチ以外を置くロール（スタックの出力 PublishRoleArn）。空ならどのジョブも動かさない
+        required: false
+        type: string
+        default: ""
+      main_role_arn:
+        description: 既定のブランチを置くロール（スタックの出力 PublishMainRoleArn）
+        required: false
+        type: string
+        default: ""
+      aws_region:
+        required: false
+        type: string
+        default: ap-northeast-1
+      stack_name:
+        description: スタックの名前（置き場はこのスタックの出力から読む）
+        required: false
+        type: string
+        default: ReviewCanvas
+      default_branch:
+        description: 既定のブランチ（スタックの DefaultBranch と同じ値。空ならリポジトリの既定のブランチ）
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: 既定のブランチ以外を置くジョブの GitHub Environment（ロールの信頼ポリシーと同じ名前）
+        required: false
+        type: string
+        default: review-canvas
+      main_environment:
+        description: 既定のブランチを置くジョブの GitHub Environment
+        required: false
+        type: string
+        default: review-canvas-main
+      branch:
+        description: workflow_dispatch で置くブランチ（空なら動かしたブランチ）
+        required: false
+        type: string
+        default: ""
+      all:
+        description: workflow_dispatch で、いま置いてあるブランチを全部置き直す（branch は見ない）
+        required: false
+        type: boolean
+        default: false
+      node_version:
+        required: false
+        type: string
+        default: "24"
+      pnpm_version:
+        required: false
+        type: string
+        default: 10.24.0
+      install_command:
+        description: 使う側のリポジトリで依存を入れるコマンド（使う側の根で動かす）
+        required: false
+        type: string
+        default: pnpm install --frozen-lockfile
+
+# OIDC のトークン（id-token: write）は、AWS を使うジョブにだけ付ける（呼ぶ側のジョブに id-token: write を許しておく）
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CONFIG: ${{ inputs.config }}
+  TOOL_REF: ${{ inputs.review_canvas_ref }}
+  AWS_REGION: ${{ inputs.aws_region }}
+  REVIEW_CANVAS_STACK_NAME: ${{ inputs.stack_name }}
+  # 置くスクリプトはいつもスタックの出力（DefaultBranch）を読み、これと食い違えば止める
+  REVIEW_CANVAS_DEFAULT_BRANCH: ${{ inputs.default_branch || github.event.repository.default_branch }}
+  DEFAULT_BRANCH_NAME: ${{ inputs.default_branch || github.event.repository.default_branch }}
+
+jobs:
+  # 置くブランチを決める（AWS にはつながない。使う側のコードは動かさない）。push は、Storybook に関わるパスが変わったときだけ候補にする
+  plan:
+    if: >-
+      inputs.role_arn != '' &&
+      ((github.event_name == 'push' && github.event.deleted != true) ||
+       (github.event_name == 'workflow_dispatch' && !inputs.all))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      branches: ${{ steps.plan.outputs.branches }}
+      # push のときだけ、置いてあるかを確かめてから置く
+      check: ${{ steps.plan.outputs.check }}
+    steps:
+      # 入力の形を確かめる（review-canvas のコミットは SHA に限る。設定ファイルは使う側の中の相対パスに限る）
+      - name: Check inputs
+        run: |
+          if ! [[ "$TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
+            exit 1
+          fi
+          case "$CONFIG" in
+            "" | /* | *..*) echo "::error::config は使う側のリポジトリの中の相対パスにしてください: $CONFIG"; exit 1 ;;
+          esac
+
+      # push のときは前の push との差分を見るため履歴を取る（ファイルの中身は要らないので blob を落とさない）
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+          filter: ${{ github.event_name == 'push' && 'blob:none' || '' }}
+          path: host
+
+      # 新しいブランチ・force push で前が分からないときは、変わったとみなす
+      - name: Plan
+        id: plan
+        working-directory: host
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "branches=$(jq -cn --arg b "${INPUT_BRANCH:-$REF_NAME}" '[$b]')" >> "$GITHUB_OUTPUT"
+            echo "check=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "check=true" >> "$GITHUB_OUTPUT"
+          if [ ! -f "$CONFIG" ]; then
+            echo "::error::設定ファイル $CONFIG がありません"
+            exit 1
+          fi
+          # watchPaths はリポジトリの根からのパス
+          mapfile -t paths < <(jq -r '.watchPaths // [] | .[]' "$CONFIG")
+          if [ "${#paths[@]}" -eq 0 ]; then
+            echo "::error::$CONFIG の watchPaths が空です"
+            exit 1
+          fi
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+            && git diff --quiet "$BEFORE" "$GITHUB_SHA" -- "${paths[@]}"; then
+            echo "Storybook に関わるパス（${paths[*]}）は変わっていないので置き直しません"
+            echo "branches=[]" >> "$GITHUB_OUTPUT"
+          else
+            echo "branches=$(jq -cn --arg b "$REF_NAME" '[$b]')" >> "$GITHUB_OUTPUT"
+          fi
+
+  # all のとき、いま置いてあるブランチを AWS から読む（動かすのは review-canvas のスクリプトだけ）
+  list-published:
+    if: >-
+      inputs.role_arn != '' &&
+      github.event_name == 'workflow_dispatch' && inputs.all
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # OIDC で AWS のロール（GitHubPublishRole）を引き受ける
+      id-token: write
+    # ロールの信頼ポリシーは environment を sub に入れて完全一致させる（AWS を使うジョブにだけ付ける）
+    environment: ${{ inputs.environment }}
+    outputs:
+      branches: ${{ steps.list.outputs.branches }}
+    steps:
+      - name: Check inputs
+        run: |
+          if ! [[ "$TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
+            exit 1
+          fi
+
+      - name: Checkout review-canvas
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ShuntaToda/review-canvas
+          ref: ${{ inputs.review_canvas_ref }}
+          path: tool
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ inputs.pnpm_version }}
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install review-canvas
+        working-directory: tool
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 出力は文字列の JSON の配列のときだけ渡す（スクリプトが別のものを出したら止める）
+      - name: List
+        id: list
+        working-directory: tool
+        run: |
+          branches="$(pnpm --silent --fail-if-no-match -F review-canvas-infra run branch-storybooks list --stack-name "$REVIEW_CANVAS_STACK_NAME" | tail -n 1)"
+          if ! jq -e 'type == "array" and all(.[]; type == "string")' <<<"$branches" >/dev/null 2>&1; then
+            echo "::error::置いてあるブランチの一覧が JSON の文字列の配列ではありません: $branches"
+            exit 1
+          fi
+          # 既定のブランチは外す（既定のブランチの push か、既定のブランチを指定して手で動かしたときに、その実行だけで置く。
+          # ほかのブランチのビルドと同じ実行に入れると、ほかのブランチのビルドが既定のブランチ向けの成果物を上げられてしまうため）
+          branches="$(jq -c --arg d "$DEFAULT_BRANCH_NAME" 'map(select(. != $d))' <<<"$branches")"
+          echo "置き直すブランチ（既定のブランチ $DEFAULT_BRANCH_NAME を除く）: $branches"
+          echo "branches=$branches" >> "$GITHUB_OUTPUT"
+
+  # push のときは、置いてあるブランチだけを置き直す（置くかどうかは手で決める）。答えは true か false だけを受ける。
+  # 目録を読むだけなので、どのブランチでも既定のブランチ以外のロールで確かめる（読み取りはどちらのロールにも許してある）
+  check-published:
+    needs: [plan]
+    if: >-
+      inputs.role_arn != '' &&
+      needs.plan.outputs.check == 'true' && needs.plan.outputs.branches != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    environment: ${{ inputs.environment }}
+    outputs:
+      branches: ${{ steps.published.outputs.branches }}
+    env:
+      # push の plan は、push したブランチ 1 つだけを返す
+      BRANCH: ${{ fromJSON(needs.plan.outputs.branches)[0] }}
+    steps:
+      - name: Checkout review-canvas
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ShuntaToda/review-canvas
+          ref: ${{ inputs.review_canvas_ref }}
+          path: tool
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ inputs.pnpm_version }}
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install review-canvas
+        working-directory: tool
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check published
+        id: published
+        working-directory: tool
+        run: |
+          published="$(pnpm --silent --fail-if-no-match -F review-canvas-infra run branch-storybooks is-published "$BRANCH" --stack-name "$REVIEW_CANVAS_STACK_NAME" | tail -n 1)"
+          case "$published" in
+            true) echo "branches=$(jq -cn --arg b "$BRANCH" '[$b]')" >> "$GITHUB_OUTPUT" ;;
+            false)
+              echo "$BRANCH は置いていないので置きません（置くときは workflow_dispatch で branch を指定する）"
+              echo "branches=[]" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::置いてあるかの答えが true・false ではありません: $published"
+              exit 1
+              ;;
+          esac
+
+  # Storybook をビルドし、成果物として渡す。置くブランチのコード（ビルド）は、AWS の資格情報（id-token）を持たないこのジョブでだけ動かす。
+  # 既定のブランチは、ここではビルドしない（置くジョブが既定のブランチのコードから自分でビルドする）
+  build:
+    needs: [plan, check-published, list-published]
+    # plan（確かめ不要）・check-published・list-published のどれか 1 つから、置くブランチを受ける
+    if: >-
+      always() && !cancelled() &&
+      ((needs.plan.result == 'success' && needs.plan.outputs.check != 'true' && needs.plan.outputs.branches != '[]') ||
+       (needs.check-published.result == 'success' && needs.check-published.outputs.branches != '[]') ||
+       (needs.list-published.result == 'success' && needs.list-published.outputs.branches != '[]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        branch: ${{ fromJSON(needs.check-published.outputs.branches || needs.list-published.outputs.branches || needs.plan.outputs.branches) }}
+    env:
+      BRANCH: ${{ matrix.branch }}
+      # 既定のブランチは、置くジョブが既定のブランチのコード（信頼できるもの）から自分でビルドする（成果物を使わない）
+      SKIP: ${{ matrix.branch == (inputs.default_branch || github.event.repository.default_branch) }}
+    steps:
+      # 置くブランチ（push のときは push したコミット。その後にまた push されていても、それは次の実行が置く）
+      - name: Checkout target branch
+        if: env.SKIP != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'push' && github.sha || matrix.branch }}
+          path: host
+
+      - name: Install pnpm
+        if: env.SKIP != 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ inputs.pnpm_version }}
+          run_install: false
+
+      - name: Setup Node
+        if: env.SKIP != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install dependencies of target branch
+        if: env.SKIP != 'true'
+        working-directory: host
+        env:
+          INSTALL_COMMAND: ${{ inputs.install_command }}
+        run: bash -c "$INSTALL_COMMAND"
+
+      # 作り方は置くブランチの設定ファイル。出力は artifact/ の同じ場所（使う側の根からの相対）へ写す。
+      # 形の確かめはここでも行い（id・outDir）、置くジョブのスクリプトがもう一度確かめる
+      - name: Build Storybooks
+        if: env.SKIP != 'true'
+        run: |
+          config="host/$CONFIG"
+          if [ ! -f "$config" ]; then
+            echo "::error::設定ファイル $CONFIG がありません（$BRANCH）"
+            exit 1
+          fi
+          base="$(dirname "$CONFIG")"
+          mkdir -p "artifact/$base"
+          cp "$config" "artifact/$CONFIG"
+          git -C host rev-parse --short HEAD > artifact/COMMIT
+          mapfile -t entries < <(jq -r '.storybooks[] | [.id, .build, .outDir] | @tsv' "$config")
+          if [ "${#entries[@]}" -eq 0 ]; then
+            echo "::error::$CONFIG に storybooks がありません"
+            exit 1
+          fi
+          for entry in "${entries[@]}"; do
+            IFS=$'\t' read -r source build out_dir <<<"$entry"
+            if ! [[ "$source" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; then
+              echo "::error::Storybook の id は英小文字・数字・- の 32 文字までにしてください: $source"
+              exit 1
+            fi
+            case "$out_dir" in
+              "" | /* | *..*) echo "::error::outDir は設定ファイルのあるディレクトリからの相対パスにしてください: $out_dir"; exit 1 ;;
+            esac
+            echo "::group::$source: $build"
+            (cd "host/$base" && bash -c "$build")
+            echo "::endgroup::"
+            if [ ! -f "host/$base/$out_dir/index.json" ]; then
+              echo "::error::Storybook（$source）のビルド結果がありません: $base/$out_dir/index.json"
+              exit 1
+            fi
+            mkdir -p "artifact/$base/$(dirname "$out_dir")"
+            cp -R "host/$base/$out_dir" "artifact/$base/$out_dir"
+          done
+
+      - name: Artifact name
+        if: env.SKIP != 'true'
+        id: artifact
+        run: echo "name=review-canvas-storybook-$(printf %s "$BRANCH" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload
+        if: env.SKIP != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 1
+
+  # ビルドした成果物を置く。AWS の資格情報を持つのはこのジョブで、既定のブランチ以外の置くブランチのコードは動かさない
+  # （スクリプト・橋渡しは review-canvas の review_canvas_ref のもの）
+  publish:
+    needs: [plan, check-published, list-published, build]
+    if: always() && !cancelled() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    # 既定のブランチは、既定のブランチだけを書けるロールの environment で動かす（Environment で既定のブランチからだけ動かせるようにする）
+    environment: ${{ matrix.branch == (inputs.default_branch || github.event.repository.default_branch) && inputs.main_environment || inputs.environment }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        branch: ${{ fromJSON(needs.check-published.outputs.branches || needs.list-published.outputs.branches || needs.plan.outputs.branches) }}
+    # 同じブランチの置く・消すは並べない。途中のものは止めずに待つ（止めると、置き場が途中のまま残るため）
+    concurrency:
+      group: review-canvas-publish-${{ inputs.stack_name }}-${{ matrix.branch }}
+      cancel-in-progress: false
+    env:
+      BRANCH: ${{ matrix.branch }}
+      # 既定のブランチは、スタックの既定のブランチ（出力 DefaultBranch）と同じ値を default_branch に入れる（無ければリポジトリの既定のブランチ）。
+      # スクリプトが、スタックの既定のブランチと食い違えば止める
+      IS_DEFAULT_BRANCH: ${{ matrix.branch == (inputs.default_branch || github.event.repository.default_branch) }}
+      MAIN_ROLE_ARN: ${{ inputs.main_role_arn }}
+      OTHER_ROLE_ARN: ${{ inputs.role_arn }}
+    steps:
+      - name: Check inputs
+        run: |
+          if ! [[ "$TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
+            exit 1
+          fi
+
+      - name: Checkout review-canvas
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ShuntaToda/review-canvas
+          ref: ${{ inputs.review_canvas_ref }}
+          path: tool
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ inputs.pnpm_version }}
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install review-canvas
+        working-directory: tool
+        run: pnpm install --frozen-lockfile
+
+      # 橋渡しは、review-canvas のコミットからここでビルドする（成果物の中のものは使わない）
+      - name: Build bridge
+        working-directory: tool
+        run: |
+          pnpm run build:bridge
+          test -s dist-bridge/review-canvas-bridge.js
+
+      - name: Artifact name
+        if: env.IS_DEFAULT_BRANCH != 'true'
+        id: artifact
+        run: echo "name=review-canvas-storybook-$(printf %s "$BRANCH" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Download
+        if: env.IS_DEFAULT_BRANCH != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: artifact
+
+      # 既定のブランチは、このジョブのチェックアウト（既定のブランチのコード。Environment で既定のブランチからだけ動く）から自分でビルドする
+      - name: Check default branch checkout
+        if: env.IS_DEFAULT_BRANCH == 'true'
+        run: |
+          if [ "$GITHUB_REF_NAME" != "$BRANCH" ]; then
+            echo "::error::既定のブランチ（$BRANCH）は、既定のブランチから動かしたワークフローでだけ置けます（いまは $GITHUB_REF_NAME）"
+            exit 1
+          fi
+
+      - name: Checkout default branch
+        if: env.IS_DEFAULT_BRANCH == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: host
+
+      - name: Install dependencies of default branch
+        if: env.IS_DEFAULT_BRANCH == 'true'
+        working-directory: host
+        env:
+          INSTALL_COMMAND: ${{ inputs.install_command }}
+        run: bash -c "$INSTALL_COMMAND"
+
+      # ロールを選ぶ。既定のブランチ用のロールが無いまま既定のブランチを置こうとしたら、ほかのロールに落とさずに止める
+      - name: Check role
+        id: role
+        run: |
+          if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+            if [ -z "$MAIN_ROLE_ARN" ]; then
+              echo "::error::既定のブランチ（$BRANCH）を置くには、main_role_arn（スタックの出力 PublishMainRoleArn）を渡してください"
+              exit 1
+            fi
+            echo "arn=$MAIN_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          else
+            if [ -z "$OTHER_ROLE_ARN" ]; then
+              echo "::error::role_arn（スタックの出力 PublishRoleArn）を渡してください"
+              exit 1
+            fi
+            echo "arn=$OTHER_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish
+        working-directory: tool
+        env:
+          REVIEW_CANVAS_PUBLISH_AS_DEFAULT: ${{ env.IS_DEFAULT_BRANCH }}
+        run: |
+          if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+            # 既定のブランチのコードから、ここでビルドして置く（橋渡しは上でビルドしたもの）
+            pnpm --fail-if-no-match -F review-canvas-infra run publish-branch \
+              --branch "$BRANCH" \
+              --commit "$(git -C "$GITHUB_WORKSPACE/host" rev-parse --short HEAD)" \
+              --repo-root "$GITHUB_WORKSPACE/host" \
+              --config "$GITHUB_WORKSPACE/host/$CONFIG" \
+              --stack-name "$REVIEW_CANVAS_STACK_NAME"
+          else
+            pnpm --fail-if-no-match -F review-canvas-infra run publish-branch \
+              --branch "$BRANCH" \
+              --commit "$(cat "$GITHUB_WORKSPACE/artifact/COMMIT")" \
+              --repo-root "$GITHUB_WORKSPACE/artifact" \
+              --config "$GITHUB_WORKSPACE/artifact/$CONFIG" \
+              --skip-build \
+              --stack-name "$REVIEW_CANVAS_STACK_NAME"
+          fi
+
+  unpublish:
+    if: >-
+      inputs.role_arn != '' &&
+      github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: review-canvas-publish-${{ inputs.stack_name }}-${{ github.event.ref }}
+      cancel-in-progress: false
+    env:
+      BRANCH: ${{ github.event.ref }}
+    steps:
+      - name: Check inputs
+        run: |
+          if ! [[ "$TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::review_canvas_ref は 40 桁のコミットの SHA にしてください: $TOOL_REF"
+            exit 1
+          fi
+
+      - name: Checkout review-canvas
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ShuntaToda/review-canvas
+          ref: ${{ inputs.review_canvas_ref }}
+          path: tool
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ inputs.pnpm_version }}
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install review-canvas
+        working-directory: tool
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 置いてあるか（目録があるか）を見ずに消す（目録を書く前に止まった、途中まで置いたものも残さない）。
+      # 置いていなければ、消すものが無いだけで失敗にはしない（受け付けない名前もスクリプトが何もせずに終える）
+      - name: Unpublish
+        working-directory: tool
+        run: |
+          pnpm --fail-if-no-match -F review-canvas-infra run unpublish-branch "$BRANCH" --stack-name "$REVIEW_CANVAS_STACK_NAME"

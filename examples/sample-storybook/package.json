@@ -1,0 +1,32 @@
+{
+  "name": "sample-storybook",
+  "version": "0.0.0",
+  "private": true,
+  "description": "review-canvas を手元で試すための架空のサンプルショップの Storybook",
+  "type": "module",
+  "scripts": {
+    "build-storybook": "storybook build",
+    "storybook": "storybook dev -p 6006",
+    "validate": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "10.4.6",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "msw": "2.15.0",
+    "msw-storybook-addon": "2.0.7",
+    "storybook": "10.4.6",
+    "typescript": "catalog:",
+    "vite": "6.4.3"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

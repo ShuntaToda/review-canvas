@@ -1,0 +1,34 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "ignorePaths": [
+    "node_modules",
+    "pnpm-lock.yaml",
+    "openapi.json",
+    "src/generated",
+    "**/storybook-static",
+    "dist*",
+    "infra/cdk.out",
+    "examples/sample-storybook/public/mockServiceWorker.js"
+  ],
+  "words": [
+    "cfsb",
+    "codegen",
+    "contenteditable",
+    "fieldfocusring",
+    "focusin",
+    "inputmode",
+    "keyup",
+    "labelledby",
+    "maxlength",
+    "noninteractive",
+    "Passwordless",
+    "pipefail",
+    "spinbutton",
+    "SSSZ",
+    "unstub",
+    "valuenow",
+    "valuetext"
+  ],
+  "ignoreRegExpList": ["[Ａ-Ｚａ-ｚ０-９]+", "ShuntaToda/review-canvas"]
+}

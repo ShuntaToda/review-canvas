@@ -1,0 +1,1580 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Review Canvas API",
+    "version": "0.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4100",
+      "description": "ローカル"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "AccessToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Authorization",
+        "description": "`Bearer <アクセストークン>`。Authorization はデプロイ先の CloudFront が署名で上書きするため使わない"
+      }
+    },
+    "schemas": {
+      "CommentList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          },
+          "deletedIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "since を指定したときだけ、その後に削除されたコメントのID",
+            "example": []
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "続きのページの位置。最後のページなら null",
+            "example": null
+          },
+          "asOf": {
+            "type": "string",
+            "description": "次の差分の取り直しで since に渡す時刻",
+            "example": "2026-11-13T10:00:00.000+09:00"
+          }
+        },
+        "required": [
+          "items",
+          "deletedIds",
+          "nextCursor",
+          "asOf"
+        ]
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/application-search"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "source": {
+            "type": "string",
+            "example": "shop"
+          },
+          "storyId": {
+            "type": "string",
+            "example": "pages-login--default"
+          },
+          "x": {
+            "type": "number",
+            "example": 120
+          },
+          "y": {
+            "type": "number",
+            "example": 80
+          },
+          "frameWidth": {
+            "type": "number",
+            "nullable": true,
+            "example": 1280
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/CommentAnchor"
+          },
+          "body": {
+            "type": "string",
+            "example": "ボタンの文言がモックと違います"
+          },
+          "author": {
+            "type": "string",
+            "description": "書いた人の表示名（書いた時点のトークンの表示名）",
+            "example": "山田"
+          },
+          "authorId": {
+            "type": "string",
+            "description": "書いた人の利用者ID（トークンの sub）。認証を入れる前に書かれたコメントは空文字",
+            "example": "auth0|6543210fedcba9876543210f"
+          },
+          "commit": {
+            "type": "string",
+            "example": "c9ebd82"
+          },
+          "resolved": {
+            "type": "boolean",
+            "example": false
+          },
+          "resolvedBy": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "resolvedAt": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-13T10:00:00.000+09:00"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-13T10:00:00.000+09:00"
+          }
+        },
+        "required": [
+          "id",
+          "branch",
+          "parentId",
+          "source",
+          "storyId",
+          "x",
+          "y",
+          "frameWidth",
+          "body",
+          "author",
+          "authorId",
+          "commit",
+          "resolved",
+          "resolvedBy",
+          "resolvedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CommentAnchor": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "要素のタグ名（小文字）。例: button"
+          },
+          "testId": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "要素そのものの data-testid"
+          },
+          "closestTestId": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "testId": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "testId",
+              "depth"
+            ],
+            "description": "要素か、いちばん近い祖先の data-testid と、何段上か（0=要素そのもの）"
+          },
+          "elementId": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "要素の id 属性"
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40,
+            "description": "ロール（role 属性、無ければタグから決まるロール）。例: button"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "アクセシブルな名前（aria-label・aria-labelledby・label・alt・文字）。例: 申し込む"
+          },
+          "text": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "見えている文字（前後の空白を落とし、200 字まで）"
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "手がかりになる属性（name・type・placeholder・href・title・aria-* など。value は持たない）"
+          },
+          "state": {
+            "type": "object",
+            "properties": {
+              "hasValue": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "checked": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "disabled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "hasValue",
+              "checked",
+              "disabled"
+            ],
+            "description": "入力欄などの状態（値の中身は持たない）"
+          },
+          "selector": {
+            "type": "string",
+            "maxLength": 600,
+            "description": "要素を指す CSS セレクタ（data-testid・id・属性を手がかりに、なるべく短く）"
+          },
+          "nthPath": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "文書の根からの nth-of-type の道筋"
+          },
+          "ancestors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tag": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "role": {
+                  "type": "string",
+                  "nullable": true,
+                  "maxLength": 40
+                },
+                "name": {
+                  "type": "string",
+                  "nullable": true,
+                  "maxLength": 200
+                },
+                "testId": {
+                  "type": "string",
+                  "nullable": true,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "tag",
+                "role",
+                "name",
+                "testId"
+              ]
+            },
+            "maxItems": 8,
+            "description": "祖先の要約（近い順に数段）"
+          },
+          "heading": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "前にあるいちばん近い見出しの文字"
+          },
+          "region": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "label": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "kind",
+              "label"
+            ],
+            "description": "囲んでいるフォーム・区画・ダイアログなど（いちばん近いもの）"
+          },
+          "box": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "description": "置いたときの要素の矩形（画面の左上からの px）"
+          },
+          "offset": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "description": "要素の中でクリックした位置（左上からの割合。0〜1）"
+          },
+          "styles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": "デザインのレビューに使う見た目（font-size・color・padding など。計算後の値）"
+          },
+          "html": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 600,
+            "description": "要素の HTML の抜き出し（入力の値は落とす。500 字ほどまで）"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "maxItems": 12,
+            "description": "UI のコンポーネント名の連なり（外側から。React・Vue などで読めたときだけ）"
+          },
+          "story": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "importPath": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 400
+              },
+              "args": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 1200
+              },
+              "globals": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 600
+              }
+            },
+            "required": [
+              "title",
+              "name",
+              "importPath",
+              "args",
+              "globals"
+            ],
+            "description": "置いたときのストーリー（Storybook の index.json とプレビューから）"
+          }
+        },
+        "required": [
+          "version",
+          "tag",
+          "testId",
+          "closestTestId",
+          "elementId",
+          "role",
+          "name",
+          "text",
+          "attributes",
+          "state",
+          "selector",
+          "nthPath",
+          "ancestors",
+          "heading",
+          "region",
+          "box",
+          "offset",
+          "styles",
+          "html",
+          "components",
+          "story"
+        ],
+        "description": "ピンが指している要素の手がかり。置いたときにクリックした要素から集める（data-testid・ロールと名前・セレクタ・文字・見出し・矩形・見た目・HTML の抜き出し・React のコンポーネント名・ストーリー）。入力欄の値は持たない。JSON で 8192 バイトまで"
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "InvalidError"
+          },
+          "message": {
+            "type": "string",
+            "example": "不正なリクエストが送信されました"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ]
+      },
+      "ReviewerNotAllowedErrorResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "ReviewerNotAllowedError"
+                ],
+                "example": "ReviewerNotAllowedError"
+              }
+            }
+          }
+        ]
+      },
+      "CommentLimitExceededErrorResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "CommentLimitExceededError"
+                ],
+                "example": "CommentLimitExceededError"
+              }
+            }
+          }
+        ]
+      },
+      "CreateCommentRequestBody": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/application-search"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "example": "shop"
+          },
+          "storyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[a-z0-9-]+$",
+            "example": "pages-login--default"
+          },
+          "x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000,
+            "example": 120
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 20000,
+            "example": 80
+          },
+          "frameWidth": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 10000,
+            "example": 1280
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/CommentAnchor"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^(?:[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]|[\\n\\r\\t])+$",
+            "example": "ボタンの文言がモックと違います"
+          }
+        },
+        "required": [
+          "branch",
+          "source",
+          "storyId",
+          "x",
+          "y",
+          "body"
+        ]
+      },
+      "ReplyToCommentRequestBody": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/application-search"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^(?:[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]|[\\n\\r\\t])+$",
+            "example": "ボタンの文言がモックと違います"
+          }
+        },
+        "required": [
+          "branch",
+          "body"
+        ]
+      },
+      "CommentNotAuthorErrorResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "CommentNotAuthorError"
+                ],
+                "example": "CommentNotAuthorError"
+              }
+            }
+          }
+        ]
+      },
+      "EditCommentRequestBody": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/application-search"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^(?:[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]|[\\n\\r\\t])+$",
+            "example": "ボタンの文言がモックと違います"
+          }
+        },
+        "required": [
+          "branch",
+          "body"
+        ]
+      },
+      "SetCommentResolvedRequestBody": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+            "example": "feature/application-search"
+          },
+          "resolved": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "branch",
+          "resolved"
+        ]
+      },
+      "DeleteCommentResult": {
+        "type": "object",
+        "properties": {
+          "deletedIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            ]
+          }
+        },
+        "required": [
+          "deletedIds"
+        ]
+      },
+      "ReviewMeta": {
+        "type": "object",
+        "properties": {
+          "defaultBranch": {
+            "type": "string",
+            "example": "main"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "branch": {
+                  "type": "string",
+                  "example": "feature/product-search"
+                },
+                "commit": {
+                  "type": "string",
+                  "example": "c9ebd82"
+                },
+                "builtAt": {
+                  "type": "string",
+                  "nullable": true,
+                  "example": "2026-11-13T10:00:00.000+09:00"
+                },
+                "basePath": {
+                  "type": "string",
+                  "example": "/sb/main/"
+                },
+                "storybooks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "example": "shop"
+                      },
+                      "available": {
+                        "type": "boolean",
+                        "example": true
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "available"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "branch",
+                "commit",
+                "builtAt",
+                "basePath",
+                "storybooks"
+              ]
+            }
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "storybooks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ReviewSource"
+                }
+              },
+              "excludeTitlePrefixes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "example": [
+                  "Components/"
+                ]
+              }
+            },
+            "required": [
+              "storybooks",
+              "excludeTitlePrefixes"
+            ]
+          }
+        },
+        "required": [
+          "defaultBranch",
+          "branches",
+          "sources"
+        ]
+      },
+      "ReviewSource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "shop"
+          },
+          "label": {
+            "type": "string",
+            "example": "サンプルショップ"
+          },
+          "widths": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "example": [
+              375,
+              768,
+              1280
+            ]
+          },
+          "defaultWidth": {
+            "type": "integer",
+            "example": 375
+          },
+          "baseHeight": {
+            "type": "integer",
+            "example": 812
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "widths",
+          "defaultWidth",
+          "baseHeight"
+        ]
+      },
+      "BranchList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "branch": {
+                  "type": "string",
+                  "example": "feature/product-search"
+                },
+                "commentCount": {
+                  "type": "integer",
+                  "example": 3
+                },
+                "lastCommentedAt": {
+                  "type": "string",
+                  "nullable": true,
+                  "example": "2026-11-13T10:00:00.000+09:00"
+                }
+              },
+              "required": [
+                "branch",
+                "commentCount",
+                "lastCommentedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/comments": {
+      "get": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "ブランチのコメントを1ページずつ一覧する（返信を含む・書いた順。since で差分だけ）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+              "example": "feature/application-search"
+            },
+            "required": true,
+            "name": "branch",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "前の応答の asOf。指定すると、その後に書かれた・変わったコメントと、削除されたコメントのIDだけを返す",
+              "example": "2026-11-13T10:00:00.000+09:00"
+            },
+            "required": false,
+            "description": "前の応答の asOf。指定すると、その後に書かれた・変わったコメントと、削除されたコメントのIDだけを返す",
+            "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF",
+              "description": "前のページの nextCursor"
+            },
+            "required": false,
+            "description": "前のページの nextCursor",
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "コメントの一覧",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "新しいピン（スレッドの最初のコメント）を書く",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "書いたコメント",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ブランチのコメント数が上限に達している",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentLimitExceededErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{commentId}/replies": {
+      "post": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "スレッドに返信する",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyToCommentRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "書いた返信",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "返信先が見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ブランチのコメント数が上限に達している",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentLimitExceededErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{commentId}": {
+      "patch": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "コメントの本文を書き換える（書いた本人だけ）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditCommentRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "書き換えたコメント",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "書いた本人ではない・使ってよい人ではない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CommentNotAuthorErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "コメントが見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "コメントを削除する（書いた本人だけ。最初のコメントならスレッドごと）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]*$",
+              "example": "feature/application-search"
+            },
+            "required": true,
+            "name": "branch",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "削除したID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteCommentResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "書いた本人ではない・使ってよい人ではない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CommentNotAuthorErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "コメントが見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{commentId}/resolution": {
+      "put": {
+        "tags": [
+          "Comments"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "スレッドを解決・再開する（誰でもできる）",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "example": "01J1H3V7X4K9QW2RT8ZB5C6DYF"
+            },
+            "required": true,
+            "name": "commentId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCommentResolvedRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "解決・再開したスレッドの最初のコメント",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "コメントが見つからない",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "Storybookを置いてあるブランチ（ブランチごとのコミット・置いてあるStorybook）と、既定のブランチ、並べるStorybookの設定",
+        "responses": {
+          "200": {
+            "description": "置いてあるStorybookの情報",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewMeta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "コメントのあるブランチを一覧する（既定のブランチが先頭）",
+        "responses": {
+          "200": {
+            "description": "ブランチの一覧",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

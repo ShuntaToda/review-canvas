@@ -1,0 +1,11 @@
+# openapi:generate の生成物。整形は生成側（JSON.stringify）を正とし、prettier と二重管理しない
+openapi.json
+review-canvas.config.schema.json
+src/generated
+pnpm-lock.yaml
+storybook-static
+dist
+dist-deployed
+dist-bridge
+# 別のパッケージ（review-canvas-infra）。自分の validate で整形を確かめる
+infra/

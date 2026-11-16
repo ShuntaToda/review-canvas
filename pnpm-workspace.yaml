@@ -1,0 +1,12 @@
+packages:
+  - "infra"
+  - "examples/*"
+# 公開から 21 日たっていない版は入れない（乗っ取られた版を掴まないため）
+minimumReleaseAge: 30240
+# 複数のパッケージで宣言する依存だけを揃える
+catalog:
+  "@types/node": 24.13.2
+  esbuild-register: 3.6.0
+  typescript: 6.0.3
+  vitest: 4.1.10
+  zod: 4.4.3

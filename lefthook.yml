@@ -1,0 +1,71 @@
+assert_lefthook_installed: true
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: prettier
+      glob: "*.{ts,tsx,css,json,jsonc,yml,yaml,md}"
+      exclude:
+        - "infra/**"
+      run: pnpm exec prettier --cache --write --ignore-unknown {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+
+    - name: prettier-infra
+      root: infra/
+      glob:
+        - "*.{ts,json,md}"
+        - "lib/cloudfront-functions/*.js"
+      run: pnpm exec prettier --cache --write {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+
+    - name: eslint
+      glob: "*.{ts,tsx}"
+      exclude:
+        - "infra/**"
+        - "examples/**"
+      run: pnpm exec eslint --cache --max-warnings 0 --no-warn-ignored --fix {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+      fail_text: "codegen が未実行かもしれません: pnpm run codegen"
+
+    - name: eslint-infra
+      root: infra/
+      glob: "*.ts"
+      run: pnpm exec eslint --cache --max-warnings 0 --no-warn-ignored --fix {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+
+commit-msg:
+  jobs:
+    # AI の署名の行（Co-Authored-By: のうち AI のもの・セッションの URL）をコミットメッセージに入れない
+    - name: no-ai-signature
+      run: "! grep -qiE '^(co-authored-by:.*(claude|anthropic|copilot|openai)|claude-session:)' {1}"
+      fail_text: "コミットメッセージから AI の署名の行を消してください"
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: tsc
+      glob: "*.{ts,tsx}"
+      exclude:
+        - "infra/**"
+      run: pnpm run validate:tsc
+
+    - name: tsc-infra
+      root: infra/
+      glob: "*.ts"
+      run: pnpm exec tsc --noEmit
+
+    - name: openapi-check
+      glob:
+        - "api/*.ts"
+        - "api/**/*.ts"
+      run: pnpm run openapi:check
+      fail_text: "openapi.json が最新でない可能性があります: pnpm run openapi:generate で作り直してください"
+
+    - name: cspell
+      glob: "*.{ts,tsx,md}"
+      run: pnpm exec cspell --cache --gitignore --no-must-find-files {push_files}
+      fail_text: "未知の単語であれば cspell.json の words に足してください"

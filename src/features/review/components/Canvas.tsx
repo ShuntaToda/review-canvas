@@ -1,0 +1,403 @@
+import { useEffect, useRef, useState } from "react";
+import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
+import {
+  type Camera,
+  type Size,
+  visibleWorldRect,
+  zoomAt,
+} from "../model/camera";
+import {
+  FRAME_LABEL_HEIGHT,
+  FRAME_LABEL_SCREEN_HEIGHT,
+  intersects,
+  ROW_LABEL_HEIGHT,
+  type RowPlacement,
+  SIDE_TITLE_MAX_ZOOM,
+  SIDE_TITLE_SCREEN_GAP,
+  SIDE_TITLE_SCREEN_WIDTH,
+} from "../model/layout";
+import { nextLiveFrames, sameFrames } from "../model/live-frames";
+import { isTypingTarget, type Tool } from "../model/shortcuts";
+import type { StorySource } from "../model/sources";
+import type { CommentAnchor } from "../model/threads";
+import { Frame, type PinView } from "./Frame";
+import { resetScroll, trackParentFocus } from "./canvas-dom";
+
+/** これより縮小しているときは、新しく iframe を読み込まない（全体を見渡すときに全部を読み込まない） */
+const LOAD_MIN_ZOOM = 0.12;
+/**
+ * これより縮小しているときは、フレームの見出し（状態の名前）を出さない。
+ * 見出しは画面上で同じ大きさに保つため、縮小するとキャンバス上では背が高くなり、画面の名前や上の行に重なるため
+ */
+const LABEL_MIN_ZOOM = 0.25;
+/** 画面の名前（段の見出し）の、画面上の高さ(px)と最小の幅(px) */
+const ROW_TITLE_SCREEN_HEIGHT = 32;
+const ROW_TITLE_MIN_WIDTH = 480;
+/** 段の左の外に出すときの見出しの高さ(px) */
+const SIDE_TITLE_SCREEN_HEIGHT = 18;
+/** 読み込み始める範囲（見えている範囲を画面の大きさの割合で広げる） */
+const LOAD_MARGIN = 0.25;
+/**
+ * 読み込んだ iframe を残す範囲。少し戻ったときに読み込み直さない程度にとどめ、離れた画面は早めに外す
+ * （付けておく数の上限は model/live-frames の MAX_LIVE_FRAMES）
+ */
+const KEEP_MARGIN = 0.5;
+
+type CanvasProps = {
+  source: StorySource;
+  rows: ReadonlyArray<RowPlacement>;
+  camera: Camera;
+  viewport: Size;
+  element: HTMLElement | null;
+  containerRef: (element: HTMLDivElement | null) => void;
+  onCameraChange: (update: (camera: Camera) => Camera) => void;
+  tool: Tool;
+  /** Space を押している間は、どの操作中でもドラッグで動かす */
+  spaceHeld: boolean;
+  pinsByStory: ReadonlyMap<string, ReadonlyArray<PinView>>;
+  activeThreadId: string | null;
+  draft: {
+    storyId: string;
+    x: number;
+    y: number;
+    box: AnchorBox | null;
+  } | null;
+  onMeasure: (storyId: string, height: number) => void;
+  onPlace: (
+    storyId: string,
+    point: { x: number; y: number },
+    anchor: CommentAnchor | null,
+  ) => void;
+  onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
+  onOpenThread: (threadId: string) => void;
+  /** 何も無いところをクリックした（開いているスレッドを閉じる） */
+  onBackgroundClick: () => void;
+  /**
+   * 見えている範囲の外でも読み込む画面（共有リンク・一覧から移ったピンの画面）。
+   * 読み込んで高さを測らないと、長い画面の下の方のピンへ移れないため
+   */
+  focusStoryId?: string | null;
+};
+
+type Point = { x: number; y: number };
+
+/**
+ * Figma のような大きなキャンバス。ドラッグ・ホイール・ピンチで動かし、Ctrl/⌘+ホイールで拡大縮小する
+ */
+export const Canvas = ({
+  source,
+  rows,
+  camera,
+  viewport,
+  element,
+  containerRef,
+  onCameraChange,
+  tool,
+  spaceHeld,
+  pinsByStory,
+  activeThreadId,
+  draft,
+  onMeasure,
+  onPlace,
+  onLocate,
+  onOpenThread,
+  onBackgroundClick,
+  focusStoryId = null,
+}: CanvasProps) => {
+  const pointersRef = useRef(new Map<number, Point>());
+  const panRef = useRef<{
+    last: Point;
+    moved: boolean;
+    onBackground: boolean;
+  } | null>(null);
+  const pinchRef = useRef<{ distance: number; center: Point } | null>(null);
+
+  // ストーリーにフォーカスを取られたとき、元いた所へ返せるよう覚えておく
+  useEffect(() => trackParentFocus(), []);
+
+  // ホイールは既定の動き（ページのスクロール・ブラウザの拡大）を止めるため、passive でない登録が要る
+  useEffect(() => {
+    if (element === null) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      const anchor = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      // 行単位のスクロール（マウスの設定による）は px に直す
+      const unit = event.deltaMode === 1 ? 16 : 1;
+      if (event.ctrlKey || event.metaKey) {
+        // トラックパッドのピンチも ctrlKey 付きのホイールとして届く
+        // マウスのホイール1目盛り（100px 前後）で跳びすぎないよう、1回分の変化を抑える
+        const delta = Math.max(-40, Math.min(40, event.deltaY * unit));
+        const factor = Math.exp(-delta * 0.01);
+        onCameraChange((current) =>
+          zoomAt(current, current.zoom * factor, anchor),
+        );
+        return;
+      }
+      const horizontal = event.shiftKey && event.deltaX === 0;
+      const dx = (horizontal ? event.deltaY : event.deltaX) * unit;
+      const dy = (horizontal ? 0 : event.deltaY) * unit;
+      onCameraChange((current) => ({
+        ...current,
+        x: current.x - dx,
+        y: current.y - dy,
+      }));
+    };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, [element, onCameraChange]);
+
+  const localPoint = (event: React.PointerEvent): Point => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+
+  const pinchOf = (): { distance: number; center: Point } | null => {
+    const [a, b] = [...pointersRef.current.values()];
+    if (a === undefined || b === undefined) return null;
+    return {
+      distance: Math.hypot(a.x - b.x, a.y - b.y),
+      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // 入力欄にいるときにキャンバスを押したら、フォーカスもキャンバスへ移す（ドラッグのために既定の動きを止めるとフォーカスが動かず、
+    // 絞り込み欄などに残って「-」などがそこへ入るため）。入力欄にいないときは動かさない
+    // （play 関数の途中のストーリーが持っているフォーカスを奪い、toHaveFocus などを落とさないように）
+    if (
+      isTypingTarget(document.activeElement) &&
+      !(
+        event.target instanceof Element &&
+        event.target.closest("a, button, input, textarea, select") !== null
+      )
+    ) {
+      event.currentTarget.focus({ preventScroll: true });
+    }
+    const point = localPoint(event);
+    pointersRef.current.set(event.pointerId, point);
+    if (pointersRef.current.size === 2) {
+      pinchRef.current = pinchOf();
+      panRef.current = null;
+      return;
+    }
+    const onBackground =
+      event.target instanceof HTMLElement &&
+      event.target.dataset["canvasBackground"] !== undefined;
+    const pan =
+      event.button === 1 ||
+      (event.button === 0 && (spaceHeld || tool === "move" || onBackground));
+    if (!pan) return;
+    // 中ボタンの自動スクロールを止める
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panRef.current = { last: point, moved: false, onBackground };
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    const point = localPoint(event);
+    pointersRef.current.set(event.pointerId, point);
+
+    const startPinch = pinchRef.current;
+    if (startPinch !== null) {
+      const next = pinchOf();
+      if (next === null || startPinch.distance === 0) return;
+      const ratio = next.distance / startPinch.distance;
+      const shift = {
+        x: next.center.x - startPinch.center.x,
+        y: next.center.y - startPinch.center.y,
+      };
+      pinchRef.current = next;
+      onCameraChange((current) =>
+        zoomAt(
+          { ...current, x: current.x + shift.x, y: current.y + shift.y },
+          current.zoom * ratio,
+          next.center,
+        ),
+      );
+      return;
+    }
+
+    const pan = panRef.current;
+    if (pan === null) return;
+    const dx = point.x - pan.last.x;
+    const dy = point.y - pan.last.y;
+    panRef.current = {
+      ...pan,
+      last: point,
+      moved: pan.moved || Math.abs(dx) + Math.abs(dy) > 2,
+    };
+    onCameraChange((current) => ({
+      ...current,
+      x: current.x + dx,
+      y: current.y + dy,
+    }));
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size < 2) {
+      pinchRef.current = null;
+    }
+    const pan = panRef.current;
+    panRef.current = null;
+    // 動かさずに何も無いところを押した → 開いているスレッドを閉じる
+    if (pan !== null && !pan.moved && pan.onBackground) {
+      onBackgroundClick();
+    }
+  };
+
+  const visible = visibleWorldRect(camera, viewport, LOAD_MARGIN);
+  const keep = visibleWorldRect(camera, viewport, KEEP_MARGIN);
+  const canLoad = camera.zoom >= LOAD_MIN_ZOOM;
+  // 付けておく iframe（最近見えていた順。見えていない画面は上限まで）。描画の中で決め、変わったときだけ覚え直す
+  const placements = rows.flatMap((row) => row.frames);
+  const isWanted = (placement: (typeof placements)[number]) =>
+    placement.story.id === focusStoryId || intersects(placement, visible);
+  const [previousLive, setPreviousLive] = useState<string[]>([]);
+  const live = canLoad
+    ? nextLiveFrames({
+        previous: previousLive,
+        visible: placements.filter(isWanted).map((p) => p.story.id),
+        keep: placements
+          .filter((p) => intersects(p, keep))
+          .map((p) => p.story.id),
+      })
+    : [];
+  if (!sameFrames(live, previousLive)) setPreviousLive(live);
+  const liveSet = new Set(live);
+  const showLabel = camera.zoom >= LABEL_MIN_ZOOM;
+  // 点の格子（キャンバスの背景）。倍率が小さいときは間隔を広げる
+  const grid = 24 * camera.zoom * (camera.zoom < 0.25 ? 4 : 1);
+
+  return (
+    <div
+      ref={containerRef}
+      role="application"
+      aria-label="キャンバス"
+      aria-roledescription="キャンバス"
+      // 矢印キーで動かせるよう、Tab で止まれるようにする（role="application" はキー操作を受け持つ要素）
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+      tabIndex={0}
+      data-canvas-root
+      data-canvas-background
+      className={[
+        "relative size-full touch-none overflow-clip bg-canvas outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset",
+        spaceHeld || tool === "move"
+          ? "cursor-grab active:cursor-grabbing"
+          : "",
+      ].join(" ")}
+      style={{
+        backgroundImage:
+          "radial-gradient(circle, var(--color-line-strong) 1px, transparent 1px)",
+        backgroundSize: `${grid}px ${grid}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      // overflow-hidden だとフォーカスで中がスクロールしてカメラとずれるため、clip にしたうえで動いたら戻す
+      onScroll={resetScroll}
+    >
+      <div
+        className="absolute top-0 left-0 will-change-transform"
+        style={{
+          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`,
+          transformOrigin: "0 0",
+        }}
+      >
+        {rows.map((row) => {
+          const rowWidth = Math.max(...row.frames.map((f) => f.x + f.w));
+          const firstFrameTop = row.y + ROW_LABEL_HEIGHT + FRAME_LABEL_HEIGHT;
+          // 画面の名前は、最初のフレームの見出しのすぐ上に下端を合わせる。
+          // 縮小して前の段に重なる倍率になったら、段の左の外（最初のフレームの上端の高さ）に出す
+          const side = camera.zoom < SIDE_TITLE_MAX_ZOOM;
+          const titleBottom =
+            firstFrameTop -
+            (showLabel ? FRAME_LABEL_SCREEN_HEIGHT / camera.zoom : 0);
+          const titleStyle: React.CSSProperties = side
+            ? {
+                left:
+                  -(SIDE_TITLE_SCREEN_WIDTH + SIDE_TITLE_SCREEN_GAP) /
+                  camera.zoom,
+                top: firstFrameTop,
+                width: SIDE_TITLE_SCREEN_WIDTH,
+                height: SIDE_TITLE_SCREEN_HEIGHT,
+                transform: `scale(${1 / camera.zoom})`,
+                transformOrigin: "0 0",
+              }
+            : {
+                left: 0,
+                top: titleBottom - ROW_TITLE_SCREEN_HEIGHT,
+                // 状態が1つの画面でも名前が切れないよう、フレームの幅に縛らない（右は何も無い）
+                width: Math.max(rowWidth * camera.zoom, ROW_TITLE_MIN_WIDTH),
+                height: ROW_TITLE_SCREEN_HEIGHT,
+                transform: `scale(${1 / camera.zoom})`,
+                transformOrigin: "0 100%",
+              };
+          return (
+            <div key={row.title}>
+              <h2
+                className={[
+                  "pointer-events-none absolute flex gap-2 truncate font-bold text-ink",
+                  side
+                    ? "items-center justify-end text-xs"
+                    : "items-end pb-1 text-base",
+                ].join(" ")}
+                style={titleStyle}
+              >
+                {/* 見出しの上でもドラッグで動かせるよう h2 は触らせず、切れた名前の全文を出すため名前だけ触れる */}
+                <span
+                  className="pointer-events-auto truncate"
+                  title={row.title}
+                >
+                  {row.title}
+                </span>
+                <span className="shrink-0 text-xs font-normal text-muted">
+                  {row.frames.length} 状態
+                </span>
+              </h2>
+              {row.frames.map((placement) => (
+                <Frame
+                  key={placement.story.id}
+                  source={source}
+                  placement={placement}
+                  zoom={camera.zoom}
+                  tool={spaceHeld ? "move" : tool}
+                  shouldLoad={canLoad && isWanted(placement)}
+                  // 小さく表示している間は、読み込み済みの画面も外す（全体を表示したときに一斉に読み込み直さないように）
+                  // 見えていない画面は、付けておく数の上限を超えたら古い順に外す
+                  keepLoaded={liveSet.has(placement.story.id)}
+                  showLabel={showLabel}
+                  pins={pinsByStory.get(placement.story.id) ?? []}
+                  activeThreadId={activeThreadId}
+                  draftPin={
+                    draft !== null && draft.storyId === placement.story.id
+                      ? draft
+                      : null
+                  }
+                  onMeasure={onMeasure}
+                  onPlace={onPlace}
+                  onLocate={onLocate}
+                  onOpenThread={onOpenThread}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {/* Space を押している間は、iframe・コメントの置き場に触れさせずに動かす */}
+      {spaceHeld && (
+        <div
+          aria-hidden
+          className="absolute inset-0 z-30 cursor-grab active:cursor-grabbing"
+        />
+      )}
+    </div>
+  );
+};

@@ -1,0 +1,16 @@
+{
+  "$schema": "./review-canvas.config.schema.json",
+  "storybooks": [
+    {
+      "id": "shop",
+      "label": "サンプルショップ",
+      "build": "pnpm --fail-if-no-match -F sample-storybook run build-storybook --test",
+      "outDir": "examples/sample-storybook/storybook-static",
+      "widths": [375, 768, 1280],
+      "defaultWidth": 375,
+      "baseHeight": 812
+    }
+  ],
+  "excludeTitlePrefixes": ["Components/"],
+  "watchPaths": ["examples/sample-storybook/", "review-canvas.config.json"]
+}

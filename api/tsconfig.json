@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "exclude": ["node_modules", "tsc-cache"],
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "outDir": "./tsc-cache",
+    // ローカルの入口が、画面の側の 1 ファイル（src/features/review/bridge/inject.ts。Storybook への橋渡しの差し込み）を読むため、パッケージの根から
+    "rootDir": "..",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2024",
+    "types": ["vitest/globals", "node"],
+    "allowSyntheticDefaultImports": true,
+    "exactOptionalPropertyTypes": false,
+    "strictNullChecks": true,
+    "resolveJsonModule": true
+  }
+}

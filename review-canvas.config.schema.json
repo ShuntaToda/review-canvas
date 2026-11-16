@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "storybooks": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "description": "Storybook の ID（英小文字・数字・-、32 文字まで）。URL とコメントに残る。あとから変えると、その ID のコメントは画面に並ばなくなる"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "画面に出す名前（ページの切り替え・Markdown の見出し）"
+          },
+          "widths": {
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 4000
+            },
+            "description": "切り替えられる画面の幅(px)"
+          },
+          "defaultWidth": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 4000,
+            "description": "既定の画面の幅(px)。widths のどれか"
+          },
+          "baseHeight": {
+            "default": 800,
+            "description": "中身を測る前の画面の高さ(px)。測った高さがこれより低くても、これより低くはしない",
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 4000
+          },
+          "build": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Storybook をビルドするコマンド（設定ファイルのあるディレクトリで、シェルで動かす）"
+          },
+          "outDir": {
+            "type": "string",
+            "description": "ビルド結果（index.json・iframe.html のあるディレクトリ）。設定ファイルのあるディレクトリからの相対パス"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "widths",
+          "defaultWidth",
+          "build",
+          "outDir"
+        ]
+      },
+      "description": "キャンバスに並べる Storybook（1 つ目が開いたときのページ）"
+    },
+    "excludeTitlePrefixes": {
+      "default": [],
+      "description": "既定では並べないストーリーのタイトルの頭（例: Components/）。画面の「部品も表示」で並べる",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "watchPaths": {
+      "default": [],
+      "description": "push のときに置き直すきっかけのパス（リポジトリの根から。git diff に渡す）",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "storybooks"
+  ],
+  "title": "review-canvas の設定（review-canvas.config.json）"
+}

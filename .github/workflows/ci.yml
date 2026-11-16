@@ -1,0 +1,136 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 同じ PR・ブランチに続けて push したら、古い実行は止める
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+# Action はコミットの SHA で固定する（publish.yml と同じ）
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # validate は prevalidate で codegen（openapi.json → src/generated）を済ませる
+      - name: Validate
+        run: |
+          pnpm run validate
+          pnpm run openapi:check
+          pnpm run infra:validate
+          pnpm -F sample-storybook run validate
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # Storybook の iframe.html に差し込む橋渡し（置くスクリプト・手元のサーバーが読む）を、1 つのファイルにビルドできることを確かめる
+      - name: Build bridge
+        run: |
+          pnpm run build:bridge
+          test -s dist-bridge/review-canvas-bridge.js
+
+      # デプロイ先のビルドに擬似ログイン（署名の無いトークンを作る）のコードが入っていないことを確かめる
+      - name: Build for deploy
+        run: |
+          pnpm run build:deployed
+          pnpm run check:deployed-bundle
+
+      - name: Build sample Storybook
+        run: |
+          pnpm run build:storybook
+          test -s examples/sample-storybook/storybook-static/index.json
+
+      # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない
+      - name: Synth
+        env:
+          REVIEW_CANVAS_AUTH0_DOMAIN: tenant.example.com
+          REVIEW_CANVAS_AUTH0_CLIENT_ID: dummy-client-id
+          REVIEW_CANVAS_AUTH0_AUDIENCE: https://review-canvas.example.com/api
+          REVIEW_CANVAS_GITHUB_OIDC_PROVIDER: create
+          REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: repo:example/app
+        run: pnpm run synth --quiet
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # medium のテストが DynamoDB Local を使う
+      - name: Start DynamoDB Local
+        run: pnpm run docker:up
+
+      - name: Test
+        run: |
+          pnpm run test --silent
+          pnpm run infra:test --silent

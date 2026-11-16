@@ -1,0 +1,131 @@
+import { useRef } from "react";
+import useSWR from "swr";
+import {
+  buildReviewApi,
+  isReviewerNotAllowed,
+  isUnauthorized,
+} from "../api/review-api";
+import { type CommentSnapshot, syncComments } from "../model/comment-sync";
+import type { StorySource } from "../model/sources";
+import {
+  parseStorybookIndex,
+  type Story,
+  storybookIndexPath,
+} from "../model/storybook";
+import { apiClient } from "@/support/api/api-client";
+
+export const reviewApi = buildReviewApi(apiClient);
+
+/** ほかの人の書き込みを取り直す間隔(ms) */
+export const COMMENTS_REFRESH_INTERVAL = 10_000;
+
+export const metaKey = "GET /api/meta";
+export const branchesKey = "GET /api/branches";
+export const commentsKey = "GET /api/comments";
+export const storybookIndexKey = "GET {base}{source}/index.json";
+
+/**
+ * ウィンドウに戻るたびには読み直さないもの（置いてあるブランチ・ブランチの一覧・ストーリーの一覧）。
+ * 読み直すと、作業の途中で選んでいるブランチの置き場やストーリーの並びが変わり、キャンバスが組み直されるため
+ */
+const STATIC_OPTIONS = { revalidateOnFocus: false } as const;
+
+/** Storybook を置いてあるブランチ（ブランチごとのコミット・置き場・ビルドの有無）と既定のブランチ */
+export const useReviewMeta = () =>
+  useSWR(metaKey, () => reviewApi.getMeta(), STATIC_OPTIONS);
+
+/** コメントのあるブランチの一覧（ブランチを切り替える欄を開いたときだけ読む） */
+export const useBranches = (enabled: boolean) =>
+  useSWR(
+    enabled ? branchesKey : null,
+    () => reviewApi.listBranches(),
+    STATIC_OPTIONS,
+  );
+
+/** ページ 1 つ分のストーリーの一覧の読み込みの結果 */
+export type StoriesResult =
+  { kind: "ok"; stories: Story[] } | { kind: "error"; message: string };
+
+/** Storybook のストーリーの一覧を読む（Storybook は別のオリジンなので、資格情報（Cookie）を付けずに読む） */
+const fetchStories = async (
+  base: string,
+  source: StorySource,
+): Promise<Story[]> => {
+  const response = await fetch(storybookIndexPath(base, source), {
+    credentials: "omit",
+  });
+  if (!response.ok) {
+    throw new Error(`Storybook の一覧を読めません（${response.status}）`);
+  }
+  return parseStorybookIndex(await response.json(), source);
+};
+
+/**
+ * 置いてあるページ（sources）のストーリーの一覧を、まとめて読む（ページの数は設定で決まるため、1 つの読み込みにまとめる）。
+ * base は選んでいるブランチの置き場（Storybook のオリジンから）。1 つのページが読めなくても、ほかのページは出す
+ */
+export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
+  useSWR(
+    [storybookIndexKey, base, sources.join(",")],
+    async (): Promise<Record<StorySource, StoriesResult>> => {
+      const settled = await Promise.allSettled(
+        sources.map((source) => fetchStories(base, source)),
+      );
+      return Object.fromEntries(
+        settled.map((result, index): [StorySource, StoriesResult] => [
+          sources[index] ?? "",
+          result.status === "fulfilled"
+            ? { kind: "ok", stories: result.value }
+            : { kind: "error", message: String(result.reason) },
+        ]),
+      );
+    },
+    STATIC_OPTIONS,
+  );
+
+/**
+ * コメントの読み込みに失敗したときの読み直し。ログインし直しが要る失敗（401）と、使ってよい人ではない失敗（403 の ReviewerNotAllowedError）は
+ * 読み直さない（別のアカウントでログインし直すまで通らないため）。
+ * それ以外（サーバーが落ちている等）は、定期の取り直しと同じ間隔で読み直し続ける
+ */
+export const retryCommentsOnError = (
+  error: unknown,
+  revalidate: () => void,
+  schedule: (run: () => void, ms: number) => void = (run, ms) =>
+    window.setTimeout(run, ms),
+): void => {
+  if (isUnauthorized(error) || isReviewerNotAllowed(error)) return;
+  schedule(revalidate, COMMENTS_REFRESH_INTERVAL);
+};
+
+/**
+ * ブランチのコメント（返信を含む）。ほかの人の書き込みを拾うため定期的に取り直す。
+ * 取り直しは前回からの差分だけを読み（応答を小さく保つ）、ときどき全件でそろえ直す（model/comment-sync）
+ */
+export const useComments = (branch: string | undefined) => {
+  // 前回の結果（差分を重ねる起点）。ブランチを切り替えたら使わない
+  const lastRef = useRef<{ branch: string; snapshot: CommentSnapshot } | null>(
+    null,
+  );
+  return useSWR(
+    branch === undefined ? null : [commentsKey, branch],
+    async ([, keyBranch]): Promise<CommentSnapshot> => {
+      const last = lastRef.current;
+      const snapshot = await syncComments(
+        ({ since, cursor }) =>
+          reviewApi.listCommentsPage({ branch: keyBranch, since, cursor }),
+        last?.branch === keyBranch ? last.snapshot : undefined,
+      );
+      lastRef.current = { branch: keyBranch, snapshot };
+      return snapshot;
+    },
+    {
+      refreshInterval: COMMENTS_REFRESH_INTERVAL,
+      // SWR は失敗を持っているあいだ定期の取り直しをしないため、失敗したら同じ間隔で読み直し続ける
+      // （サーバーが一時的に落ちても、戻れば続きを拾う）。ログインし直しが要る失敗（401）は、読み直しても通らないので止める
+      shouldRetryOnError: true,
+      onErrorRetry: (error, _key, _config, revalidate, { retryCount }) =>
+        retryCommentsOnError(error, () => void revalidate({ retryCount })),
+    },
+  );
+};

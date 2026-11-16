@@ -1,0 +1,8 @@
+# テスト（*.medium.test.ts）と手元の API が使う DynamoDB Local（ポート 8000）
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:1.22.0
+    container_name: review-canvas-dynamodb-local
+    ports:
+      - 8000:8000
+    command: -jar DynamoDBLocal.jar -sharedDb -inMemory

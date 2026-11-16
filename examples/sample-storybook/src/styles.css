@@ -1,0 +1,58 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1f2937;
+  background: #ffffff;
+}
+body {
+  margin: 0;
+}
+.page {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+}
+.button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.button[disabled] {
+  background: #9ca3af;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.field input,
+.field select {
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 16px;
+}
+.error {
+  color: #b91c1c;
+  font-size: 13px;
+}
+.footer {
+  margin-top: 32px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  color: #6b7280;
+}
