@@ -18,6 +18,10 @@ import {
 import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import {
+  formatM2mClients,
+  parseM2mClients,
+} from "../../api/infrastructure/config/m2m-clients-setting";
+import {
   type ReviewCanvasConfig,
   toSourcesEnv,
 } from "../../api/infrastructure/config/review-canvas-config";
@@ -192,6 +196,10 @@ export class ReviewCanvas extends Construct {
         AUTH0_AUDIENCE: settings.auth0.audience,
         ALLOWED_EMAIL_DOMAINS: settings.access.allowedEmailDomains,
         ALLOWED_EMAILS: settings.access.allowedEmails,
+        // 人の代わりに呼んでよい client（空ならだれも通さない）。組み込みで手で渡した値も、ここで形を確かめる
+        AUTH0_M2M_CLIENTS: formatM2mClients(
+          parseM2mClients(settings.access.m2mClients, "access.m2mClients"),
+        ),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

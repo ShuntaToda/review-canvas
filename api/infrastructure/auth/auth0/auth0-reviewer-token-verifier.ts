@@ -22,6 +22,10 @@ import {
 } from "@/domain/support/auth/reviewer-token-verifier";
 import type { FetchNow } from "@/domain/support/fetch-now";
 import {
+  isM2mPayload,
+  readM2mReviewer,
+} from "@/infrastructure/auth/m2m-clients";
+import {
   assertReviewerAllowed,
   type ReviewerAccessPolicy,
 } from "@/infrastructure/auth/reviewer-access-policy";
@@ -29,6 +33,7 @@ import {
   buildTokenVerificationFailedError,
   readReviewerClaims,
 } from "@/infrastructure/auth/reviewer-claims";
+import type { M2mClient } from "@/infrastructure/config/m2m-clients-setting";
 
 /** 受け付ける署名のアルゴリズム（Auth0 の既定。これ以外はヘッダーの時点で 401） */
 const ACCEPTED_SIGNATURE_ALGORITHM = "RS256";
@@ -117,6 +122,8 @@ type Auth0ReviewerTokenVerifierProps = {
   fetchNow: FetchNow;
   /** 使ってよい人の決め方（許可したメールのドメイン・メールアドレス） */
   accessPolicy: ReviewerAccessPolicy;
+  /** 人の代わりに呼んでよい client（Machine to Machine。AI・CI）。省略・空なら client のトークンは通さない */
+  m2mClients?: ReadonlyArray<M2mClient>;
   /** 公開鍵（JWKS）の取得。テストで差し替える。省略時は aws-jwt-verify の HTTPS の取得 */
   fetcher?: Fetcher;
 };
@@ -133,6 +140,8 @@ type Auth0ReviewerTokenVerifierProps = {
  *   署名の検証だけでは exp・iat の無いトークンも通るため、ここで弾く
  * - 最後に、確かめ済みのメールアドレスが許可したものかを確かめる（assertReviewerAllowed）。
  *   テナントで正しいトークンでも、確かめ済みでない・許可していないメールアドレスの人は通さない
+ * - client credentials（Machine to Machine）のトークンは、メールアドレスの代わりに、許可した client のものかを確かめる（readM2mReviewer）。
+ *   テナントで API を使えるようにした client でも、設定（m2mClients）に挙げていなければ通さない
  *
  * 401 は TokenVerificationFailedError（理由はログにだけ残す）、公開鍵を取得できない・中身が不正なときは
  * UnexpectedTokenVerificationError（500）、使ってよい人でなければ ReviewerNotAllowedError（403）
@@ -142,6 +151,7 @@ export class Auth0ReviewerTokenVerifier implements ReviewerTokenVerifier {
   readonly #issuer: string;
   readonly #fetchNow: FetchNow;
   readonly #accessPolicy: ReviewerAccessPolicy;
+  readonly #m2mClients: ReadonlyArray<M2mClient>;
 
   /**
    * @throws {Error} 発行元・宛先が空、または発行元が `https://` で始まり `/` で終わる形でない（入口が起動時に止まる）
@@ -151,6 +161,7 @@ export class Auth0ReviewerTokenVerifier implements ReviewerTokenVerifier {
     audience,
     fetchNow,
     accessPolicy,
+    m2mClients = [],
     fetcher,
   }: Auth0ReviewerTokenVerifierProps) {
     if (!ISSUER_PATTERN.test(issuer)) {
@@ -166,10 +177,15 @@ export class Auth0ReviewerTokenVerifier implements ReviewerTokenVerifier {
     this.#issuer = issuer;
     this.#fetchNow = fetchNow;
     this.#accessPolicy = accessPolicy;
+    this.#m2mClients = m2mClients;
   }
 
   async verify(credential: string): Promise<Reviewer> {
     const payload = await this.#verifySignature(credential);
+    // client のトークンは人の確かめ（メールアドレス）に回さず、許可した client かで決める
+    if (isM2mPayload(payload)) {
+      return readM2mReviewer(payload, this.#m2mClients, this.#fetchNow());
+    }
     const reviewer = readReviewerClaims(payload, this.#fetchNow());
     assertReviewerAllowed(payload, this.#accessPolicy);
     return reviewer;

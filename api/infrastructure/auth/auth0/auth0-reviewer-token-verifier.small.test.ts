@@ -20,6 +20,7 @@ import {
   type ReviewerAccessPolicy,
 } from "@/infrastructure/auth/reviewer-access-policy";
 import { REVIEWER_NAME_CLAIM } from "@/infrastructure/auth/reviewer-claims";
+import type { M2mClient } from "@/infrastructure/config/m2m-clients-setting";
 
 const ISSUER = "https://example-tenant.auth0.example.com/";
 const AUDIENCE = "https://review-canvas-api.example.com";
@@ -110,14 +111,34 @@ const jwksResponse =
   (): ArrayBuffer =>
     toArrayBuffer(JSON.stringify({ keys }));
 
-const buildVerifier = (fetcher: Fetcher) =>
+const buildVerifier = (
+  fetcher: Fetcher,
+  m2mClients?: ReadonlyArray<M2mClient>,
+) =>
   new Auth0ReviewerTokenVerifier({
     issuer: ISSUER,
     audience: AUDIENCE,
     fetchNow: buildFetchNowDummy(),
     accessPolicy: ACCESS_POLICY,
+    ...(m2mClients === undefined ? {} : { m2mClients }),
     fetcher,
   });
+
+const M2M_CLIENT_ID = "AbCdEf0123456789AbCdEf0123456789";
+
+/** Auth0 が client credentials で発行するアクセストークンの形（メールアドレスのクレームは無い） */
+const m2mPayload = (
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+  iss: ISSUER,
+  sub: `${M2M_CLIENT_ID}@clients`,
+  aud: AUDIENCE,
+  azp: M2M_CLIENT_ID,
+  gty: "client-credentials",
+  iat: nowSeconds - 60,
+  exp: nowSeconds - 60 + 900,
+  ...overrides,
+});
 
 /** 401（理由はログ用の context にだけ載る）であることを確かめる */
 const expectUnauthorized = async (
@@ -170,6 +191,91 @@ describe("Auth0ReviewerTokenVerifier", () => {
         verifier.verify(
           signToken({
             payload: validPayload({ [REVIEWER_EMAIL_VERIFIED_CLAIM]: false }),
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ReviewerNotAllowedError);
+    });
+  });
+
+  describe("verify（人の代わりに呼ぶ client。Machine to Machine）", () => {
+    const CLIENTS = [{ clientId: M2M_CLIENT_ID, name: "fixer" }];
+
+    test("[正常系]許可した client のトークンは、メールアドレスのクレームが無くても通し、表示名を「AI（表示名）」にする", async () => {
+      const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+      const verifier = buildVerifier(fetcher, CLIENTS);
+
+      await expect(
+        verifier.verify(signToken({ payload: m2mPayload() })),
+      ).resolves.toStrictEqual({
+        id: `${M2M_CLIENT_ID}@clients`,
+        name: "AI（fixer）",
+      });
+    });
+
+    test("[異常系]client を許可していない（既定）と、テナントで正しい client のトークンでも ReviewerNotAllowedError（403）", async () => {
+      const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+      const verifier = buildVerifier(fetcher);
+
+      await expect(
+        verifier.verify(signToken({ payload: m2mPayload() })),
+      ).rejects.toBeInstanceOf(ReviewerNotAllowedError);
+    });
+
+    test("[異常系]一覧に無い client は、許可したドメインの確かめ済みのメールアドレスを自分で載せても通さない（人の確かめに回さない）", async () => {
+      const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+      const verifier = buildVerifier(fetcher, [
+        { clientId: "other", name: "other" },
+      ]);
+
+      await expect(
+        verifier.verify(
+          signToken({
+            payload: m2mPayload({
+              [REVIEWER_EMAIL_CLAIM]: "yamada@example.co.jp",
+              [REVIEWER_EMAIL_VERIFIED_CLAIM]: true,
+            }),
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ReviewerNotAllowedError);
+    });
+
+    test("[異常系]許可した client でも、署名が違う・宛先が違うトークンは 401", async () => {
+      const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+      const verifier = buildVerifier(fetcher, CLIENTS);
+
+      await expectUnauthorized(
+        verifier.verify(
+          signToken({
+            payload: m2mPayload(),
+            privateKey: otherKey.privateKey,
+          }),
+        ),
+        /署名/,
+      );
+      await expectUnauthorized(
+        verifier.verify(
+          signToken({
+            payload: m2mPayload({ aud: "https://other.example.com" }),
+          }),
+        ),
+        /宛先/,
+      );
+    });
+
+    test("[正常系]client を許可しても、人のトークンはこれまでどおりメールアドレスで確かめる", async () => {
+      const { fetcher } = buildFetcherStub(jwksResponse(signingJwk));
+      const verifier = buildVerifier(fetcher, CLIENTS);
+
+      await expect(verifier.verify(signToken())).resolves.toStrictEqual({
+        id: "auth0|reviewer-1",
+        name: "山田",
+      });
+      await expect(
+        verifier.verify(
+          signToken({
+            payload: validPayload({
+              [REVIEWER_EMAIL_CLAIM]: "someone@example.com",
+            }),
           }),
         ),
       ).rejects.toBeInstanceOf(ReviewerNotAllowedError);

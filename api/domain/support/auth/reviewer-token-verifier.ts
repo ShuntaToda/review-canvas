@@ -27,7 +27,7 @@ export class TokenVerificationFailedError extends AuthenticationError {
 }
 
 /**
- * トークンは正しいが、使ってよい人（許可したメールのドメイン・メールアドレス）ではないエラー（403）
+ * トークンは正しいが、使ってよい人（許可したメールのドメイン・メールアドレス）・許可した client ではないエラー（403）
  */
 export class ReviewerNotAllowedError extends ForbiddenError {
   /** API契約(レスポンススキーマのenum)と共有するエラー名の正本 */

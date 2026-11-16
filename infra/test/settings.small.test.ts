@@ -36,7 +36,7 @@ describe("readSettings", () => {
         clientId: "client-id",
         audience: "https://review-canvas.example.com/api",
       },
-      access: { allowedEmailDomains: "*", allowedEmails: "" },
+      access: { allowedEmailDomains: "*", allowedEmails: "", m2mClients: "" },
       defaultBranch: "main",
       publisher: {
         oidcProvider: null,
@@ -60,12 +60,38 @@ describe("readSettings", () => {
     ).toStrictEqual({
       allowedEmailDomains: "example.co.jp,example.co.jp",
       allowedEmails: "guest@example.com",
+      m2mClients: "",
     });
     expect(
       read({ context: { allowedEmailDomains: "example.com" } }).access
         .allowedEmailDomains,
     ).toBe("example.com");
   });
+
+  test("人の代わりに呼んでよい client は、既定ではだれも通さず、指定したら <Client ID>:<表示名> のカンマ区切りで読む", () => {
+    expect(read({ env: AUTH0_ENV }).access.m2mClients).toBe("");
+    expect(
+      read({
+        env: {
+          ...AUTH0_ENV,
+          REVIEW_CANVAS_M2M_CLIENTS:
+            " AbCdEf0123456789AbCdEf0123456789:fixer , other:ci ",
+        },
+      }).access.m2mClients,
+    ).toBe("AbCdEf0123456789AbCdEf0123456789:fixer,other:ci");
+    expect(
+      read({ context: { m2mClients: "other:ci" } }).access.m2mClients,
+    ).toBe("other:ci");
+  });
+
+  test.each(["AbCdEf0123456789AbCdEf0123456789", "*:any", "a:b,a:c"])(
+    "人の代わりに呼んでよい client の形が誤っている（%s）と例外にする",
+    (m2mClients) => {
+      expect(() =>
+        read({ env: { ...AUTH0_ENV, REVIEW_CANVAS_M2M_CLIENTS: m2mClients } }),
+      ).toThrow("m2mClients");
+    },
+  );
 
   test("使ってよいドメインは * を単独でなら指定でき、ほかのドメインと混ぜたら例外にする", () => {
     expect(
@@ -134,6 +160,7 @@ describe("readSettings", () => {
     ).toStrictEqual({
       allowedEmailDomains: "",
       allowedEmails: "guest@example.com",
+      m2mClients: "",
     });
   });
 

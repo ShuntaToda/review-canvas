@@ -92,3 +92,42 @@ Post Login の Action（上）は**必ず置いてください**。API が読む
 - 足す: User Management → Users → **Create User**（Connection は `email`、メールアドレスだけを入れる）。本人には「ログインの画面でメールアドレスを入れると、コードがメールで届く」と伝える
 - 外す: 同じ画面でその人を **Block** するか削除する。発行済みのアクセストークンは期限（API の Token Expiration）まで使えるので、すぐに止めたいときは Token Expiration を短くしておく
 - ドメイン・メールアドレスで絞るときは、API の `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS`・`REVIEW_CANVAS_ALLOWED_EMAILS`（[deploy.md](deploy.md)）と、Post Login の Action のコメントにした部分を同じ一覧にする
+
+## AI が呼ぶ（M2M のトークン）
+
+AI（コーディングエージェント）・CI が、人の代わりに API を呼ぶ（未解決のコメントを読む・返信する・「AI 修正済み」の印を付ける。[api.md](api.md#ai-が直して返すスレッドの状態)）ときは、人のログインを使い回さず、Auth0 の **Machine to Machine（client credentials）** のトークンを使います。既定ではどの client も通しません。**テナントで許可し、さらに review-canvas の設定に挙げた client だけ**が通ります。
+
+1. **Machine to Machine Application を作る**（Applications → Create Application → Machine to Machine Applications）。名前は用途が分かるもの（例: `review-canvas-fixer`）。使う API に上の 1. の API を選ぶ（Permissions は要りません）
+   - これで Applications → APIs → 1. の API → Application Access で、その Application の **Client Access** が Authorized になります（外すとトークンを取れなくなります）
+   - Client ID と Client Secret を控える。**Client Secret は秘密**です（リポジトリ・設定ファイル・書き出しに置かない。CI のシークレットや手元の環境変数で渡す）
+2. **review-canvas に client を挙げる**: `REVIEW_CANVAS_M2M_CLIENTS`（`-c m2mClients=`）に `<Client ID>:<表示名>` をカンマ区切りで指定して出し直す（[deploy.md](deploy.md)）
+
+   ```bash
+   # いつもの値（REVIEW_CANVAS_AUTH0_* など）に足して出す
+   REVIEW_CANVAS_M2M_CLIENTS=<Client ID>:fixer pnpm run deploy --profile <プロファイル>
+   ```
+
+   - 表示名は文字・数字・空白・`.`・`_`・`-` の 30 文字まで。コメントの書いた人・印を付けた人には「AI（fixer）」と残ります
+   - 挙げていない client のトークンは 403（`ReviewerNotAllowedError`）です。`*` のような「どの client も通す」書き方はありません
+
+3. **トークンを取る**（client credentials）
+
+   ```bash
+   curl -sS --request POST "https://<テナントのドメイン>/oauth/token" \
+     --header "content-type: application/json" \
+     --data '{"client_id":"<Client ID>","client_secret":"<Client Secret>","audience":"<API の Identifier>","grant_type":"client_credentials"}'
+   ```
+
+   返ってきた `access_token` を `X-Authorization: Bearer <access_token>` で送ります
+
+API は client のトークンを次のように確かめます（`api/infrastructure/auth/m2m-clients.ts`）。
+
+- 署名・発行元・宛先・期限は人のトークンと同じ（RS256・JWKS・有効期限は 24 時間まで）
+- `gty` が `client-credentials` か、`sub` が `@clients` で終わるトークンは client のものとして扱い、人の確かめ（メールアドレス）には回しません。`azp`（Client ID）が設定の一覧にあり、`sub` が `<azp>@clients` のものだけを通します
+- 利用者 ID は `sub`（`<Client ID>@clients`）、表示名は設定の「AI（表示名）」です。トークンの中の名前・メールアドレスのクレームは読みません
+- client ができることは人と同じです（読む・書く・返信・解決／再開・印の付け外し。編集・削除は自分が書いたコメントだけ）。書いたコメント・付けた印には利用者 ID が残るので、あとからどの client が何をしたかを確かめられます
+
+**止めるとき**: 設定から外して出し直す（すぐに 403 になります）か、Auth0 で API の Client Access を外す・Client Secret を入れ替える（発行済みのトークンは期限まで有効なので、急ぐときは設定から外すほうが確かです）。
+
+- M2M のトークンの発行数は Auth0 のプランで上限があります。呼ぶたびに取り直さず、期限（`expires_in`）まで使い回してください
+- 手元（擬似ログイン）では client の確かめはありません

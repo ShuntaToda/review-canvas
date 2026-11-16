@@ -1,4 +1,8 @@
 import * as path from "path";
+import {
+  formatM2mClients,
+  parseM2mClients,
+} from "../../api/infrastructure/config/m2m-clients-setting";
 import { PACKAGE_ROOT } from "./dist-dirs";
 import { readProtectedAccountsFile } from "./protected-accounts";
 
@@ -35,7 +39,15 @@ export type ReviewCanvasSettings = {
    * 使ってよい人（API の ALLOWED_EMAIL_DOMAINS・ALLOWED_EMAILS）。確かめ済みのメールアドレスが、ドメインのどれかか、メールアドレスのどれかなら通す。
    * 小文字にそろえたカンマ区切りで持つ。ドメインの既定は *（どのドメインも通す）
    */
-  access: { allowedEmailDomains: string; allowedEmails: string };
+  access: {
+    allowedEmailDomains: string;
+    allowedEmails: string;
+    /**
+     * 人の代わりに API を呼んでよい client（AI・CI の Machine to Machine Application。API の AUTH0_M2M_CLIENTS）。
+     * `<Client ID>:<表示名>` のカンマ区切り。省略・空ならだれも通さない（既定）
+     */
+    m2mClients?: string;
+  };
   /** 画面を開いたときに選ぶブランチ（API の DEFAULT_BRANCH。置いていなければ、いちばん新しく置いたブランチ） */
   defaultBranch: string;
   /**
@@ -119,6 +131,10 @@ export const SETTING_KEYS = {
   allowedEmails: {
     context: "allowedEmails",
     env: "REVIEW_CANVAS_ALLOWED_EMAILS",
+  },
+  m2mClients: {
+    context: "m2mClients",
+    env: "REVIEW_CANVAS_M2M_CLIENTS",
   },
   defaultBranch: {
     context: "defaultBranch",
@@ -346,6 +362,11 @@ export const readSettings = ({
     );
   }
 
+  // 人の代わりに呼んでよい client。形の誤りは、出してから通らないと気づく前にここで止める（API と同じ関数で確かめる）
+  const m2mClients = formatM2mClients(
+    parseM2mClients(read("m2mClients"), "m2mClients"),
+  );
+
   return {
     stageName: DEPLOY_STAGE_NAME,
     stackName,
@@ -355,6 +376,7 @@ export const readSettings = ({
     access: {
       allowedEmailDomains: allowedEmailDomains.join(","),
       allowedEmails: allowedEmails.join(","),
+      m2mClients,
     },
     auth0: {
       domain,

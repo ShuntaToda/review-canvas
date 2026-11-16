@@ -191,6 +191,8 @@ describe("API の Lambda", () => {
           AUTH0_AUDIENCE: "https://review-canvas.example.com/api",
           ALLOWED_EMAIL_DOMAINS: "example.co.jp",
           ALLOWED_EMAILS: "guest@example.com",
+          // 指定しなければ、人の代わりに呼ぶ client はだれも通さない
+          AUTH0_M2M_CLIENTS: "",
         }),
       },
     });
@@ -342,6 +344,43 @@ describe("CloudFront", () => {
     expect(storybook.ResponseHeadersPolicyId).toBe(
       "60669652-455b-4ae9-85a4-c4c02393f86c",
     );
+  });
+});
+
+describe("人の代わりに呼んでよい client（Machine to Machine）", () => {
+  const synthWith = (m2mClients: string) => {
+    const app = new App({ context: { "aws:cdk:bundling-stacks": [] } });
+    return Template.fromStack(
+      new ReviewCanvasStack(app, "M2mReviewCanvas", {
+        settings: {
+          ...baseSettings,
+          stackName: "M2mReviewCanvas",
+          access: { ...baseSettings.access, m2mClients },
+        },
+        config,
+        distDirs,
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      }),
+    );
+  };
+
+  test("指定した client を、API の環境変数 AUTH0_M2M_CLIENTS へ渡す", () => {
+    synthWith("AbCdEf0123456789AbCdEf0123456789:fixer").hasResourceProperties(
+      "AWS::Lambda::Function",
+      {
+        Environment: {
+          Variables: Match.objectLike({
+            AUTH0_M2M_CLIENTS: "AbCdEf0123456789AbCdEf0123456789:fixer",
+          }),
+        },
+      },
+    );
+  });
+
+  test("形が誤っている（表示名が無い・どの client も通す書き方）と、組み立てるときに例外にする", () => {
+    for (const m2mClients of ["AbCdEf0123456789AbCdEf0123456789", "*:any"]) {
+      expect(() => synthWith(m2mClients)).toThrow("access.m2mClients");
+    }
   });
 });
 

@@ -26,6 +26,10 @@ import {
   type ReviewerAccessPolicy,
 } from "@/infrastructure/auth/reviewer-access-policy";
 import {
+  type M2mClient,
+  parseM2mClients,
+} from "@/infrastructure/config/m2m-clients-setting";
+import {
   parseSourcesEnv,
   type ReviewCanvasConfig,
   toSourcesSetting,
@@ -86,6 +90,7 @@ export const buildReviewerTokenVerifier = ({
     issuer: string;
     audience: string;
     accessPolicy: ReviewerAccessPolicy;
+    m2mClients: ReadonlyArray<M2mClient>;
   };
 }): ReviewerTokenVerifier => {
   if (authMode === "dev") {
@@ -287,6 +292,8 @@ export const registerContainer = ({
           audience: unwrapEnv("AUTH0_AUDIENCE"),
           // 使ってよい人（確かめ済みのメールアドレスのドメイン・メールアドレス。カンマ区切り）。擬似ログインは確かめない
           accessPolicy: readReviewerAccessPolicyFromEnv(process.env),
+          // 人の代わりに呼んでよい client（AI・CI の Machine to Machine。`<Client ID>:<表示名>` のカンマ区切り）。未設定ならだれも通さない
+          m2mClients: parseM2mClients(process.env["AUTH0_M2M_CLIENTS"]),
         }),
       }),
     )

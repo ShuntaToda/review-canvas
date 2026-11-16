@@ -86,15 +86,15 @@ pnpm dev                    # → http://localhost:4100
 
 ## ドキュメント
 
-| 文書                                                             | 内容                                                                                        |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [docs/host-setup.md](docs/host-setup.md)                         | 使う側のリポジトリでの準備（設定ファイルの項目・CLI・呼ぶワークフローの例・CDK に組み込む） |
-| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順）                                  |
-| [docs/auth0.md](docs/auth0.md)                                   | Auth0 の設定（メールのワンタイムコード・招待制・使う人を足す・Post Login の Action）        |
-| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                 |
-| [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                  |
-| [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                      |
-| [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                              |
-| [docs/development.md](docs/development.md)                       | 開発・テスト・リリースと互換性                                                              |
+| 文書                                                             | 内容                                                                                                |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [docs/host-setup.md](docs/host-setup.md)                         | 使う側のリポジトリでの準備（設定ファイルの項目・CLI・呼ぶワークフローの例・CDK に組み込む）         |
+| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順）                                          |
+| [docs/auth0.md](docs/auth0.md)                                   | Auth0 の設定（メールのワンタイムコード・招待制・使う人を足す・Post Login の Action・AI が呼ぶ M2M） |
+| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                         |
+| [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                          |
+| [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                              |
+| [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                                      |
+| [docs/development.md](docs/development.md)                       | 開発・テスト・リリースと互換性                                                                      |
 
 npm には出していません。使う側は、このリポジトリのコミットを指して使います（[docs/development.md](docs/development.md#リリースと互換性)）。

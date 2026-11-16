@@ -112,6 +112,24 @@ describe("registerContainer", () => {
       ).toBeInstanceOf(Auth0ReviewerTokenVerifier);
     });
 
+    test("[異常系]auth0 で AUTH0_M2M_CLIENTS の形が誤っていると例外（誤った設定のまま起動しない）", () => {
+      vi.stubEnv("STAGE_NAME", "DEV");
+      vi.stubEnv("AUTH_MODE", "auth0");
+      vi.stubEnv("AUTH0_ISSUER", "https://tenant.example.com/");
+      vi.stubEnv("AUTH0_AUDIENCE", "https://review-canvas.example.com/api");
+      vi.stubEnv("ALLOWED_EMAIL_DOMAINS", "example.co.jp");
+      vi.stubEnv("AUTH0_M2M_CLIENTS", "AbCdEf0123456789AbCdEf0123456789");
+
+      expect(() =>
+        registerContainer().get(serviceId.REVIEWER_TOKEN_VERIFIER),
+      ).toThrow(/AUTH0_M2M_CLIENTS/);
+
+      vi.stubEnv("AUTH0_M2M_CLIENTS", "AbCdEf0123456789AbCdEf0123456789:fixer");
+      expect(
+        registerContainer().get(serviceId.REVIEWER_TOKEN_VERIFIER),
+      ).toBeInstanceOf(Auth0ReviewerTokenVerifier);
+    });
+
     test("[異常系]auth0 で ALLOWED_EMAIL_DOMAINS・ALLOWED_EMAILS がどちらも無いなら例外（だれでも通さない）", () => {
       vi.stubEnv("STAGE_NAME", "DEV");
       vi.stubEnv("AUTH_MODE", "auth0");
