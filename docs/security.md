@@ -39,7 +39,8 @@ Storybook は画面と別のオリジンで配るので、画面は iframe の�
 - 画面 → 橋渡し: `hello`（つなぐ）・`mode`（操作モードか）・`blur`（中のフォーカスを外す）・`capture`（押した位置の要素の手がかりを集める）・`locate`（ピンの要素を探す）
 - 橋渡し → 画面: `ready`・`render`（描画の段階・play 関数の有無）・`size`（高さ）・`focusin`・`blur`・`keydown`/`keyup`（利用者のキーだけ。play 関数の打つキーは伝えない）・`captured`・`located`
 - どちらも、相手のオリジン（画面は `app-config.json` の `storybookOrigin`、橋渡しは差し込むときに `data-canvas-origin` で渡した画面のオリジン）と相手の window（iframe の window・親の window）を確かめ、知らない形の知らせは捨てます。橋渡しは、最初に `hello` をくれた画面のオリジンとだけやり取りします
-- ストーリーの iframe には `sandbox`（`allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals`）を付け、`allow-top-navigation` は渡しません。ストーリーのコードが `top.location` で親のタブ（キャンバス）を別のページへ移せないようにするためです（`allow-same-origin` は Storybook の配信のオリジンのまま動かすため）
+- ストーリーの iframe には `sandbox`（`allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads`）を付け、`allow-top-navigation` は渡しません。ストーリーのコードが `top.location` で親のタブ（キャンバス）を別のページへ移せないようにするためです（`allow-same-origin` は Storybook の配信のオリジンのまま動かすため。`allow-downloads` はストーリーのダウンロードの操作を試せるようにするため）
+  - ブラウザ（Chrome など）は `allow-scripts` と `allow-same-origin` を一緒に付けると「sandbox を抜けられる」と警告します。これは iframe の中身が親と同じオリジンのときの話で、Storybook は画面と別のオリジンで配るため、中のコードは親の DOM に触れず、sandbox の属性も外せません
 - 集めた手がかりは、画面・サーバーの両方で形と 8KB の上限を確かめます。入力欄の値は持ちません
 - 橋渡しの無い Storybook（橋渡しを差し込まずに置いたもの）は、つながらないまま 4 秒で読み込みの順番を譲り、画面の名前の横に「置き直しが必要」を出します（ピンは置いたときの位置に出す）。同じ置き場の 2 枚目からは、返事を待たずに順番を譲ります
 - 高さは橋渡しが測って知らせます。幅を切り替えたとき・iframe を付け直したときは、画面から測り直しを頼みます（見えている範囲の外の iframe には大きさの変化が届かないため）。画面の高さ（`100vh` など）に合わせて伸びるストーリーは、知らせた高さで iframe が伸びると中身もまた伸びるので、画面の高さに引きずられた伸びは知らせません（`bridge/measure.ts`）。知らせずにいるあいだは、iframe の中の縦のスクロールバーを隠します

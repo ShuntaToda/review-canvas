@@ -30,6 +30,7 @@ describe("StoryIframe", () => {
         "allow-forms",
         "allow-popups",
         "allow-modals",
+        "allow-downloads",
       ]),
     );
     expect(

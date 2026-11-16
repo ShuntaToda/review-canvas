@@ -793,7 +793,7 @@ export const StoryIframe = ({
       }
       // ストーリーのコードに、親のタブ（キャンバス）を別のページへ移させない（allow-top-navigation を付けない）。
       // allow-same-origin は Storybook の配信のオリジンのまま動かすため（サービスワーカー・保存領域・橋渡しの postMessage の宛先）
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
       // 操作モード以外では画面の中へフォーカスを入れない（ストーリーの autofocus などでショートカットが効かなくなるため）
       inert={!interactive || hidden}
       style={{
