@@ -44,6 +44,8 @@ export default tseslint.config(
   {
     ignores: [
       ...commonIgnores,
+      // CLI（bin/）は使う側が動かす入口なので、JavaScript でも検査する
+      "!bin/*.mjs",
       "api/tsc-cache/**",
       "infra/**",
       // サンプルの Storybook（examples/）は使う側のアプリの見本。型は自分の tsconfig で確かめる（pnpm --dir examples/sample-storybook run validate）
@@ -314,6 +316,16 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  // CLI（bin/）は Node でそのまま動かす JavaScript で、型情報を持たない。型を使う規則は外し、Node のグローバルを許す
+  {
+    files: ["bin/*.mjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      sourceType: "module",
+      globals: { process: "readonly", console: "readonly", URL: "readonly" },
     },
   },
 );

@@ -4,7 +4,7 @@ pre-commit:
   parallel: true
   jobs:
     - name: prettier
-      glob: "*.{ts,tsx,css,json,jsonc,yml,yaml,md}"
+      glob: "*.{ts,tsx,css,json,jsonc,yml,yaml,md,mjs}"
       exclude:
         - "infra/**"
       run: pnpm exec prettier --cache --write --ignore-unknown {staged_files}
@@ -21,7 +21,9 @@ pre-commit:
       skip: [merge, rebase]
 
     - name: eslint
-      glob: "*.{ts,tsx}"
+      glob:
+        - "*.{ts,tsx}"
+        - "bin/*.mjs"
       exclude:
         - "infra/**"
         - "examples/**"
@@ -66,6 +68,6 @@ pre-push:
       fail_text: "openapi.json が最新でない可能性があります: pnpm run openapi:generate で作り直してください"
 
     - name: cspell
-      glob: "*.{ts,tsx,md}"
+      glob: "*.{ts,tsx,md,yml,yaml,json,mjs}"
       run: pnpm exec cspell --cache --gitignore --no-must-find-files {push_files}
       fail_text: "未知の単語であれば cspell.json の words に足してください"

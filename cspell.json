@@ -9,26 +9,31 @@
     "**/storybook-static",
     "dist*",
     "infra/cdk.out",
+    "infra/cdk.json",
     "examples/sample-storybook/public/mockServiceWorker.js"
   ],
   "words": [
     "cfsb",
     "codegen",
     "contenteditable",
+    "esbuild",
     "fieldfocusring",
     "focusin",
     "inputmode",
     "keyup",
     "labelledby",
+    "lefthook",
     "maxlength",
     "noninteractive",
+    "orderform",
     "Passwordless",
     "pipefail",
     "spinbutton",
     "SSSZ",
     "unstub",
     "valuenow",
-    "valuetext"
+    "valuetext",
+    "vitest"
   ],
   "ignoreRegExpList": ["[Ａ-Ｚａ-ｚ０-９]+", "ShuntaToda/review-canvas"]
 }

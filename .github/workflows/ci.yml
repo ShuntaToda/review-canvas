@@ -50,6 +50,10 @@ jobs:
           pnpm run infra:validate
           pnpm --dir examples/sample-storybook run validate
 
+      # CLI が依存を読み込めて動くことを確かめる（使い方を出すだけで、AWS にはつながない）
+      - name: CLI
+        run: node bin/review-canvas.mjs --help
+
   # ワークフローの書き方と run のシェルを確かめる（shellcheck はランナーに入っているものを使う）
   actionlint:
     runs-on: ubuntu-latest
