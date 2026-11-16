@@ -94,7 +94,7 @@ export const CommentSidebar = ({
         onClick={onExport}
       >
         <FileDown aria-hidden className="size-3.5" />
-        Markdown
+        書き出し
       </button>
     </div>
     <div className="flex flex-col gap-2 border-b border-line px-3 py-2">

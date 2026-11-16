@@ -1,18 +1,18 @@
 import { Copy, Download } from "lucide-react";
 import { useState } from "react";
-import type { MarkdownFormat } from "../model/markdown";
+import type { ExportFormat } from "../model/export-json";
 import type { StatusFilter } from "../model/threads";
 import { Modal } from "./Modal";
 
 type Scope = {
   status: StatusFilter;
   allPages: boolean;
-  /** issue=Issue・PR に貼るチェックリスト、ai=AI に渡す詳しい形 */
-  format: MarkdownFormat;
+  /** issue=Issue・PR に貼るチェックリスト、ai=AI に渡す詳しい形、json=道具・AI に機械で読ませる形 */
+  format: ExportFormat;
 };
 
 /**
- * コメントを Markdown で書き出す（GitHub の Issue にそのまま貼れる形と、AI に渡して直してもらう詳しい形）
+ * コメントを書き出す（GitHub の Issue にそのまま貼れる Markdown・AI に渡して直してもらう詳しい Markdown・機械で読む JSON）
  */
 export const MarkdownDialog = ({
   initialScope,
@@ -24,13 +24,14 @@ export const MarkdownDialog = ({
   initialScope: Scope;
   buildText: (scope: Scope) => string;
   fileName: (scope: Scope) => string;
-  onCopied: () => void;
+  onCopied: (scope: Scope) => void;
   onClose: () => void;
 }) => {
   const [scope, setScope] = useState(initialScope);
   const text = buildText(scope);
+  const json = scope.format === "json";
   return (
-    <Modal title="Markdown で書き出す" onClose={onClose} width={720}>
+    <Modal title="コメントを書き出す" onClose={onClose} width={720}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <label className="flex items-center gap-2">
@@ -41,12 +42,13 @@ export const MarkdownDialog = ({
               onChange={(event) =>
                 setScope({
                   ...scope,
-                  format: event.target.value as MarkdownFormat,
+                  format: event.target.value as ExportFormat,
                 })
               }
             >
               <option value="issue">Issue 向け（チェックリスト）</option>
               <option value="ai">AI 向け（要素の詳しい手がかり付き）</option>
+              <option value="json">JSON（道具・AI に機械で読ませる）</option>
             </select>
           </label>
           <label className="flex items-center gap-2">
@@ -79,7 +81,7 @@ export const MarkdownDialog = ({
           </label>
         </div>
         <textarea
-          aria-label="書き出した Markdown"
+          aria-label={json ? "書き出した JSON" : "書き出した Markdown"}
           readOnly
           value={text}
           rows={18}
@@ -91,7 +93,9 @@ export const MarkdownDialog = ({
             className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm hover:bg-panel-sub"
             onClick={() => {
               const url = URL.createObjectURL(
-                new Blob([text], { type: "text/markdown" }),
+                new Blob([text], {
+                  type: json ? "application/json" : "text/markdown",
+                }),
               );
               const link = document.createElement("a");
               link.href = url;
@@ -101,13 +105,15 @@ export const MarkdownDialog = ({
             }}
           >
             <Download aria-hidden className="size-4" />
-            .md を保存
+            {json ? ".json を保存" : ".md を保存"}
           </button>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-bold text-white hover:bg-accent-strong"
             onClick={() => {
-              void navigator.clipboard.writeText(text).then(onCopied);
+              void navigator.clipboard
+                .writeText(text)
+                .then(() => onCopied(scope));
             }}
           >
             <Copy aria-hidden className="size-4" />

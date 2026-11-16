@@ -1,11 +1,12 @@
 # API と AI 向けの書き出し
 
-## 書き出し（Markdown）
+## 書き出し（Markdown・JSON）
 
-コメントは Markdown でコピー・`.md` で保存できます（画面の「書き出し」。`src/features/review/model/markdown.ts`）。対象は「すべてのページ」か、いま見ているページです。ページの名前は設定ファイルの `label` を使います。
+コメントは Markdown・JSON でコピー・保存できます（画面の「書き出し」。`src/features/review/model/markdown.ts`・`export-json.ts`）。対象は状態（未解決・AI 修正済み（確認待ち）・解決済み・すべて）と、「すべてのページ」か、いま見ているページです。ページの名前は設定ファイルの `label` を使います。
 
 - **Issue 向け**: GitHub のチェックリスト。スレッドごとに、キャンバス・Storybook へのリンクと、要素の要約（見出し・区画・ロールと名前）を付けます
 - **AI 向け**: ストーリーのファイル・URL と、要素の手がかりのすべて（HTML の抜き出し・コンポーネント名・セレクタ・祖先・見た目など。下の「要素の手がかり」）を書きます。AI（コーディングエージェント）に渡せば、どのファイルのどこを直すかを特定できる形です
+- **JSON**: 道具・AI に機械で読ませる形（`.json`）。`{ version, branch, commit, total, items }` で、`items` の 1 件は API の `GET /api/threads` のスレッドと同じ項目（`number`・`status`・`story`・`root`・`replies`）に、ページの名前（`story.label`）と開くための URL（`links.canvas`・`links.storyIframe`・`links.storybook`）を足したものです。要素の手がかりは `root.anchor` にそのまま入ります。本文は打ち消さずにそのまま持つので、読む側でデータとして扱ってください
 - 名前・画面名の改行と Markdown の記号は打ち消し、本文の HTML のタグは文字のまま出します（読む人・AI に、見えない文字やタグを紛れ込ませない）
 - 名前・画面名の `@` は打ち消しますが、本文の `@` は書いた人が呼びかけるつもりで書いたものとして、そのまま出します（貼った先で呼びかけになります）
 

@@ -46,6 +46,7 @@ import {
   zoomAt,
 } from "../model/camera";
 import { type CameraState, resolveCamera } from "../model/camera-state";
+import { buildExportJson, exportFileName } from "../model/export-json";
 import {
   boundsOfRows,
   DEFAULT_FRAMES_PER_ROW,
@@ -1045,8 +1046,8 @@ export const ReviewWorkspace = ({
       {dialog === "markdown" && (
         <MarkdownDialog
           initialScope={{ status, allPages: false, format: "issue" }}
-          buildText={(scope) =>
-            buildMarkdown({
+          buildText={(scope) => {
+            const input = {
               threads: filterThreads(threads, {
                 status: scope.status,
                 ...(scope.allPages ? {} : { source: page }),
@@ -1057,15 +1058,21 @@ export const ReviewWorkspace = ({
               branch,
               commit,
               origin: window.location.origin,
-              format: scope.format,
               // 置いていないブランチには Storybook のリンクを付けない
               storybookBase: published === null ? null : storybookBase,
-            })
+            };
+            return scope.format === "json"
+              ? buildExportJson(input)
+              : buildMarkdown({ ...input, format: scope.format });
+          }}
+          fileName={(scope) => exportFileName(branch, scope.format)}
+          onCopied={(scope) =>
+            showToast(
+              scope.format === "json"
+                ? "JSON をコピーしました"
+                : "Markdown をコピーしました",
+            )
           }
-          fileName={(scope) =>
-            `review-${branch.replaceAll("/", "-")}${scope.format === "ai" ? "-ai" : ""}.md`
-          }
-          onCopied={() => showToast("Markdown をコピーしました")}
           onClose={() => setDialog(null)}
         />
       )}
