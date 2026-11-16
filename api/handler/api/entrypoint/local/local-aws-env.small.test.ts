@@ -11,7 +11,7 @@ const FILE_VALUES = {
 describe("applyLocalAwsEnv", () => {
   test("[正常系]シェルに AWS の資格情報があっても、.env の DynamoDB Local への接続の値で上書きし、組にならない値を外す", () => {
     const env: NodeJS.ProcessEnv = {
-      AWS_ACCESS_KEY_ID: "ASIAEXAMPLE",
+      AWS_ACCESS_KEY_ID: "ShellAccessKey",
       AWS_SECRET_ACCESS_KEY: "secret/with+symbols",
       AWS_SESSION_TOKEN: "token",
       AWS_PROFILE: "work",
