@@ -65,7 +65,7 @@ pnpm --dir examples/sample-storybook run validate
 - テストの名前は `*.small.test.ts`（外につながない）・`*.medium.test.ts`（DynamoDB Local を使う）です
 - CDK の組み立て（Lambda のバンドルを含む）は、架空の値で確かめられます: `REVIEW_CANVAS_AUTH0_DOMAIN=tenant.example.com REVIEW_CANVAS_AUTH0_CLIENT_ID=dummy REVIEW_CANVAS_AUTH0_AUDIENCE=https://review-canvas.example.com/api pnpm run synth --quiet`
 - 使う側の CDK アプリに組み込んだ形は、CI の「Synth embedded」が `infra/test/embedded-app.ts` を infra の外から動かして確かめます
-- ワークフロー（`.github/workflows/`）は CI の actionlint（shellcheck つき）で確かめます。手元では `actionlint` をそのまま動かします
+- ワークフロー（`.github/workflows/`）は CI の actionlint で確かめます。手元では `actionlint` をそのまま動かします（`shellcheck` が PATH に無いと run のシェルを確かめずに通るので、先に入れておく）
 - コミットの前後に lefthook が prettier・eslint（pre-commit）、tsc・openapi・cspell（pre-push）を動かします
 
 ## リリースと互換性

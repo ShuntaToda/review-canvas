@@ -50,7 +50,7 @@ jobs:
           pnpm run infra:validate
           pnpm --dir examples/sample-storybook run validate
 
-      # CLI が依存を読み込めて動くことを確かめる（使い方を出すだけで、AWS にはつながない）
+      # CLI の入口が Node で読み込めて、使い方を出せることを確かめる（コマンドは動かさず、AWS にもつながない）
       - name: CLI
         run: node bin/review-canvas.mjs --help
 
@@ -75,8 +75,14 @@ jobs:
           echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
 
+      # shellcheck が無いと actionlint は run のシェルを確かめずに通るため、先に有無を確かめる
       - name: Actionlint
-        run: '"$RUNNER_TEMP/actionlint" -color'
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            echo "::error::shellcheck がありません（actionlint が run のシェルを確かめられない）"
+            exit 1
+          fi
+          "$RUNNER_TEMP/actionlint" -color
 
   build:
     runs-on: ubuntu-latest
@@ -129,6 +135,8 @@ jobs:
           REVIEW_CANVAS_AUTH0_AUDIENCE: https://review-canvas.example.com/api
           REVIEW_CANVAS_GITHUB_OIDC_PROVIDER: create
           REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: repo:example/app
+          # 手元の esbuild でバンドルできないときに Docker へ逃げず、その場で落とす
+          CDK_DOCKER: "false"
         run: pnpm run synth --quiet
 
       # 使う側の CDK アプリに ReviewCanvas を組み込んだ形も組み立てる（infra の外から、pnpm を介さずに動かす）
@@ -139,6 +147,8 @@ jobs:
           REVIEW_CANVAS_AUTH0_AUDIENCE: https://review-canvas.example.com/api
           REVIEW_CANVAS_GITHUB_OIDC_PROVIDER: create
           REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: repo:example/app
+          # 手元の esbuild でバンドルできないときに Docker へ逃げず、その場で落とす
+          CDK_DOCKER: "false"
         working-directory: ${{ runner.temp }}
         run: |
           node -r "$GITHUB_WORKSPACE/infra/node_modules/esbuild-register" "$GITHUB_WORKSPACE/infra/test/embedded-app.ts" embedded.out
