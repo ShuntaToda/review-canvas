@@ -766,7 +766,7 @@ type StoryIframeProps = {
  * ページの切り替えなどで一度に外すときのために、外す前に走る useLayoutEffect の後片付けで、親の側のフォーカスを iframe から外す
  * （中の要素のフォーカスは、外されるときに橋渡しが pagehide で外す）
  */
-const StoryIframe = ({
+export const StoryIframe = ({
   iframeRef,
   hidden,
   title,
@@ -791,6 +791,9 @@ const StoryIframe = ({
       className={
         hidden ? "invisible absolute inset-0 border-0" : "block border-0"
       }
+      // ストーリーのコードに、親のタブ（キャンバス）を別のページへ移させない（allow-top-navigation を付けない）。
+      // allow-same-origin は Storybook の配信のオリジンのまま動かすため（サービスワーカー・保存領域・橋渡しの postMessage の宛先）
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
       // 操作モード以外では画面の中へフォーカスを入れない（ストーリーの autofocus などでショートカットが効かなくなるため）
       inert={!interactive || hidden}
       style={{
