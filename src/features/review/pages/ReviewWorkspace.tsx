@@ -22,7 +22,12 @@ import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
-import { reviewApi, useBranches, useComments } from "../hooks/useReviewData";
+import {
+  commentsErrorMessage,
+  reviewApi,
+  useBranches,
+  useComments,
+} from "../hooks/useReviewData";
 import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import {
@@ -75,7 +80,6 @@ import {
   type Thread,
 } from "../model/threads";
 import { buildSearch, type UrlState } from "../model/url-state";
-import { messages } from "@/constants/messages";
 import type { AuthUser } from "@/support/auth";
 
 type Draft = {
@@ -1013,9 +1017,7 @@ export const ReviewWorkspace = ({
             errorMessage={
               commentsQuery.error === undefined
                 ? undefined
-                : isUnauthorized(commentsQuery.error)
-                  ? messages.unauthorized
-                  : "コメントを読めません。10 秒ごとに読み直します（手元では API と DynamoDB Local が動いているか確かめてください）"
+                : commentsErrorMessage(commentsQuery.error)
             }
             onSelect={focusThread}
             onExport={() => setDialog("markdown")}

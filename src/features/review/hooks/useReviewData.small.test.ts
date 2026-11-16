@@ -1,6 +1,7 @@
 import { ReviewApiError } from "../api/review-api";
 import {
   COMMENTS_REFRESH_INTERVAL,
+  commentsErrorMessage,
   retryCommentsOnError,
 } from "./useReviewData";
 
@@ -63,5 +64,30 @@ describe("retryCommentsOnError", () => {
     );
 
     expect(schedule).toHaveBeenCalledOnce();
+  });
+});
+
+describe("commentsErrorMessage", () => {
+  test("[正常系]読み直さない失敗（400）では「読み直します」と出さない", () => {
+    const message = commentsErrorMessage(errorOf(400));
+
+    expect(message).not.toContain("読み直します");
+    expect(message).toContain("ブランチ");
+  });
+
+  test("[正常系]読み直す失敗（500・つながらない）では、読み直すことを伝える", () => {
+    expect(commentsErrorMessage(errorOf(500))).toContain(
+      "10 秒ごとに読み直します",
+    );
+    expect(commentsErrorMessage(errorOf(0))).toContain(
+      "10 秒ごとに読み直します",
+    );
+  });
+
+  test("[正常系]ログインし直しが要る失敗（401）・使ってよい人ではない失敗は、その案内を出す", () => {
+    expect(commentsErrorMessage(errorOf(401))).toContain("ログインし直して");
+    expect(
+      commentsErrorMessage(errorOf(403, "ReviewerNotAllowedError")),
+    ).toContain("このアカウントでは使えません");
   });
 });

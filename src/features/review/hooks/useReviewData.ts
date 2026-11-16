@@ -13,6 +13,7 @@ import {
   type Story,
   storybookIndexPath,
 } from "../model/storybook";
+import { messages } from "@/constants/messages";
 import { apiClient } from "@/support/api/api-client";
 
 export const reviewApi = buildReviewApi(apiClient);
@@ -98,6 +99,16 @@ export const retryCommentsOnError = (
   if (isUnauthorized(error) || isReviewerNotAllowed(error) || isInvalid(error))
     return;
   schedule(revalidate, COMMENTS_REFRESH_INTERVAL);
+};
+
+/**
+ * コメントの読み込みに失敗したときに一覧へ出す文言。読み直さない失敗（retryCommentsOnError）では「読み直します」と言わない
+ */
+export const commentsErrorMessage = (error: unknown): string => {
+  if (isUnauthorized(error)) return messages.unauthorized;
+  if (isReviewerNotAllowed(error)) return messages.notAllowed;
+  if (isInvalid(error)) return messages.commentsInvalid;
+  return messages.commentsRetrying;
 };
 
 /**
