@@ -1,8 +1,8 @@
 import type { UseCase } from "./interfaces";
-import type { ThreadView } from "./list-threads-use-case";
+import { loadThreads, type ThreadView } from "./thread-view";
 import { CommentNotFoundError } from "@/domain/model/comment/comment-errors";
 import type { CommentRepository } from "@/domain/model/comment/comment-repository";
-import { latestReplies, loadThreads } from "@/domain/model/comment/thread";
+import { latestReplies } from "@/domain/model/comment/thread";
 import type { Logger } from "@/domain/support/logger";
 import {
   publishedCommitOf,

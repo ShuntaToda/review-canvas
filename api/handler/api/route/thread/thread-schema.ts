@@ -11,8 +11,8 @@ import { THREAD_STATUS_FILTERS } from "@/domain/model/comment/thread";
 import {
   THREADS_DEFAULT_LIMIT,
   THREADS_MAX_LIMIT,
-  type ThreadView,
 } from "@/use-case/list-threads-use-case";
+import type { ThreadView } from "@/use-case/thread-view";
 
 /**
  * スレッド一覧のクエリパラメータ

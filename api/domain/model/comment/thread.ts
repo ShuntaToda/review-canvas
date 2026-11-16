@@ -1,5 +1,4 @@
 import type { Comment, CommentStatus } from "./comment";
-import type { CommentRepository } from "./comment-repository";
 
 /**
  * ピン1つ分のスレッド（最初のコメントと返信）。AI・外部の道具が指摘を1件ずつ扱うための読み取り用の形
@@ -63,28 +62,4 @@ export const latestReplies = (
     replies: thread.replies.slice(omittedReplyCount),
     omittedReplyCount,
   };
-};
-
-/**
- * ブランチのコメントを全ページ読み、スレッドにまとめる（1ブランチの件数には上限 COMMENTS_PER_BRANCH_LIMIT がある）
- */
-export const loadThreads = async ({
-  commentRepository,
-  branch,
-}: {
-  commentRepository: CommentRepository;
-  branch: string;
-}): Promise<Thread[]> => {
-  const comments: Comment[] = [];
-  let cursor: string | null = null;
-  do {
-    const page = await commentRepository.findPage({
-      branch,
-      since: null,
-      cursor,
-    });
-    comments.push(...page.comments);
-    cursor = page.nextCursor;
-  } while (cursor !== null);
-  return buildThreads(comments);
 };

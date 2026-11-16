@@ -1,9 +1,8 @@
 import type { UseCase } from "./interfaces";
-import type { Comment } from "@/domain/model/comment/comment";
+import { loadThreads, type ThreadView } from "./thread-view";
 import type { CommentRepository } from "@/domain/model/comment/comment-repository";
 import {
   latestReplies,
-  loadThreads,
   matchesThreadStatus,
   type ThreadStatusFilter,
 } from "@/domain/model/comment/thread";
@@ -24,15 +23,6 @@ export const THREADS_MAX_LIMIT = 25;
 
 /** 一覧でスレッドごとに載せる返信の件数（新しいほうから。全部は1件の取得で読む） */
 export const THREAD_LIST_REPLIES_MAX = 20;
-
-/** 一覧・1件の取得で返すスレッド（返信は新しいほうから上限まで） */
-export type ThreadView = {
-  root: Comment;
-  replies: Comment[];
-  /** 載せなかった（古いほうの）返信の件数 */
-  omittedReplyCount: number;
-  number: number;
-};
 
 export type ListThreadsUseCaseInput = {
   branch: string;
