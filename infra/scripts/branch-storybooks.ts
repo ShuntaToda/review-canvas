@@ -28,10 +28,10 @@ import { decodeBranchKey, encodeBranchKey } from "./branch-key";
  * 古いブランチを置くときも、橋渡しの差し込みはこのスクリプトの版で行う
  *
  * 使い方:
- *   pnpm -F review-canvas-infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--repo-root <置くブランチの根>]
- *   pnpm -F review-canvas-infra run unpublish-branch <ブランチ>
- *   pnpm -F review-canvas-infra run branch-storybooks is-published <ブランチ>   … true / false を出す
- *   pnpm -F review-canvas-infra run branch-storybooks list                        … 置いてあるブランチを JSON の配列で出す
+ *   pnpm --dir infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--repo-root <置くブランチの根>]
+ *   pnpm --dir infra run unpublish-branch <ブランチ>
+ *   pnpm --dir infra run branch-storybooks is-published <ブランチ>   … true / false を出す
+ *   pnpm --dir infra run branch-storybooks list                        … 置いてあるブランチを JSON の配列で出す
  * 共通: --bucket・--distribution-id（Storybook の配信）・--canvas-origin（橋渡しがつないでよいキャンバスのオリジン。カンマ区切り）・
  *   --default-branch（既定のブランチ。サービスワーカーはこのブランチを置くときだけ書く）。
  *   無ければ環境変数 REVIEW_CANVAS_BUCKET・REVIEW_CANVAS_STORYBOOK_DISTRIBUTION_ID・REVIEW_CANVAS_CANVAS_ORIGIN・REVIEW_CANVAS_DEFAULT_BRANCH、

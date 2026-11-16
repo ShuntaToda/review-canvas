@@ -46,7 +46,7 @@ export default tseslint.config(
       ...commonIgnores,
       "api/tsc-cache/**",
       "infra/**",
-      // サンプルの Storybook（examples/）は使う側のアプリの見本。型は自分の tsconfig で確かめる（pnpm -F sample-storybook run validate）
+      // サンプルの Storybook（examples/）は使う側のアプリの見本。型は自分の tsconfig で確かめる（pnpm --dir examples/sample-storybook run validate）
       "examples/**",
       // 橋渡しをまとめる設定（default export が要る。型検査は tsconfig.node.json）
       "vite.bridge.config.ts",

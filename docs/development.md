@@ -57,7 +57,7 @@ pnpm run test              # API と画面の small・medium テスト（medium 
 pnpm run openapi:check     # openapi.json が API のコードと合っているか
 pnpm run infra:validate    # infra の tsc・prettier・eslint
 pnpm run infra:test        # infra のテスト（スタックの形・置くスクリプト・配信の関数）
-pnpm -F sample-storybook run validate
+pnpm --dir examples/sample-storybook run validate
 ```
 
 - API を変えたら `pnpm run openapi:generate` で `openapi.json` を作り直します（画面の型 `src/generated/` は `codegen` で作る。どちらも手で直さない）

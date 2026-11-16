@@ -4,7 +4,7 @@
     {
       "id": "shop",
       "label": "サンプルショップ",
-      "build": "pnpm --fail-if-no-match -F sample-storybook run build-storybook --test",
+      "build": "pnpm --dir examples/sample-storybook run build-storybook --test",
       "outDir": "examples/sample-storybook/storybook-static",
       "widths": [375, 768, 1280],
       "defaultWidth": 375,

@@ -6,7 +6,7 @@
 ## 前提
 
 - `pnpm install` 済み（Docker は不要）
-- 出し先のアカウント・リージョンで `cdk bootstrap` 済み（`pnpm -F review-canvas-infra exec cdk bootstrap aws://<アカウントID>/<リージョン> --profile <プロファイル>`。下の環境変数も付けて実行する）
+- 出し先のアカウント・リージョンで `cdk bootstrap` 済み（`pnpm --dir infra exec cdk bootstrap aws://<アカウントID>/<リージョン> --profile <プロファイル>`。下の環境変数も付けて実行する）
 - Auth0 のテナント・API・Application を作ってある（[auth0.md](auth0.md)。Allowed Callback URLs 等は、1 度出してから出力の `Url` を入れる）
 - 出す人の権限は [github-aws-permissions.md](github-aws-permissions.md)
 
@@ -20,7 +20,7 @@ REVIEW_CANVAS_CONFIG=../my-app/review-canvas.config.json \
 pnpm run deploy --profile <プロファイル>
 ```
 
-画面をビルド（`build:deployed`）してから `cdk deploy` します。ビルド済みなら `pnpm -F review-canvas-infra run deploy:no-build --profile <プロファイル>` で省けます。デプロイはこの 2 つのスクリプトから行ってください（`cdk deploy` を直に、とくに `--app cdk.out` で動かさない。組み立て済みの `cdk.out` を渡す経路は、出し先のアカウントを確かめないため）。
+画面をビルド（`build:deployed`）してから `cdk deploy` します。ビルド済みなら `pnpm --dir infra run deploy:no-build --profile <プロファイル>` で省けます。デプロイはこの 2 つのスクリプトから行ってください（`cdk deploy` を直に、とくに `--app cdk.out` で動かさない。組み立て済みの `cdk.out` を渡す経路は、出し先のアカウントを確かめないため）。
 
 出し先のリージョンは、プロファイルの既定のリージョンです。
 
@@ -52,7 +52,7 @@ pnpm run deploy --profile <プロファイル>
 
 ```bash
 REVIEW_CANVAS_AUTH0_DOMAIN=... REVIEW_CANVAS_AUTH0_CLIENT_ID=... REVIEW_CANVAS_AUTH0_AUDIENCE=... \
-pnpm -F review-canvas-infra run diff --profile <プロファイル>     # destroy・synth も同じ
+pnpm --dir infra run diff --profile <プロファイル>     # destroy・synth も同じ
 ```
 
 ## 出力

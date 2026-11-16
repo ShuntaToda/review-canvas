@@ -48,7 +48,7 @@ jobs:
           pnpm run validate
           pnpm run openapi:check
           pnpm run infra:validate
-          pnpm -F sample-storybook run validate
+          pnpm --dir examples/sample-storybook run validate
 
   build:
     runs-on: ubuntu-latest

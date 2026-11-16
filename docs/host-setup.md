@@ -33,7 +33,7 @@ flowchart LR
     {
       "id": "shop",
       "label": "ショップ",
-      "build": "pnpm --fail-if-no-match -F shop run build-storybook --test",
+      "build": "pnpm --dir apps/shop run build-storybook --test",
       "outDir": "apps/shop/storybook-static",
       "widths": [375, 768, 1280],
       "defaultWidth": 375,
@@ -42,7 +42,7 @@ flowchart LR
     {
       "id": "console",
       "label": "運用コンソール",
-      "build": "pnpm --fail-if-no-match -F console run build-storybook --test",
+      "build": "pnpm --dir apps/console run build-storybook --test",
       "outDir": "apps/console/storybook-static",
       "widths": [1024, 1280, 1920],
       "defaultWidth": 1280
