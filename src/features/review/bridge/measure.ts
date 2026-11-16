@@ -5,6 +5,7 @@
  * - 画面の高さ（100vh など）に合わせて伸びるストーリーは、知らせた高さで iframe が伸びると中身もまた伸び、際限なく伸びる。
  *   画面の高さが変わったのと同じだけ中身が伸びた（画面の高さから下へはみ出す量が前と同じ）ときは、画面の高さに引きずられたとみなして知らせない。
  *   はみ出す量が違っても、画面の高さが変わるたびに伸び続けるときは、決まった回数で打ち切る
+ * - 画面の高さが変わったのと同時に中身も伸びた（play 関数など）ときは、画面の高さの変わった分を除いた高さを知らせる
  */
 
 /** 画面の中で測った値 */
@@ -50,13 +51,14 @@ export const decideSize = (
 ): { report: number | null; state: MeasureState } => {
   const reported = (
     follows: number,
+    height: number = current.height,
   ): {
     report: number;
     state: MeasureState;
   } => ({
-    report: current.height,
+    report: height,
     state: {
-      height: current.height,
+      height,
       width: current.width,
       viewport: current.viewport,
       excess: current.height - current.viewport,
@@ -74,6 +76,16 @@ export const decideSize = (
   if (viewportChanged && grew) {
     const sameExcess = near(current.height - current.viewport, state.excess);
     const follows = state.follows + 1;
+    // 画面の高さが変わったのと同時に中身も伸びた（play 関数など）。画面の高さに引きずられた分を除いた高さを知らせる
+    // （そのまま知らせると、100vh の帯がその分だけ伸びたまま残る）。除くと前より伸びていないときは、画面の高さに合わせて伸びる中身ではない
+    const followed = current.height - (current.viewport - state.viewport);
+    if (
+      !sameExcess &&
+      follows <= MAX_VIEWPORT_FOLLOWS &&
+      followed > state.height + TOLERANCE
+    ) {
+      return reported(follows, followed);
+    }
     if (sameExcess || follows > MAX_VIEWPORT_FOLLOWS) {
       // 画面の高さに引きずられて伸びた（知らせた高さのまま）
       return keep({

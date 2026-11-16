@@ -44,6 +44,25 @@ describe("decideSize", () => {
     expect(reports.at(-1)).toBeLessThan(1200);
   });
 
+  test("[異常系]100vh の帯の下に足がある画面が、画面の高さが変わるのと同時に play 関数で伸びても、画面 1 枚分高くしない", () => {
+    // 帯（100vh）＋足 120px。2 回目に測ったときから play 関数が 300px 足す
+    let played = false;
+    const { reports, state } = run((viewport) => {
+      const height = viewport + 120 + (played ? 300 : 0);
+      played = true;
+      return height;
+    });
+
+    expect(reports).toStrictEqual([920, 1220]);
+    expect(state?.height).toBe(800 + 120 + 300);
+  });
+
+  test("[正常系]高さの決まった中身が、画面の高さが変わるのと同時に伸びたら、伸びた高さを知らせる", () => {
+    const { reports } = run((viewport) => (viewport > 800 ? 2000 : 1500));
+
+    expect(reports).toStrictEqual([1500, 2000]);
+  });
+
   test("[正常系]幅が変わったら、高さが同じでも知らせ直す", () => {
     const first = decideSize(
       null,
