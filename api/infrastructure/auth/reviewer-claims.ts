@@ -38,9 +38,9 @@ const CONTROL_CHARACTERS =
   // eslint-disable-next-line no-control-regex
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
-// 見えない文字（書式の文字 \p{Cf}: ゼロ幅の空白・接合子・ソフトハイフン・BOM など）と異体字セレクタ。
+// 見えない文字（書式の文字 \p{Cf} と既定で無視される文字: ゼロ幅の空白・接合子・ソフトハイフン・BOM・異体字セレクタ・ハングルの空白など）。
 // 名前に挟むと、見た目は同じまま別の文字列にできる（「A<ゼロ幅>I（…」で client の名前に見せる、など）
-const INVISIBLE_CHARACTERS = /[\p{Cf}\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/gu;
+const INVISIBLE_CHARACTERS = /[\p{Default_Ignorable_Code_Point}\p{Cf}]/gu;
 
 /**
  * 表示名にできる値か。制御文字を空白にし、見えない文字を落として前後の空白を落とし、上限で切る

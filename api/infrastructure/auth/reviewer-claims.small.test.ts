@@ -156,6 +156,9 @@ describe("looksLikeAiName", () => {
     "AI（fixer）",
     "ＡＩ ( x )",
     "A\u200bI\u00ad（x）",
+    "A\u034fI（x）",
+    "A\u3164I（x）",
+    "A\u180bI\u17b4（x）",
     "AI\ufe0f(x)",
   ])(
     "[正常系]%j は client の名前に見える（全角・空白・見えない文字を挟んでも）",
