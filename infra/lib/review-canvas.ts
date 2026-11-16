@@ -247,6 +247,38 @@ export class ReviewCanvas extends Construct {
       400, 403, 404, 405, 414, 416, 500, 501, 502, 503, 504,
     ].map((httpStatus) => ({ httpStatus, ttl: Duration.seconds(0) }));
 
+    // 画面（ログインのトークンを持つ側）は、ほかのページの iframe に入れさせない（重ねて押させる手口を防ぐ）。
+    // HTTPS だけで開かせ、Content-Type の読み替えもさせない
+    const appResponseHeadersPolicy = new aws_cloudfront.ResponseHeadersPolicy(
+      this,
+      "AppResponseHeadersPolicy",
+      {
+        comment: `review-canvas app (${Stack.of(this).stackName})`,
+        securityHeadersBehavior: {
+          contentSecurityPolicy: {
+            contentSecurityPolicy: "frame-ancestors 'none'",
+            override: true,
+          },
+          frameOptions: {
+            frameOption: aws_cloudfront.HeadersFrameOption.DENY,
+            override: true,
+          },
+          strictTransportSecurity: {
+            accessControlMaxAge: Duration.days(365),
+            includeSubdomains: false,
+            override: true,
+          },
+          contentTypeOptions: { override: true },
+          referrerPolicy: {
+            referrerPolicy:
+              aws_cloudfront.HeadersReferrerPolicy
+                .STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+            override: true,
+          },
+        },
+      },
+    );
+
     const distribution = new aws_cloudfront.Distribution(this, "Distribution", {
       comment: `review-canvas (${Stack.of(this).stackName})`,
       defaultRootObject: "index.html",
@@ -256,6 +288,7 @@ export class ReviewCanvas extends Construct {
         cachePolicy: aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
         viewerProtocolPolicy:
           aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        responseHeadersPolicy: appResponseHeadersPolicy,
         functionAssociations: [
           {
             function: rewriteFunction,
@@ -276,6 +309,7 @@ export class ReviewCanvas extends Construct {
           originRequestPolicy:
             aws_cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           viewerProtocolPolicy: aws_cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          responseHeadersPolicy: appResponseHeadersPolicy,
         },
       },
       errorResponses,

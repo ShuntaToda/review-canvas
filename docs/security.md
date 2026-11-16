@@ -26,6 +26,7 @@ flowchart LR
   - Storybook 用の配信は `/sb/*` と `/mockServiceWorker.js`（S3 の `sb/mockServiceWorker.js` を返す。msw はオリジン直下でないと効かない）だけを配り、ほかは 404 です。サービスワーカーの読み込み（`Service-Worker` ヘッダーの付いた要求）は `/mockServiceWorker.js` のほかは 403 にします（ブランチの Storybook が `/sb/` の scope で自分のサービスワーカーを登録し、ほかのブランチの画面を差し替えないように）。応答には CORS（`Access-Control-Allow-Origin: *`。マネージドの CORS-With-Preflight ではなく CORS-AllowAllOrigins）を付けます（画面が `index.json`・`meta.json` を読むため。ログインの情報は送らない）
   - 画面は Storybook のオリジンを `/app-config.json` の `storybookOrigin`（デプロイの出力 `StorybookUrl`）から読みます
 - API の関数 URL は CloudFront（OAC）からだけ呼べます。ログインの確かめは API が Auth0 のアクセストークンで行います。画面・Storybook のファイルそのものはログインなしで読めます（中身はモックのデータだけ。URL を関係者の外に渡さない）
+- 画面の配信（画面と `/api/*`）の応答には、`Content-Security-Policy: frame-ancestors 'none'`・`X-Frame-Options: DENY`（ほかのページの iframe に入れさせない）・`Strict-Transport-Security`（1 年）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin` を付けます。Storybook 用の配信はキャンバスの iframe に入るので付けません
 - 画面は Auth0 の値をビルドに埋め込まず、デプロイのときに置く `/app-config.json` から読みます
 - 名前にハッシュを持つファイル（画面の `/assets/` と、Storybook の配信の `/sb/<ブランチのキー>/<id>/assets/`）は `Cache-Control: public, max-age=31536000, immutable` で長く（1 年）キャッシュさせ、ほか（`index.html`・Storybook の `iframe.html`・`index.json`・`sb-manager/`・`meta.json`・`app-config.json` 等）は `no-cache` で使うたびに確かめ直させます（Storybook を入れ替えた後に、古い `iframe.html` が消えたファイルを読みに行かないように）。Storybook の分は置くスクリプトが付けます
 - 出してはいけないアカウント（`protectedAccountIds`）へは、アプリから組み立てる経路で出し先のアカウントを確かめて止めます（[deploy.md](deploy.md)）。組み立て済みの `cdk.out` を `cdk deploy --app cdk.out` で渡す経路は確かめないので使わないでください

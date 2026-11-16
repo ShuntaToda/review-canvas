@@ -257,6 +257,7 @@ describe("CloudFront", () => {
       AllowedMethods: string[];
       CachePolicyId: string;
       OriginRequestPolicyId: string;
+      ResponseHeadersPolicyId?: unknown;
       FunctionAssociations?: unknown[];
     }[];
     Origins: { S3OriginConfig?: unknown; OriginAccessControlId?: unknown }[];
@@ -337,11 +338,68 @@ describe("CloudFront", () => {
     expect(JSON.stringify(storybook.FunctionAssociations)).toContain(
       "StorybookRewriteFunction",
     );
-    expect(app.ResponseHeadersPolicyId).toBeUndefined();
     // マネージドポリシーの ID（SimpleCORS。どのオリジンからも読める）
     expect(storybook.ResponseHeadersPolicyId).toBe(
       "60669652-455b-4ae9-85a4-c4c02393f86c",
     );
+  });
+});
+
+describe("画面の配信の応答ヘッダー", () => {
+  test("画面と /api/* に、ほかのページの iframe に入れさせない・HTTPS だけ・Content-Type を読み替えさせないヘッダーを付ける（Storybook の配信には付けない）", () => {
+    template.resourceCountIs("AWS::CloudFront::ResponseHeadersPolicy", 1);
+    template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
+      ResponseHeadersPolicyConfig: Match.objectLike({
+        SecurityHeadersConfig: Match.objectLike({
+          ContentSecurityPolicy: {
+            ContentSecurityPolicy: "frame-ancestors 'none'",
+            Override: true,
+          },
+          FrameOptions: { FrameOption: "DENY", Override: true },
+          StrictTransportSecurity: Match.objectLike({
+            AccessControlMaxAgeSec: 31536000,
+            Override: true,
+          }),
+          ContentTypeOptions: { Override: true },
+        }),
+      }),
+    });
+    const [policyId] = Object.keys(
+      template.findResources("AWS::CloudFront::ResponseHeadersPolicy"),
+    );
+    const configs = Object.entries(
+      template.findResources("AWS::CloudFront::Distribution"),
+    ).map(([id, resource]) => ({
+      id,
+      config: (
+        resource as {
+          Properties: {
+            DistributionConfig: {
+              DefaultCacheBehavior: { ResponseHeadersPolicyId?: unknown };
+              CacheBehaviors?: { ResponseHeadersPolicyId?: unknown }[];
+            };
+          };
+        }
+      ).Properties.DistributionConfig,
+    }));
+    const app = configs.find(
+      ({ id }) =>
+        id.startsWith("Distribution") &&
+        !id.startsWith("DistributionStorybook"),
+    );
+    const storybook = configs.find(({ id }) =>
+      id.startsWith("StorybookDistribution"),
+    );
+    const ref = { Ref: policyId };
+    expect(app?.config.DefaultCacheBehavior.ResponseHeadersPolicyId).toEqual(
+      ref,
+    );
+    expect(app?.config.CacheBehaviors?.[0]?.ResponseHeadersPolicyId).toEqual(
+      ref,
+    );
+    expect(
+      storybook?.config.DefaultCacheBehavior.ResponseHeadersPolicyId,
+    ).not.toEqual(ref);
   });
 });
 
