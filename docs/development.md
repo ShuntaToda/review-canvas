@@ -64,6 +64,8 @@ pnpm --dir examples/sample-storybook run validate
 - 設定ファイルの形（`api/infrastructure/config/review-canvas-config.ts`）を変えたら `pnpm run config:schema` で `review-canvas.config.schema.json` を作り直します
 - テストの名前は `*.small.test.ts`（外につながない）・`*.medium.test.ts`（DynamoDB Local を使う）です
 - CDK の組み立て（Lambda のバンドルを含む）は、架空の値で確かめられます: `REVIEW_CANVAS_AUTH0_DOMAIN=tenant.example.com REVIEW_CANVAS_AUTH0_CLIENT_ID=dummy REVIEW_CANVAS_AUTH0_AUDIENCE=https://review-canvas.example.com/api pnpm run synth --quiet`
+- 使う側の CDK アプリに組み込んだ形は、CI の「Synth embedded」が `infra/test/embedded-app.ts` を infra の外から動かして確かめます
+- ワークフロー（`.github/workflows/`）は CI の actionlint（shellcheck つき）で確かめます。手元では `actionlint` をそのまま動かします
 - コミットの前後に lefthook が prettier・eslint（pre-commit）、tsc・openapi・cspell（pre-push）を動かします
 
 ## リリースと互換性
