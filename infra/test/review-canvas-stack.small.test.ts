@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { App, Stack } from "aws-cdk-lib";
-import { Match, Template } from "aws-cdk-lib/assertions";
+import { Annotations, Match, Template } from "aws-cdk-lib/assertions";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { afterAll, describe, expect, test } from "vitest";
 import { parseReviewCanvasConfig } from "../../api/infrastructure/config/review-canvas-config";
@@ -342,6 +342,34 @@ describe("CloudFront", () => {
     expect(storybook.ResponseHeadersPolicyId).toBe(
       "60669652-455b-4ae9-85a4-c4c02393f86c",
     );
+  });
+});
+
+describe("使える人の警告", () => {
+  const warningsOf = (allowedEmailDomains: string) => {
+    const app = new App({ context: { "aws:cdk:bundling-stacks": [] } });
+    const stack = new ReviewCanvasStack(app, "WarnReviewCanvas", {
+      settings: {
+        ...baseSettings,
+        stackName: "WarnReviewCanvas",
+        access: { allowedEmailDomains, allowedEmails: "" },
+      },
+      config,
+      distDirs,
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    return Annotations.fromStack(stack).findWarning(
+      "*",
+      Match.stringLikeRegexp("allowedEmailDomains が \\*"),
+    );
+  };
+
+  test("allowedEmailDomains が *（どのドメインも通す）なら、組み立てるときに警告する", () => {
+    expect(warningsOf("*")).toHaveLength(1);
+  });
+
+  test("ドメインで絞っていれば警告しない", () => {
+    expect(warningsOf("example.co.jp")).toHaveLength(0);
   });
 });
 

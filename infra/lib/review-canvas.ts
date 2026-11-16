@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import {
+  Annotations,
   CfnOutput,
   Duration,
   RemovalPolicy,
@@ -32,7 +33,7 @@ import {
   githubOidcProviderArn,
   STORYBOOK_PREFIX,
 } from "./github-publish-role";
-import { type ReviewCanvasSettings } from "./settings";
+import { ANY_EMAIL_DOMAIN, type ReviewCanvasSettings } from "./settings";
 
 /** 画面がデプロイ先の設定を読む場所（src/config/index.ts の DEPLOYED_CONFIG_PATH と同じ） */
 export const APP_CONFIG_KEY = "app-config.json";
@@ -130,6 +131,14 @@ export class ReviewCanvas extends Construct {
 
     const { settings, config } = props;
     const distDirs = props.distDirs ?? DEFAULT_DIST_DIRS;
+
+    // どのドメインも通す既定のままだと、Auth0 でメールアドレスを確かめられた人はだれでも使える。出す人が気づけるよう、組み立てるときに知らせる
+    if (settings.access.allowedEmailDomains === ANY_EMAIL_DOMAIN) {
+      Annotations.of(this).addWarningV2(
+        "review-canvas:allowedEmailDomains",
+        "allowedEmailDomains が *（どのドメインも通す）です。確かめ済みのメールアドレスを持つ人はだれでも使えます。絞るときは REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS・REVIEW_CANVAS_ALLOWED_EMAILS を指定してください（docs/deploy.md）",
+      );
+    }
 
     /**
      * コメント。パーティションキーはブランチ、ソートキーは ID（ULID）。削除済みの印は expiresAt（TTL）で消える
