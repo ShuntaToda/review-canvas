@@ -3,12 +3,20 @@ import * as path from "path";
 import { defineConfig } from "vitest/config";
 
 /**
- * API（api/）と画面（src/）を1つの vitest で走らせる。両者は同じ `@/` で各自の根を指すため、プロジェクトを分ける。
+ * API（api/）・画面（src/）・CLI（bin/）を1つの vitest で走らせる。両者は同じ `@/` で各自の根を指すため、プロジェクトを分ける。
  * small・medium の区別はファイル名（*.small.test.ts・*.medium.test.ts。medium は DynamoDB Local を使う）
  */
 export default defineConfig({
   test: {
     projects: [
+      {
+        test: {
+          // CLI・MCP サーバー（bin/。依存を持たない JavaScript）
+          name: "bin",
+          include: ["bin/**/*.test.mjs"],
+          environment: "node",
+        },
+      },
       {
         resolve: { alias: { "@/": path.join(__dirname, "api/") } },
         test: {

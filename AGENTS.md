@@ -9,6 +9,7 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `api/` — API（Hono・zod-openapi・inversify。domain / use-case / infrastructure / presenter / di-container / handler の層分け。import の向きは eslint が確かめる）
 - `src/` — 画面（React・vite・Tailwind CSS）。`src/features/review/bridge/` は Storybook の iframe に差し込む橋渡し
 - `infra/` — CDK（コンストラクト `ReviewCanvas`・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト
+- `bin/` — CLI（`review-canvas.mjs`）と、AI がコメントを読んで返すための MCP サーバー（`review-canvas-mcp.mjs`。依存を持たない JavaScript。docs/ai.md）
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
 - `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー
 

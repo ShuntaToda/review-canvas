@@ -10,7 +10,8 @@
   },
   "type": "module",
   "bin": {
-    "review-canvas": "bin/review-canvas.mjs"
+    "review-canvas": "bin/review-canvas.mjs",
+    "review-canvas-mcp": "bin/review-canvas-mcp.mjs"
   },
   "scripts": {
     "api": "tsx --tsconfig ./api/tsconfig.json",

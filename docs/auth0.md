@@ -118,7 +118,7 @@ AI（コーディングエージェント）・CI が、人の代わりに API �
      --data '{"client_id":"<Client ID>","client_secret":"<Client Secret>","audience":"<API の Identifier>","grant_type":"client_credentials"}'
    ```
 
-   返ってきた `access_token` を `X-Authorization: Bearer <access_token>` で送ります
+   返ってきた `access_token` を `X-Authorization: Bearer <access_token>` で送ります。MCP サーバー（[ai.md](ai.md)）は、Client ID・Client Secret を環境変数で渡せばトークンを自分で取り、期限まで使い回します
 
 API は client のトークンを次のように確かめます（`api/infrastructure/auth/m2m-clients.ts`）。
 
@@ -130,4 +130,4 @@ API は client のトークンを次のように確かめます（`api/infrastru
 **止めるとき**: 設定から外して出し直す（すぐに 403 になります）か、Auth0 で API の Client Access を外す・Client Secret を入れ替える（発行済みのトークンは期限まで有効なので、急ぐときは設定から外すほうが確かです）。
 
 - M2M のトークンの発行数は Auth0 のプランで上限があります。呼ぶたびに取り直さず、期限（`expires_in`）まで使い回してください
-- 手元（擬似ログイン）では client の確かめはありません
+- 手元（擬似ログイン）では client の確かめはありません。MCP サーバーは擬似のトークンを自分で作ります（[ai.md](ai.md)）

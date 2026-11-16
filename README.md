@@ -74,6 +74,7 @@ pnpm dev                    # → http://localhost:4100
 - コメント: 「コメント（C）」でピンを置き、返信・解決/再開・本文の編集と削除（書いた本人だけ）。AI が直したスレッドは「確認待ち」になり、確かめて解決にするか、未解決へ差し戻す。ピンはクリックした要素を覚え、幅や並びが変わっても追いかける
 - 一覧・共有: 右の一覧で未解決・確認待ち・解決済みを絞り込み、押すとそのピンへ移る。URL がいまの表示に合わせて変わり、そのまま共有できる。コメントは 10 秒ごとに読み直す
 - ブランチ: `?branch=` でブランチの Storybook とコメントに切り替える（Storybook を置いていないブランチはコメントだけ読める）
+- AI と回す: MCP サーバー（`bin/review-canvas-mcp.mjs`）で、AI が未解決のコメントを読み、直したら返信して「確認待ち」にする（[docs/ai.md](docs/ai.md)）
 - 書き出し: Markdown をコピー・保存。「Issue 向け」はチェックリスト、「AI 向け」は要素の手がかりのすべて（ストーリーのファイル・HTML の抜き出し・コンポーネント名など）
 
 ショートカットは画面右上の「?」で一覧できます（V 移動・C コメント・I 操作・+/- 拡大縮小・Shift+1 全体・Shift+0 100%・矢印キー 移動・/ 絞り込み・] 一覧の開閉・Esc 閉じる）。
@@ -94,6 +95,7 @@ pnpm dev                    # → http://localhost:4100
 | [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                         |
 | [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                          |
 | [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                              |
+| [docs/ai.md](docs/ai.md)                                         | AI に直してもらう（MCP サーバーの道具・環境変数・Claude Code への登録）                             |
 | [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                                      |
 | [docs/development.md](docs/development.md)                       | 開発・テスト・リリースと互換性                                                                      |
 

@@ -325,7 +325,14 @@ export default tseslint.config(
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
       sourceType: "module",
-      globals: { process: "readonly", console: "readonly", URL: "readonly" },
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        URL: "readonly",
+        Buffer: "readonly",
+        AbortSignal: "readonly",
+        Response: "readonly",
+      },
     },
   },
 );
