@@ -18,11 +18,19 @@ const fixtureDir = path.join(import.meta.dirname, "fixtures");
 /** 型を使うルールのテストで、コードに付けるファイル名（fixtures/tsconfig.json が含めているファイル） */
 export const TYPED_FILENAME = path.join(fixtureDir, "file.ts");
 
-/** 型情報つきで読む RuleTester。テストごとに `filename: TYPED_FILENAME` を付ける */
+/**
+ * 型情報つきで読む RuleTester。テストごとに `filename: TYPED_FILENAME` を付ける。
+ * CI（環境変数 CI=true）では typescript-eslint が 1 回きりの読み込みと見なしてプログラムを使い回し、
+ * 同じファイル名に中身を差し替えるテストで TypeScript が落ちるため、その推定を止める
+ */
 export const typedRuleTester = new RuleTester({
   languageOptions: {
     parser: tseslint.parser,
     sourceType: "module",
-    parserOptions: { project: "./tsconfig.json", tsconfigRootDir: fixtureDir },
+    parserOptions: {
+      project: "./tsconfig.json",
+      tsconfigRootDir: fixtureDir,
+      disallowAutomaticSingleRunInference: true,
+    },
   },
 });
