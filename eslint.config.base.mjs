@@ -76,6 +76,18 @@ export function baseConfig(tsconfigRootDir) {
           { ignore: ["eslint-enable"] },
         ],
         "@eslint-community/eslint-comments/no-unlimited-disable": "error",
+        // つくりの決まり（層・境界・自前のルール）は disable で外せない。例外が要る場所は、設定の ignores に理由を書いて扱う
+        "@eslint-community/eslint-comments/no-restricted-disable": [
+          "error",
+          "local/*",
+          "import/no-restricted-paths",
+          "import/no-cycle",
+          "no-restricted-properties",
+          "no-restricted-globals",
+          "no-restricted-imports",
+          "no-restricted-syntax",
+          "@eslint-community/eslint-comments/*",
+        ],
         "@eslint-community/eslint-comments/disable-enable-pair": [
           "error",
           { allowWholeFile: true },
