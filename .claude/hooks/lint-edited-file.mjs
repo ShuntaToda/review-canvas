@@ -5,6 +5,7 @@
 import {
   clip,
   deadlineOf,
+  ensureGeneratedTypes,
   lintProblemsOf,
   lintTargetOf,
   readHookInput,
@@ -20,12 +21,11 @@ const main = () => {
   const target = lintTargetOf(input?.tool_input?.file_path, root);
   if (target === null) return 0;
 
-  const problems = lintProblemsOf(
-    root,
-    target.cwd,
-    [target],
-    deadlineOf(BUDGET_MS),
-  );
+  const remaining = deadlineOf(BUDGET_MS);
+  if (target.cwd === root && target.file.startsWith("src/")) {
+    ensureGeneratedTypes(root, remaining);
+  }
+  const problems = lintProblemsOf(root, target.cwd, [target], remaining);
   if (problems.length === 0) return 0;
 
   process.stderr.write(

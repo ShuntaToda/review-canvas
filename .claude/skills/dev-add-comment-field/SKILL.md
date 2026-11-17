@@ -1,6 +1,6 @@
 ---
 name: dev-add-comment-field
-description: 【review-canvas 自身の開発用】コメント（DynamoDB の ReviewCanvasComment）に項目を足す。domain・保存の形・API の応答・画面と書き出しを、前からのデータを読める形でそろえる。「コメントに項目を足して」「DynamoDB の属性を追加して」と言われたときに使う。使う側のリポジトリに写すスキルではない。
+description: 【review-canvas 自身の開発用】コメント（DynamoDB の ReviewCanvasComment）に項目を足す。domain・保存の形・API の応答・画面と書き出しを、前からのデータを読める形でそろえる。review-canvas のリポジトリで作業していて、「コメントに項目を足して」「ReviewCanvasComment に属性を追加して」と言われたときにだけ使う。ほかのテーブル・ほかのリポジトリには使わない。使う側のリポジトリに写すスキルではない。
 ---
 
 # コメントの項目を足す
@@ -21,7 +21,7 @@ review-canvas のリポジトリ自身で、コメントに項目を足す手順
 4. 画面で使うなら `src/features/review/` の model・components。書き出しに入れるなら `model/export-json.ts`・`model/markdown.ts`（入れる項目は挙げたものだけ）
 5. MCP サーバー（`bin/review-canvas-mcp.mjs`）が返す形に入れるかを決める
 6. `docs/api.md` の「データ」の表と、応答の説明を直す
-7. 確かめる: `pnpm run docker:up && pnpm run validate && pnpm run openapi:check && pnpm run test`
+7. 確かめる: `pnpm run docker:up && pnpm run validate && pnpm run openapi:check && pnpm run test`（応答を変えたら、コミットに `openapi.json` も入れる）
 
 ## 守ること
 

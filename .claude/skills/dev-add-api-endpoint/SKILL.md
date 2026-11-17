@@ -1,6 +1,6 @@
 ---
 name: dev-add-api-endpoint
-description: 【review-canvas 自身の開発用】API のルートを 1 本足す。雛形（pnpm run new:api）でユースケース・ハンドラ・テスト・DI の登録を作り、中身を書いて検査を通す。「API を足して」「エンドポイントを追加して」「ルートを増やして」と言われたときに使う。使う側のリポジトリに写すスキルではない。
+description: 【review-canvas 自身の開発用】API のルートを 1 本足す。雛形（pnpm run new:api）でユースケース・ハンドラ・テスト・DI の登録を作り、中身を書いて検査を通す。review-canvas のリポジトリ（api/ がこのリポジトリのもの）で作業していて、「review-canvas の API にルートを足して」「エンドポイントを追加して」と言われたときにだけ使う。ほかのリポジトリの API には使わない。使う側のリポジトリに写すスキルではない。
 ---
 
 # API のルートを 1 本足す
@@ -19,16 +19,17 @@ review-canvas のリポジトリ自身で、API（`api/`）にルートを足す
 
    ユースケース・ハンドラ・それぞれの small テスト・`service-id.ts`・`register-container.ts`・ルーターの `index.ts`・`openapi.json` が、検査を通る形でできる
 
-3. 内側から書く: domain（モデルのメソッド・リポジトリの契約・エラー）→ ユースケース → infrastructure（契約を足したとき）→ ハンドラ（スキーマは同じディレクトリの `<名前>-schema.ts`）。それぞれテストを先に直す
+3. 内側から書く: domain（モデルのメソッド・リポジトリの契約・エラー）→ ユースケース → infrastructure（契約を足したとき）→ ハンドラ（そのルートだけのスキーマはハンドラのファイルの中、複数のハンドラで使うスキーマは同じディレクトリの `<ルートのディレクトリ>-schema.ts`）。それぞれテストを先に直す
 4. ユースケースの Props に足したものは、`register-container.ts` の登録にも足す
 5. `pnpm run openapi:generate && pnpm run codegen` で契約と画面の型を作り直す（手で直さない）
 6. 画面・MCP サーバーから呼ぶなら、`src/features/review/api/review-api.ts`・`bin/review-canvas-mcp.mjs` に足す
 7. `docs/api.md` を直す
-8. 確かめる: `pnpm run validate && pnpm run openapi:check && pnpm run test`（medium は先に `pnpm run docker:up`）
+8. 確かめる: `pnpm run validate && pnpm run openapi:check && pnpm run test`（medium は先に `pnpm run docker:up`）。`openapi:check` は手元の `openapi.json` と比べるので、コミットの前に動かせる。コミットには `openapi.json` も入れる
 
 ## 守ること
 
 - 検査が落ちたら、メッセージのとおりにコードを直す。`eslint-disable`・`any`・ignore で黙らせない
+- ルートは `router.openapi(…)` だけで足す（`router.get` などは lint が止める）。同じパス・隠れるパスは雛形が止めるので、メッセージのとおりにパスか順番を直す
 - 今の時刻・ID は `fetchNow`・`generateId` を Props で受ける。環境変数は `register-container.ts` で読む
 - 投げるのは `AppError` の派生（404・409 などルートに固有のものは、ハンドラの `responses` にも書く）
 - 前からある API の形（項目・パス・エラーの名前）は変えない。変えるときは人に確かめる（`docs/development.md`「リリースと互換性」）

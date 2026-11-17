@@ -125,6 +125,23 @@ export const runTool = (cwd, tool, args, timeoutMs) => {
   };
 };
 
+/** 画面の型（生成物。git には入れない） */
+const GENERATED_TYPES = "src/generated/api-types.ts";
+
+/**
+ * 画面の型が無ければ openapi.json から作る（clone した直後など）。
+ * 無いままだと、画面の lint・tsc が「型が解決できない」という、直しようのない誤りを大量に返す
+ */
+export const ensureGeneratedTypes = (root, remaining) => {
+  if (fs.existsSync(path.join(root, GENERATED_TYPES))) return;
+  runTool(
+    root,
+    "openapi-typescript",
+    ["./openapi.json", "-o", GENERATED_TYPES],
+    remaining(),
+  );
+};
+
 /** 出力を上限の行数に切る */
 export const clip = (output) => {
   const lines = output.split("\n");

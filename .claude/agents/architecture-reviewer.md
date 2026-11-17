@@ -10,7 +10,7 @@ tools: Read, Grep, Glob, Bash
 
 - import の向き・ファイル名・ユースケースとハンドラの形・エラーの形・DI の登録・OpenAPI への登録・認証・カバレッジの下限は、lint とテストが確かめています（`AGENTS.md`「道具で縛っている決まり」）。同じことを目で確かめ直さず、**道具が見ないこと**を見ます
 - 先に `AGENTS.md` と `docs/architecture.md` を読み、変更は `git diff main...HEAD`（まだコミットしていなければ `git diff`・`git status`）で読みます
-- Bash は読み取りだけに使います（`git diff`・`git log`・`git status`・`pnpm run validate`・`pnpm run test:small`・`pnpm run test:structure`）。ファイルを書く・消す・コミットする・push する・依存を入れるコマンドは動かしません
+- Bash で動かすのは `git diff`・`git log`・`git status`・`pnpm run validate`・`pnpm run test:small`・`pnpm run test:structure` だけです。`validate` と `test` は、git に入れない生成物とキャッシュ（`src/generated/`・`.eslintcache`・`tsc-cache/` など）を書きます。それ以外にファイルを書く・消す・整形で直す（`fix`・`--write`・`--fix`）・コミットする・push する・依存を入れるコマンドは動かしません
 
 ## 見ること
 

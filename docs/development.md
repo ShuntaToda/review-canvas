@@ -62,7 +62,7 @@ pnpm run test              # API・画面・道具の small・medium テスト�
 pnpm run test:small        # small だけ（Docker なし）
 pnpm run test:structure    # つくりの決まりのテストと、自前の lint ルール・雛形・hook のテストだけ（数秒）
 pnpm run test:coverage     # すべてのテストと、層ごとのカバレッジの下限（CI はこれを動かす）
-pnpm run openapi:check     # openapi.json が API のコードと合っているか
+pnpm run openapi:check     # openapi.json が API のコードと合っているか（手元のファイルと比べる。コミットの前でも確かめられる）
 pnpm run infra:validate    # infra の tsc・prettier・eslint
 pnpm run infra:test        # infra のテスト（スタックの形・置くスクリプト・配信の関数）
 pnpm --dir examples/sample-storybook run validate
@@ -75,29 +75,30 @@ pnpm --dir examples/sample-storybook run validate
 - 使う側の CDK アプリに組み込んだ形は、CI の「Synth embedded」が `infra/test/embedded-app.ts` を infra の外から動かして確かめます
 - ワークフロー（`.github/workflows/`）は CI の actionlint で確かめます。手元では `actionlint` をそのまま動かします（`shellcheck` が PATH に無いと run のシェルを確かめずに通るので、先に入れておく）
 - コミットの前後に lefthook が prettier・eslint（pre-commit）、メッセージが 1 行で AI の署名が無いこと（commit-msg）、tsc・openapi・cspell・つくりのテスト・knip（pre-push）を確かめます
+- コミットメッセージの決まりは `scripts/check-commit-message.mjs` にあり、CI のジョブ commit-messages が PR のコミットの範囲にも同じものをかけます（`--no-verify`・GitHub の画面で作ったコミットも見る）。マージコミットは見ません（「Update branch」などで GitHub が作り、文面を選べない）。`git revert` が付ける本文（`This reverts commit …`）だけは 1 行の例外として認めます（戻したコミットを指す決まった形のため）。PR をまとめてマージするときのメッセージは、人が 1 行に直します
 - API を 1 本足すときは `pnpm run new:api`（[architecture.md](architecture.md#api-を-1-本足すとき)）。CI の scaffold ジョブが、雛形で作った直後の状態で `validate` と `test:small` を通します
 
 ## 道具で縛っている仕組みと理由
 
 決まりは、文章より道具で縛ります（[adr/0007](adr/0007-enforce-by-tools.md)）。決まりの一覧と違反のメッセージは [AGENTS.md](../AGENTS.md#道具で縛っている決まり)、層ごとの置き場は [architecture.md](architecture.md) にあります。ここには、入れている仕組みごとの「防ぐもの」と「引き受けているもの」を残します。
 
-| 仕組み                                                                                                                     | 防ぐもの                                                                                      | 引き受けているもの（遅さ・誤検出・保守）                                                     |
-| -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 自前の ESLint ルール（`eslint-rules/`。ユースケース・ハンドラの形、エラーの形、時刻と乱数、外部 import、パッケージの境界） | 層ごとの決まりからの外れ。既存のプラグインでは書けない・メッセージに直し方を書けないもの      | ルールとテストを自分で保つ（6 本・RuleTester のテスト付き）。構文だけを見るので速い          |
-| `import/no-cycle`                                                                                                          | 層の向きの決まりをすり抜ける相互依存・読み込み順の不具合                                      | eslint が数秒伸びる（import 先を読む）                                                       |
-| `check-file`（ファイル名・ディレクトリ名・テストの名前）                                                                   | 名前のゆれ。つくりのテスト・雛形が名前から対応を探すので、ゆれると検査が効かなくなる          | 入口（`src/main.tsx`）とモードの設定（`src/config.test.ts`）の 2 つを対象から外している      |
-| `eslint-comments`・`reportUnusedDisableDirectives`                                                                         | 理由の無い disable・直したあとに残った disable                                                | メッセージは英語（プラグインのもの）                                                         |
-| `no-restricted-*`（`process.env`・`console`・`fetch`・`localStorage`・サーバー側のパッケージ）                             | 設定・出力・通信・保存の出入口が散らばること                                                  | 出入口を足すときは `eslint.config.mjs` の許す場所を直す                                      |
-| `switch-exhaustiveness-check`・`consistent-type-imports`・`no-non-null-assertion`・`no-param-reassign`                     | case の書き忘れ・型だけの import による循環・`!` で隠した undefined                           | `!` はテストでは許している                                                                   |
-| つくりのテスト（`api/architecture.small.test.ts`）                                                                         | DI の登録漏れ・ルーターへの足し忘れ・認証を通らないルート・テストの無いユースケースとルート   | ファイル名と `describe` の題の決まりに頼る（題を変えると落ちる）                             |
-| 契約のテスト（`bin/review-canvas-mcp-contract.small.test.mjs`）・`openapi:check`・`validate:schema`                        | API・設定の形と、それを使う側（画面・MCP・JSON Schema）のずれ                                 | MCP は正規表現で呼び出しを読む（`call("GET", …)` の形を変えたらテストも直す）                |
-| リポジトリの決まりのテスト（`scripts/repo-rules.small.test.mjs`）                                                          | タグで指した Action・範囲で書いた依存・一覧に載っていない文書                                 | なし（1 秒かからない）                                                                       |
-| `knip`                                                                                                                     | 使われない export・ファイル・依存が残ること（AI は消し忘れやすい）                            | 2 秒ほど。動的に読むもの・CLI として動かす依存は `knip.jsonc` に理由つきで書く               |
-| tsconfig（`@tsconfig/strictest`。infra は添字の確認まで）                                                                  | undefined の見落とし・省いたプロパティと undefined の混同                                     | infra は `exactOptionalPropertyTypes` を入れていない（aws-cdk-lib の型どうしが合わなくなる） |
-| カバレッジの下限（層ごと）                                                                                                 | テストの無い domain・use-case・model が増えること                                             | テストに 2〜3 秒足す。下限は今の値の少し下で、上げ下げは `vitest.config.ts`                  |
-| 雛形（`pnpm run new:api`）と CI の scaffold ジョブ                                                                         | 足すときの書き漏れ（ID・登録・ルーター・テスト・OpenAPI）。雛形そのものが決まりからずれること | CI が 1 ジョブ増える。`register-container.ts`・ルーターの形を変えたら雛形も直す              |
-| Claude Code の hook（`.claude/hooks/`）                                                                                    | AI が違反に気づくのが遅れること（編集の直後に返す）                                           | 編集 1 回に 4〜6 秒（型を使う lint）。tsc は重いので、手を止める前にだけ動かす               |
-| lefthook（pre-commit・commit-msg・pre-push）                                                                               | CI まで行ってから落ちること                                                                   | push の前に数十秒                                                                            |
+| 仕組み                                                                                                                     | 防ぐもの                                                                                                                                                            | 引き受けているもの（遅さ・誤検出・保守）                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 自前の ESLint ルール（`eslint-rules/`。ユースケース・ハンドラの形、エラーの形、時刻と乱数、外部 import、パッケージの境界） | 層ごとの決まりからの外れ。既存のプラグインでは書けない・メッセージに直し方を書けないもの                                                                            | ルールとテストを自分で保つ（6 本・RuleTester のテスト付き）。構文だけを見るので速い                                                                        |
+| `import/no-cycle`                                                                                                          | 層の向きの決まりをすり抜ける相互依存・読み込み順の不具合                                                                                                            | eslint が数秒伸びる（import 先を読む）                                                                                                                     |
+| `check-file`（ファイル名・ディレクトリ名・テストの名前）                                                                   | 名前のゆれ。つくりのテスト・雛形が名前から対応を探すので、ゆれると検査が効かなくなる                                                                                | 入口（`src/main.tsx`）とモードの設定（`src/config.test.ts`）の 2 つを対象から外している                                                                    |
+| `eslint-comments`・`reportUnusedDisableDirectives`                                                                         | 理由の無い disable・直したあとに残った disable・構造を守るルール（`local/*`・層の向き・循環・`no-restricted-*`）の disable                                          | メッセージは英語（プラグインのもの。hook が直し方を添える）。構造のルールの例外は、コメントではなく `eslint.config.mjs` の対象・`ignores` に理由つきで書く |
+| `no-restricted-*`（`process.env`・`console`・`fetch`・`localStorage`・サーバー側のパッケージ）                             | 設定・出力・通信・保存の出入口が散らばること                                                                                                                        | 出入口を足すときは `eslint.config.mjs` の許す場所を直す                                                                                                    |
+| `switch-exhaustiveness-check`・`consistent-type-imports`・`no-non-null-assertion`・`no-param-reassign`                     | case の書き忘れ・型だけの import による循環・`!` で隠した undefined                                                                                                 | `!` はテストでは許している                                                                                                                                 |
+| つくりのテスト（`api/architecture.small.test.ts`）                                                                         | DI の登録漏れ・ルーターへの足し忘れ・認証を通らないルート・テストの無いユースケースとルート・OpenAPI に載らないルート（アプリに登録されたルートと 1 対 1 で比べる） | ファイル名と `describe` の題の決まりに頼る（題を変えると落ちる）                                                                                           |
+| 契約のテスト（`bin/review-canvas-mcp-contract.small.test.mjs`）・`openapi:check`・`validate:schema`                        | API・設定の形と、それを使う側（画面・MCP・JSON Schema）のずれ                                                                                                       | MCP は正規表現で呼び出しを読む（`call("GET", …)` の形を変えたらテストも直す）                                                                              |
+| リポジトリの決まりのテスト（`scripts/repo-rules.small.test.mjs`）                                                          | タグで指した Action・範囲で書いた依存・一覧に載っていない文書                                                                                                       | なし（1 秒かからない）                                                                                                                                     |
+| `knip`                                                                                                                     | 使われない export・ファイル・依存が残ること（AI は消し忘れやすい）                                                                                                  | 2 秒ほど。動的に読むもの・CLI として動かす依存は `knip.jsonc` に理由つきで書く                                                                             |
+| tsconfig（`@tsconfig/strictest`。infra は添字の確認まで）                                                                  | undefined の見落とし・省いたプロパティと undefined の混同                                                                                                           | infra は `exactOptionalPropertyTypes` を入れていない（aws-cdk-lib の型どうしが合わなくなる）                                                               |
+| カバレッジの下限（層ごと）                                                                                                 | テストの無い domain・use-case・infrastructure・presenter・handler・画面の model と support が増えること                                                             | テストに 2〜3 秒足す。下限は今の値の少し下で、上げ下げは `vitest.config.ts`                                                                                |
+| 雛形（`pnpm run new:api`）と CI の scaffold ジョブ                                                                         | 足すときの書き漏れ（ID・登録・ルーター・テスト・OpenAPI）。雛形そのものが決まりからずれること                                                                       | CI が 1 ジョブ増える。`register-container.ts`・ルーターの形を変えたら雛形も直す                                                                            |
+| Claude Code の hook（`.claude/hooks/`）                                                                                    | AI が違反に気づくのが遅れること（編集の直後に返す）。Bash で書き換えたファイルは、手を止める前にまとめて確かめる                                                    | 編集 1 回に 4〜6 秒（型を使う lint）。手を止める前に 3〜8 秒（変更したファイルの eslint・prettier と、変更のあるパッケージの tsc）                         |
+| lefthook（pre-commit・commit-msg・pre-push）                                                                               | CI まで行ってから落ちること                                                                                                                                         | push の前に数十秒                                                                                                                                          |
 
 入れていないもの:
 
@@ -110,6 +111,15 @@ pnpm --dir examples/sample-storybook run validate
 | `consistent-type-assertions`（オブジェクトへの `as` を禁じる） | テストの偽物づくりで使っており、得るものが小さい                                                                                                                                                                                              |
 | ハンドラ 1 つにテストファイル 1 つ                             | 同じルーターのテストをまとめて書いている所がある。代わりに、ルートごとに `describe("<メソッド> <パス>")` があることを確かめている                                                                                                             |
 | ファイルの行数・複雑さの上限                                   | 今のコードが越えており、分け方は機械では決められない                                                                                                                                                                                          |
+
+### Claude Code の hook
+
+`.claude/settings.json` の hook は、次の 2 つです（中身は `.claude/hooks/`）。
+
+- 編集のたび（`Edit`・`Write`・`MultiEdit`）: 編集したファイルに eslint と prettier。Bash で書き換えたファイル（`sed`・生成コマンド）はここを通らないので、対象を広げずに、次の hook と pre-commit で見つけます（Bash のたびに動かすと、読むだけのコマンドでも数秒かかる）
+- 手を止める前（`Stop`）: まだコミットしていない変更のファイルに eslint と prettier、変更のあるパッケージに tsc
+
+hook はリポジトリのコード（`.claude/hooks/`・`eslint.config.mjs`・`node_modules/.bin`）を、開いた人の権限で動かします。信頼しないブランチ（外から来た PR など）を手元で開くときは、`.claude/settings.local.json` に `{ "disableAllHooks": true }` を置いて止めてください。
 
 ## 道具で縛る決まりを足す
 
@@ -126,7 +136,7 @@ pnpm --dir examples/sample-storybook run validate
 - 自前のルールには RuleTester のテスト（`<名前>.small.test.mjs`。通る例と落ちる例）を書き、`eslint-rules/index.mjs` に登録する
 - 今のコードに違反があれば、例外を足さずにコードを直す。直せない例外は、設定の `ignores` に理由のコメントを付けて 1 つずつ書く
 - わざと違反を入れて、落ちること・メッセージで直せることを確かめる
-- [AGENTS.md](../AGENTS.md#道具で縛っている決まり) の表に 1 行足し、上の「入れている仕組みと理由」に防ぐものと引き受けるものを書く
+- [AGENTS.md](../AGENTS.md#道具で縛っている決まり) の表に 1 行足し、上の「[道具で縛っている仕組みと理由](#道具で縛っている仕組みと理由)」に防ぐものと引き受けるものを書く
 - `pnpm run validate` の時間を前後で測る（キャッシュなしで 1 分を大きく越えるなら、対象を絞る）
 
 ## リリースと互換性

@@ -11,6 +11,7 @@ import {
   changedFilesOf,
   clip,
   deadlineOf,
+  ensureGeneratedTypes,
   lintProblemsOf,
   lintTargetOf,
   readHookInput,
@@ -20,9 +21,6 @@ import {
 
 /** settings.json の timeout（180 秒）より短くする */
 const BUDGET_MS = 160_000;
-/** 画面の型（生成物。git には入れない）。無いと src の tsc が、直しようのない誤りを大量に出す */
-const GENERATED_TYPES = "src/generated/api-types.ts";
-
 /** 変更のあるファイル（まだコミットしていないもの）から、tsc をかける場所を決める */
 export const typecheckTargetsOf = (changedFiles) => {
   const ts = changedFiles.filter((file) => /\.tsx?$/.test(file));
@@ -63,6 +61,9 @@ const main = () => {
   if (changedFiles === null || changedFiles.length === 0) return 0;
   const remaining = deadlineOf(BUDGET_MS);
 
+  if (changedFiles.some((file) => file.startsWith("src/"))) {
+    ensureGeneratedTypes(root, remaining);
+  }
   // パッケージ（作業ディレクトリ）ごとにまとめて、道具を 1 回ずつ動かす
   const targets = changedFiles.flatMap((file) => {
     const target = lintTargetOf(file, root);
@@ -80,17 +81,6 @@ const main = () => {
   );
 
   const typecheckTargets = typecheckTargetsOf(changedFiles);
-  if (
-    typecheckTargets.some((target) => target.name === "src") &&
-    !fs.existsSync(path.join(root, GENERATED_TYPES))
-  ) {
-    runTool(
-      root,
-      "openapi-typescript",
-      ["./openapi.json", "-o", GENERATED_TYPES],
-      remaining(),
-    );
-  }
   const typeProblems = typecheckTargets.flatMap((target) => {
     const result = runTool(
       path.join(root, target.dir),

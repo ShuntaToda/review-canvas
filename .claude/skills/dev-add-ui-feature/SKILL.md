@@ -1,6 +1,6 @@
 ---
 name: dev-add-ui-feature
-description: 【review-canvas 自身の開発用】画面（src/）に機能を足す。純粋な処理を model に、読み込みを hooks に、見た目を components に分けて書き、検査を通す。「画面に機能を足して」「キャンバスに〜を追加して」「UI を直して」と言われたときに使う。使う側のリポジトリに写すスキルではない。
+description: 【review-canvas 自身の開発用】画面（src/）に機能を足す。純粋な処理を model に、読み込みを hooks に、見た目を components に分けて書き、検査を通す。review-canvas のリポジトリ（src/ がこのリポジトリのもの）で作業していて、「review-canvas の画面に機能を足して」「キャンバスに〜を追加して」と言われたときにだけ使う。ほかのリポジトリの画面や、見た目の小さな手直しには使わない。使う側のリポジトリに写すスキルではない。
 ---
 
 # 画面の機能を足す
