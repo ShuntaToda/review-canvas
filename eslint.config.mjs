@@ -407,10 +407,15 @@ export default tseslint.config(
       "no-restricted-globals": ["error", CONSOLE_GLOBAL],
     },
   },
-  // 内側の層は、プロセスの状態（環境変数・引数・作業ディレクトリ）に触れない
+  // プロセスの状態（環境変数・引数・作業ディレクトリ）に触れるのは、組み立てる場所（di-container）と入口だけ。
+  // process そのものを禁じる（`const p = process; p.env`・`Reflect.get(process, "env")` のように、process.env の形を外した読み方を残さない）
   {
-    files: ["api/{domain,use-case,presenter}/**/*.ts"],
-    ignores: ["api/**/*.test.ts"],
+    files: apiFiles,
+    ignores: [
+      "api/di-container/**",
+      "api/handler/api/entrypoint/**",
+      "api/**/*.test.ts",
+    ],
     rules: {
       "no-restricted-globals": [
         "error",
@@ -418,7 +423,7 @@ export default tseslint.config(
         {
           name: "process",
           message:
-            "domain・use-case・presenter では process（環境変数・引数・作業ディレクトリ）に触れません。要る値は di-container で読み、props・引数で受けてください。",
+            "ここでは process（環境変数・引数・作業ディレクトリ）に触れません。触れてよいのは api/di-container と api/handler/api/entrypoint だけです。要る値は di-container で読み、props・引数で受けてください。",
         },
       ],
     },
