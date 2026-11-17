@@ -26,6 +26,7 @@ pre-commit:
         - "bin/*.mjs"
         - "eslint-rules/**/*.mjs"
         - "scripts/*.mjs"
+        - ".claude/hooks/*.mjs"
       exclude:
         - "infra/**"
         - "examples/**"

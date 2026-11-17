@@ -71,9 +71,15 @@ export default defineConfig({
       },
       {
         test: {
-          // 開発の道具: このリポジトリだけの ESLint ルール（eslint-rules/。RuleTester）と、雛形のスクリプト（scripts/）
+          // 開発の道具: このリポジトリだけの ESLint ルール（eslint-rules/。RuleTester）と、雛形のスクリプト（scripts/）・Claude Code の hook（.claude/hooks/）
           name: "tools",
-          include: ["eslint-rules/**/*.test.mjs", "scripts/**/*.test.mjs"],
+          include: [
+            "eslint-rules/**/*.test.mjs",
+            "scripts/**/*.test.mjs",
+            ".claude/hooks/*.test.mjs",
+          ],
+          // vitest は既定で . で始まるディレクトリを除くため、hook のテストを拾えるように既定の除外を絞る
+          exclude: ["**/node_modules/**"],
           environment: "node",
         },
       },
