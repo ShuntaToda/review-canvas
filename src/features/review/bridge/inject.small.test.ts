@@ -1,9 +1,11 @@
 import {
   BRIDGE_MARK_START,
+  BRIDGE_SCRIPT_NAME,
   assertCanvasOrigins,
   injectBridge,
   removeBridge,
 } from "./inject";
+import { BRIDGE_FILE_NAME } from "./protocol";
 
 const HTML =
   "<!doctype html><html><head><title>sb</title></head><body><div id=root></div></body></html>";
@@ -59,5 +61,12 @@ describe("injectBridge", () => {
   ])("[異常系]オリジンの形が違う(%j)ときは例外にする", (origins) => {
     expect(() => assertCanvasOrigins(origins)).toThrow();
     expect(() => injectBridge(HTML, { canvasOrigins: origins })).toThrow();
+  });
+});
+
+describe("BRIDGE_SCRIPT_NAME", () => {
+  // inject.ts は何も import できない（API・CDK からも読まれる）ため、同じ値を 2 か所に持つ
+  test("[正常系]橋渡しのファイル名（protocol.ts）と同じ", () => {
+    expect(BRIDGE_SCRIPT_NAME).toBe(BRIDGE_FILE_NAME);
   });
 });

@@ -66,10 +66,6 @@ export const isReviewerNotAllowed = (error: unknown): boolean =>
 export const isUnauthorized = (error: unknown): boolean =>
   error instanceof ReviewApiError && error.status === 401;
 
-/** 対象のコメントが無い（ほかの人・ほかのタブで消された）失敗か */
-export const isNotFound = (error: unknown): boolean =>
-  error instanceof ReviewApiError && error.status === 404;
-
 /** 入力の誤り（400。読み直しても通らない） */
 export const isInvalid = (error: unknown): boolean =>
   error instanceof ReviewApiError && error.status === 400;
@@ -250,5 +246,3 @@ export const buildReviewApi = (client: ApiClient) => ({
       )
     ).deletedIds,
 });
-
-export type ReviewApi = ReturnType<typeof buildReviewApi>;

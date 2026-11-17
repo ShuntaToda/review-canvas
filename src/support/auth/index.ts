@@ -1,21 +1,10 @@
 import type { AuthModule } from "./auth-client";
 import type { Config } from "@/configType";
 
-export {
-  AuthContext,
-  useAuth,
-  type AppState,
-  type AuthClient,
-  type AuthModule,
-  type AuthProviderProps,
-  type AuthUser,
-  type LogoutOptions,
-  type RedirectLoginOptions,
-} from "./auth-client";
+export { useAuth, type AuthModule, type AuthUser } from "./auth-client";
 export { AppAuthProvider } from "./AppAuthProvider";
 export { AuthGate } from "./AuthGate";
 export { LoginAgainButton } from "./LoginAgainButton";
-export { toSafeReturnTo, withoutAuthResponseParams } from "./return-to";
 
 /**
  * 設定（authProvider）で選んだログインの実装を読み込む。起動時（main.tsx）に一度だけ呼ぶ。

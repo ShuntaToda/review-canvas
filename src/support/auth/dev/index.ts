@@ -10,12 +10,3 @@ export const devAuthModule: AuthModule = {
   Provider: DevAuthProvider,
   LoginPage: DevLoginPage,
 };
-
-export { DevLoginContext } from "./dev-login-context";
-export {
-  buildDevToken,
-  decodeDevTokenSegment,
-  devSubjectOf,
-  DEV_TOKEN_LIFETIME_SECONDS,
-} from "./dev-token";
-export { DEV_SESSION_STORAGE_KEY, readDevSession } from "./dev-session";

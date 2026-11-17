@@ -5,8 +5,3 @@ export const YAMADA: Reviewer = { id: "auth0|yamada", name: "山田" };
 
 /** テスト用の別の利用者 */
 export const SUZUKI: Reviewer = { id: "auth0|suzuki", name: "鈴木" };
-
-export const reviewerDummyFrom = (props?: Partial<Reviewer>): Reviewer => ({
-  ...YAMADA,
-  ...props,
-});

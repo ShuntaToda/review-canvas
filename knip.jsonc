@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // 同じファイルの中で使っている export は数えない（テストから読むために export した定数など）
+  "ignoreExportsUsedInFile": true,
+  // 意味の違う名前を同じ値に付けることがある（既定値に名前を付ける、など）
+  "exclude": ["duplicates"],
+  // サンプルの Storybook は使う側のアプリの見本で、このリポジトリのコードからは読まない
+  "ignoreWorkspaces": ["examples/sample-storybook"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/features/review/bridge/bridge-main.ts",
+        "api/handler/api/entrypoint/{cli,lambda,local}/*.ts",
+        "bin/*.mjs",
+        "eslint.config.base.mjs",
+      ],
+      "project": ["{api,src,bin,eslint-rules}/**/*.{ts,tsx,mjs}"],
+      // CDK（NodejsFunction）が Lambda をバンドルするときに、パッケージの根で `pnpm exec esbuild` として動かす（infra/lib/review-canvas.ts の projectRoot）
+      "ignoreDependencies": ["esbuild"],
+      // CI の「Synth embedded」が infra/node_modules の esbuild-register を絶対パスで読む（infra の依存）
+      "github-actions": false,
+    },
+    "infra": {
+      "entry": ["bin/review-canvas.ts", "test/embedded-app.ts"],
+      "project": ["**/*.ts"],
+    },
+  },
+}

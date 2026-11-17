@@ -153,7 +153,6 @@ export const ReviewCanvasConfigSchema = z
   );
 
 export type ReviewCanvasConfig = z.output<typeof ReviewCanvasConfigSchema>;
-export type StorybookEntry = z.output<typeof StorybookEntrySchema>;
 export type StorybookSource = z.output<typeof StorybookSourceSchema>;
 
 /** 画面に出す分（API の /api/meta が返す） */

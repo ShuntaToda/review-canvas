@@ -12,5 +12,3 @@ export const createAuth0AuthModule = (settings: Auth0Config): AuthModule => {
     createElement(Auth0AuthProvider, { ...props, settings });
   return { Provider };
 };
-
-export { toAuthClient } from "./to-auth-client";
