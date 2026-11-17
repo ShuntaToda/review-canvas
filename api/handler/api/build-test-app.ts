@@ -46,14 +46,20 @@ export const buildHandlerTestApp = (
     logger = new LoggerDummy(),
     reviewer = YAMADA,
     stageName = "DEV",
-  }: { logger?: Logger; reviewer?: Reviewer; stageName?: string } = {},
+    allowOrigins = "",
+  }: {
+    logger?: Logger;
+    reviewer?: Reviewer;
+    stageName?: string;
+    allowOrigins?: string;
+  } = {},
 ): ReturnType<typeof buildApp> => {
   const container = new Container();
   container.bind(LOGGER).toConstantValue(logger);
   container
     .bind(REVIEWER_TOKEN_VERIFIER)
     .toConstantValue(buildTokenVerifierDummy(reviewer));
-  container.bind(ALLOW_ORIGINS).toConstantValue("");
+  container.bind(ALLOW_ORIGINS).toConstantValue(allowOrigins);
   container.bind(STAGE_NAME).toConstantValue(stageName);
   container
     .bind(ERROR_RESPONSE_BUILDER)
