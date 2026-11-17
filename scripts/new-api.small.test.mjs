@@ -232,20 +232,70 @@ describe("planNewApi", () => {
   });
 
   test("[正常系]同じ経路の認証がすでにあれば、router.use を足さない", () => {
+    // 今の openapi.json に頼らない（同じ経路を本当に足したあとでも落ちない）よう、仮のルーターで確かめる
+    const files = {
+      [metaRouterFile]: [
+        "export const buildMetaRouter = ({ container }) => {",
+        "  const router = createAuthedHono({ container });",
+        '  router.use("/zz-items", buildAuthMiddleware({ container }));',
+        "  buildGetZzItemsHandler({ router, container });",
+        "",
+        "  return router;",
+        "};",
+        "",
+      ].join("\n"),
+      "api/handler/api/route/meta/get-zz-items-handler.ts": fakeHandler(
+        "get",
+        "/zz-items",
+      ),
+      "openapi.json": JSON.stringify({
+        paths: { "/api/zz-items": { get: {} } },
+      }),
+    };
     const plan = planNewApi(
       {
         ...args,
         method: "post",
         routeDir: "meta",
-        routePath: "/meta",
-        handlerFiles: handlerFilesOf("meta"),
+        routePath: "/zz-items",
+        handlerFiles: ["api/handler/api/route/meta/get-zz-items-handler.ts"],
       },
-      read,
+      fakeRead(files),
     );
 
     expect(
-      plan.updated[metaRouterFile].match(/router\.use\("\/meta"/g),
+      plan.updated[metaRouterFile].match(/router\.use\("\/zz-items"/g),
     ).toHaveLength(1);
+    expect(plan.updated[metaRouterFile]).toContain(
+      "buildPostZzScaffoldProbeHandler({ router, container });",
+    );
+  });
+
+  test("[正常系]一部だけ重なるパスは、止めずに、両方に合う要求の例を知らせる", () => {
+    const files = {
+      "openapi.json": JSON.stringify({
+        paths: {
+          "/api/comments/{commentId}/zz-resolution": { get: {} },
+          "/api/comments/zz-other/{id}/x": { get: {} },
+        },
+      }),
+    };
+    const plan = planNewApi(
+      { ...args, routePath: "/zz-bulk/{action}", handlerFiles: [] },
+      fakeRead(files),
+    );
+
+    expect(plan.warnings).toHaveLength(1);
+    expect(plan.warnings[0]).toContain(
+      "GET /api/comments/zz-bulk/zz-resolution",
+    );
+    expect(plan.warnings[0]).toContain(
+      "/api/comments/{commentId}/zz-resolution",
+    );
+  });
+
+  test("[正常系]重ならないパスには、注意を出さない", () => {
+    expect(planNewApi(args, read).warnings).toStrictEqual([]);
   });
 
   test("[異常系]足すパラメータのルートが、別のルーターにある固定のパスを隠すなら弾く", () => {

@@ -278,6 +278,33 @@ const shadows = (pattern, target) => {
     a.every((segment, i) => isParam(segment) || segment === b[i])
   );
 };
+/**
+ * 2 つのルートの両方に合う要求があるか（区切りごとに、どちらかがパラメータか、同じ）。片方がもう片方を丸ごと隠す場合と、同じルートは除く。
+ * 合う要求の例（/bulk/{action} と /{commentId}/resolution なら /bulk/resolution）を返し、無ければ null
+ */
+const overlapExampleOf = (a, b) => {
+  const left = segmentsOf(a);
+  const right = segmentsOf(b);
+  if (
+    left.length !== right.length ||
+    shapeOf(a) === shapeOf(b) ||
+    shadows(a, b) ||
+    shadows(b, a)
+  ) {
+    return null;
+  }
+  const merged = left.map((segment, i) =>
+    !isParam(segment)
+      ? isParam(right[i]) || right[i] === segment
+        ? segment
+        : null
+      : isParam(right[i])
+        ? "x"
+        : right[i],
+  );
+  return merged.includes(null) ? null : `/${merged.join("/")}`;
+};
+
 /** OpenAPI のパスを Hono のパス（:itemId）にする */
 const honoPathOf = (routePath) => routePath.replaceAll(/\{([^}]+)\}/g, ":$1");
 
@@ -397,6 +424,15 @@ export const planNewApi = (args, read) => {
       `${args.method.toUpperCase()} ${fullPath} を足すと、別のルーターにある ${hidden.join("・")} への要求を先に受けてしまうおそれがあります（パラメータは何にでも合います）。別のパスを --path で指定するか、隠れる側のルートをこのルーターへ移してください`,
     );
   }
+  // 一部だけ重なるルート（止めない。どちらに届くかは登録の順番で決まるので、知らせる）
+  const warnings = existing.flatMap((routePath) => {
+    const example = overlapExampleOf(routePath, fullPath);
+    return example === null
+      ? []
+      : [
+          `${args.method.toUpperCase()} ${example} は、すでにある ${routePath} と、足した ${fullPath} の両方に合います。先に登録した方（ふつうは、すでにある方）に届きます。意図と違うなら、パスを変えるか、ルーター（index.ts）の登録の順番を直してください`,
+        ];
+  });
   const sample = siblings[0]?.text;
   const tag =
     /tags: \["([^"]+)"\]/.exec(sample ?? "")?.[1] ?? pascalOf(args.routeDir);
@@ -441,6 +477,7 @@ export const planNewApi = (args, read) => {
   return {
     names: n,
     fullPath,
+    warnings,
     created: {
       [n.useCaseFile]: useCaseTemplate(n),
       [n.useCaseTestFile]: useCaseTestTemplate(n),
@@ -544,7 +581,7 @@ ${Object.keys(plan.updated)
   .join("\n")}
   openapi.json・src/generated（${plan.names.useCaseType}・${args.method.toUpperCase()} ${plan.fullPath}）
 
-次にすること:
+${plan.warnings.map((warning) => `注意: ${warning}\n`).join("")}次にすること:
   1. ${plan.names.useCaseFile} に処理を書く（入力・出力の型、要るものを Props に足し、register-container.ts の登録にも足す）
   2. ${plan.names.handlerFile} のスキーマ・パス・応答を書く（変えたら pnpm run openapi:generate）
   3. テストを書き足し、pnpm run validate && pnpm run test で確かめる`);
