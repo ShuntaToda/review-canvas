@@ -22,6 +22,9 @@ ruleTester.run("no-ambient-time-or-random", noAmbientTimeOrRandom, {
     'import { Date } from "./my-date"; const D = Date;',
     "Date.UTC(2026, 0, 1);",
     "value instanceof Date;",
+    "value.constructor === Date;",
+    "const f = (now: unknown) => (now as Date).getTime();",
+    "type Clock = typeof Date; const f = (v: Date): Clock | Date => v;",
     'new Intl.DateTimeFormat("ja-JP").format(now);',
     "formatter.format();",
   ],
@@ -71,6 +74,23 @@ ruleTester.run("no-ambient-time-or-random", noAmbientTimeOrRandom, {
       "const read = Date[key];",
       "let D; D = Date;",
     ].map((code) => ({ code, errors: [{ messageId: "reference" }] })),
+    // 型のアサーションで包んでも同じ
+    ...[
+      "(Date as { now(): number }).now();",
+      "(Date satisfies DateConstructor).now();",
+      "new (Date as DateConstructor)();",
+      "Date!.now();",
+      "new Date(...[]);",
+      "new Date(...parts);",
+    ].map((code) => ({ code, errors: [{ messageId: "time" }] })),
+    {
+      code: "(Math as Math)['random']();",
+      errors: [{ messageId: "random" }],
+    },
+    {
+      code: "const D = Date as unknown;",
+      errors: [{ messageId: "reference" }],
+    },
     {
       code: "Intl.DateTimeFormat().format();",
       errors: [{ messageId: "time" }],
@@ -96,6 +116,11 @@ typedRuleTester.run(
         filename: TYPED_FILENAME,
         code: 'const f = new Intl.NumberFormat("ja-JP"); export const text = f.format(1);',
       },
+      // Date でないものの同じ名前のメンバー・場所で変わらないメンバーは見ない
+      {
+        filename: TYPED_FILENAME,
+        code: "export const f = (count: number, now: Date) => [count.toLocaleString(), now.toISOString(), now.getTime()];",
+      },
     ],
     invalid: [
       {
@@ -103,6 +128,16 @@ typedRuleTester.run(
         code: 'const f = new Intl.DateTimeFormat("ja-JP"); export const text = f.format();',
         errors: [{ messageId: "time" }],
       },
+      ...[
+        "now.getTimezoneOffset()",
+        "now.toLocaleString()",
+        'now.toLocaleDateString("ja-JP")',
+        "now.toLocaleTimeString()",
+      ].map((code) => ({
+        filename: TYPED_FILENAME,
+        code: `export const f = (now: Date) => ${code};`,
+        errors: [{ messageId: "environment" }],
+      })),
     ],
   },
 );

@@ -115,6 +115,11 @@ typedRuleTester.run("app-error（型で見る）", appError, {
     // 受け取ったもの（unknown）を投げ直すのは見ない
     typed("try { JSON.parse(''); } catch (error) { throw error; }"),
     typed("const f = (e: unknown) => { throw e; };"),
+    // catch で受けたものは、型を絞ったあとでも投げ直せる
+    typed(
+      "try { JSON.parse(''); } catch (e) { if (e instanceof Error) throw e; }",
+    ),
+    typed("try { JSON.parse(''); } catch (e) { throw e as Error; }"),
     // Promise でないものの reject は見ない
     typed(
       "const queue = { reject: (e: Error) => e }; queue.reject(new Error());",
@@ -133,11 +138,33 @@ typedRuleTester.run("app-error（型で見る）", appError, {
     typed("globalThis.Promise.reject(new Error());"),
     typed("const P = Promise; P.reject(new Error());"),
     typed("const { Error: E } = globalThis; throw new E();"),
+    // 型のアサーションで包んでも、中の値で見る
+    typed("const err = new Error(); throw err as NotFoundError;"),
+    typed("const err = new Error(); throw (err satisfies Error);"),
+    // ライブラリのエラー
+    typed(
+      'import { HTTPException } from "hono/http-exception"; throw new HTTPException(418);',
+    ),
+    typed('import { z } from "zod"; throw new z.ZodError([]);'),
+    // 基底そのもの（presenter がステータスを決められない）
+    typed('throw new AppError("x");'),
     typed("const make = (): Error => new NotFoundError(); throw make();"),
     typed("const f = (e: NotFoundError | RangeError) => { throw e; };"),
   ]
     .map((test) => ({ ...test, errors: [{ messageId: "plainThrow" }] }))
     .concat([
+      {
+        ...typed(
+          "const identity = <T>(value: T): T => value; class Wrapped extends identity(Error) {}",
+        ),
+        errors: [{ messageId: "extendsError" }],
+      },
+      {
+        ...typed(
+          'import { HTTPException } from "hono/http-exception"; class Teapot extends HTTPException { override name = "Teapot"; }',
+        ),
+        errors: [{ messageId: "extendsError" }],
+      },
       {
         ...typed(
           'import * as errors from "./errors"; class A extends errors.NotFoundError {}',

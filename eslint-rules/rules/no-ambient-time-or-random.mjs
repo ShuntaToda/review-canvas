@@ -1,3 +1,13 @@
+import { outermost, propertyNameOf, unwrap } from "../ast-util.mjs";
+
+/** 動かす場所のタイムゾーン・ロケールで結果が変わる Date のメンバー（実行環境は UTC、手元は別のタイムゾーン） */
+const ENVIRONMENT_MEMBERS = [
+  "getTimezoneOffset",
+  "toLocaleString",
+  "toLocaleDateString",
+  "toLocaleTimeString",
+];
+
 /** その場で今の時刻・乱数を返すもの（オブジェクトの名前 → メンバーの名前 → 種類） */
 const AMBIENT_MEMBERS = {
   Date: { now: "time" },
@@ -14,28 +24,15 @@ const AMBIENT_OBJECTS = {
 };
 const GLOBAL_OBJECTS = ["globalThis", "window", "self", "global"];
 
-/** メンバーの名前（`a.b`・`a["b"]`・`a[`b`]`）。計算しないと決まらないものは null */
-const propertyNameOf = (node) => {
-  if (!node.computed) {
-    return node.property.type === "Identifier" ? node.property.name : null;
-  }
-  if (node.property.type === "Literal") return String(node.property.value);
-  if (
-    node.property.type === "TemplateLiteral" &&
-    node.property.expressions.length === 0
-  ) {
-    return node.property.quasis[0].value.cooked;
-  }
-  return null;
-};
-
 /** `Date`・`globalThis.Date` のような式から、グローバルの名前を取り出す */
-const globalNameOf = (node) => {
+const globalNameOf = (wrapped) => {
+  const node = unwrap(wrapped);
   if (node.type === "Identifier") return node.name;
+  const object = node.type === "MemberExpression" ? unwrap(node.object) : null;
   if (
-    node.type === "MemberExpression" &&
-    node.object.type === "Identifier" &&
-    GLOBAL_OBJECTS.includes(node.object.name)
+    object !== null &&
+    object.type === "Identifier" &&
+    GLOBAL_OBJECTS.includes(object.name)
   ) {
     return propertyNameOf(node);
   }
@@ -57,6 +54,8 @@ export const noAmbientTimeOrRandom = {
     messages: {
       reference:
         "{{name}} を値として持ち回りません（別名・引数・Reflect などを通すと、今の時刻・乱数を取っても見つけられません）。使えるのは、引数ありの `new Date(値)` と、`Date.UTC(…)`・`Math.max(…)` のように名前を直に書いたメンバーだけです。今の時刻は `fetchNow: FetchNow`、ID・乱数は `generateId: GenerateId` を props・引数で受けてください。",
+      environment:
+        "{{name}} は、動かす場所のタイムゾーン・ロケールで結果が変わります（Lambda は UTC、手元は別のタイムゾーン）。日時の計算・整形は @/util/date-util の関数（タイムゾーンを明示する）を使ってください。無ければそこに足します。",
       time: "ここでは今の時刻を直に取りません（{{code}}）。use-case は props の `fetchNow: FetchNow`（@/domain/support/fetch-now）を呼び、domain の関数は `now: Date` を引数で受けてください。テストでは buildFetchNowDummy で固定できます。",
       random:
         "ここでは乱数・ID を直に作りません（{{code}}）。use-case は props の `generateId: GenerateId`（@/domain/support/generate-id）を呼び、domain の関数は作った値を引数で受けてください。",
@@ -81,9 +80,11 @@ export const noAmbientTimeOrRandom = {
     /**
      * Date・Math・crypto・performance を指す式（Date・globalThis.Date）が、決まった使い方の外にあれば知らせる。
      * 決まった使い方: 名前を直に書いたメンバー（`Date.UTC`。今の時刻・乱数のメンバーは下の MemberExpression が見る）、
-     * `new Date(…)`・`Date(…)`（引数なしは下で見る）、`x instanceof Date`、分割代入の右辺
+     * `new Date(…)`・`Date(…)`（引数なしは下で見る）、`x instanceof Date`・`v.constructor === Date`（比べるだけ）、分割代入の右辺
      */
-    const checkReference = (node, name) => {
+    const checkReference = (inner, name) => {
+      // (Date as X).now() のように包んであれば、包みの外で使い方を見る
+      const node = outermost(inner);
       const { parent } = node;
       if (
         parent.type === "MemberExpression" &&
@@ -104,9 +105,9 @@ export const noAmbientTimeOrRandom = {
         name === "Date" &&
         ((parent.type === "NewExpression" && parent.callee === node) ||
           (parent.type === "CallExpression" && parent.callee === node) ||
+          // x instanceof Date・v.constructor === Date（比べるだけ）
           (parent.type === "BinaryExpression" &&
-            parent.operator === "instanceof" &&
-            parent.right === node))
+            ["instanceof", "===", "!==", "==", "!="].includes(parent.operator)))
       ) {
         return;
       }
@@ -136,39 +137,46 @@ export const noAmbientTimeOrRandom = {
       // 型の位置（`now: Date`）は Identifier でも値の参照ではない。値の参照だけを見る
       Identifier(node) {
         if (!Object.hasOwn(AMBIENT_OBJECTS, node.name)) return;
-        const { parent } = node;
+        // 型の包み（as・satisfies・!）の中は値。包みを外へたどってから、置かれた場所を見る
+        const { parent } = outermost(node);
+        const own = outermost(node);
         const isValueReference =
+          // 本当の型の位置（now: Date・typeof Date・implements など）
           !parent.type.startsWith("TS") &&
           !(
             parent.type === "MemberExpression" &&
-            parent.property === node &&
+            parent.property === own &&
             !parent.computed
           ) &&
           !(
             parent.type === "Property" &&
-            parent.key === node &&
+            parent.key === own &&
             !parent.computed
           ) &&
           !(
             (parent.type === "PropertyDefinition" ||
               parent.type === "MethodDefinition") &&
-            parent.key === node &&
+            parent.key === own &&
             !parent.computed
           ) &&
-          !(parent.type === "VariableDeclarator" && parent.id === node) &&
+          !(parent.type === "VariableDeclarator" && parent.id === own) &&
           !parent.type.startsWith("Import") &&
           !parent.type.startsWith("Export") &&
           !(
             /Function/.test(parent.type) &&
-            (parent.params.includes(node) || parent.id === node)
+            (parent.params.includes(own) || parent.id === own)
           );
         if (isValueReference && isGlobal(node)) checkReference(node, node.name);
       },
       // new Date()（引数なし）と Date()（文字列で今の時刻を返す）
       NewExpression(node) {
+        // 引数なしと、展開した引数（new Date(...[]) は引数なしと同じになりうる）
         if (
           globalNameOf(node.callee) === "Date" &&
-          node.arguments.length === 0
+          (node.arguments.length === 0 ||
+            node.arguments.some(
+              (argument) => argument.type === "SpreadElement",
+            ))
         ) {
           context.report({
             node,
@@ -183,7 +191,7 @@ export const noAmbientTimeOrRandom = {
           return;
         }
         // Intl.DateTimeFormat(…).format()（引数なしは、今の時刻を整形する）
-        const { callee } = node;
+        const callee = unwrap(node.callee);
         if (
           callee.type === "MemberExpression" &&
           ["format", "formatToParts"].includes(propertyNameOf(callee) ?? "") &&
@@ -202,9 +210,10 @@ export const noAmbientTimeOrRandom = {
       // Date.now・Math["random"]・globalThis.crypto.randomUUID（呼ばずに取り出すだけでも）
       MemberExpression(node) {
         // globalThis.Date のように取り出したものも、Date と同じに扱う
+        const object = unwrap(node.object);
         if (
-          node.object.type === "Identifier" &&
-          GLOBAL_OBJECTS.includes(node.object.name)
+          object.type === "Identifier" &&
+          GLOBAL_OBJECTS.includes(object.name)
         ) {
           const name = propertyNameOf(node);
           if (name !== null && Object.hasOwn(AMBIENT_OBJECTS, name)) {
@@ -213,6 +222,20 @@ export const noAmbientTimeOrRandom = {
         }
         const objectName = globalNameOf(node.object);
         const propertyName = propertyNameOf(node);
+        // Date の値の、場所で結果が変わるメンバー（型情報があるときだけ）
+        if (
+          program !== null &&
+          propertyName !== null &&
+          ENVIRONMENT_MEMBERS.includes(propertyName) &&
+          services.getTypeAtLocation(node.object).getSymbol()?.getName() ===
+            "Date"
+        ) {
+          context.report({
+            node,
+            messageId: "environment",
+            data: { name: propertyName },
+          });
+        }
         if (objectName === null || propertyName === null) return;
         const kind = Object.hasOwn(AMBIENT_MEMBERS, objectName)
           ? AMBIENT_MEMBERS[objectName][propertyName]

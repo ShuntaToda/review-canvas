@@ -52,6 +52,10 @@ export const someTypeInChain = (type, matches) => {
     seen.add(current);
     if (current.isUnionOrIntersection()) return current.types.some(visit);
     if (matches(current)) return true;
+    // 型引数つきの型（ZodError<T> など）は、もとの宣言（target）が親を持つ
+    if (current.target != null && current.target !== current) {
+      return visit(current.target);
+    }
     return (current.getBaseTypes?.() ?? []).some(visit);
   };
   return visit(type);

@@ -1,3 +1,5 @@
+import { someTypeInChain, unwrap } from "../ast-util.mjs";
+
 /** 組み込みのエラー。どれを投げても presenter は種類を見分けられず、500 になる */
 const BUILTIN_ERRORS = [
   "Error",
@@ -45,9 +47,9 @@ export const appError = {
     ],
     messages: {
       plainThrow:
-        "組み込みのエラー（{{name}}）は投げません（どれも 500 になり、画面が種類を見分けられません）。@/util/error-util の InvalidError・NotFoundError・ConflictError など、または domain のエラー（例: CommentNotFoundError）を投げてください。合うものが無ければ、domain に AppError の派生を足します。",
+        "AppError の派生でないエラー（{{name}}）は投げません（組み込み・ライブラリのエラーも AppError そのものも 500 になり、画面が種類を見分けられません）。@/util/error-util の InvalidError・NotFoundError・ConflictError など、または domain のエラー（例: CommentNotFoundError）を投げてください。合うものが無ければ、domain に AppError の派生を足します。catch で受けたものをそのまま投げ直すのは構いません。",
       extendsError:
-        "エラーのクラス {{className}} は組み込みのエラー（{{name}}）を直に継承しません。@/util/error-util の派生（InvalidError=400・AuthenticationError=401・ForbiddenError=403・NotFoundError=404・ConflictError=409 など）を継承してください。ステータスは presenter がその親から決めます。",
+        "エラーのクラス {{className}} は AppError の派生でないエラー（{{name}}）を継承しません。@/util/error-util の派生（InvalidError=400・AuthenticationError=401・ForbiddenError=403・NotFoundError=404・ConflictError=409 など）を継承してください。ステータスは presenter がその親から決めます。",
       missingName:
         'エラーのクラス {{className}} に `override name = "{{className}}";` を書いてください。無いと、API の応答の error が親の名前のままになります。',
     },
@@ -61,30 +63,50 @@ export const appError = {
     const services = sourceCode.parserServices;
     const program = services?.program ?? null;
 
-    /** 式の型が組み込みのエラー（TypeScript の標準の型定義にある Error・TypeError など）なら、その名前 */
-    const builtinTypeNameOf = (node) => {
-      if (program === null) return null;
-      const partsOf = (type) =>
-        type.isUnionOrIntersection() ? type.types.flatMap(partsOf) : [type];
-      for (const part of partsOf(services.getTypeAtLocation(node))) {
-        const symbol = part.getSymbol();
-        if (
-          symbol === undefined ||
-          !BUILTIN_ERRORS.includes(symbol.getName())
-        ) {
-          continue;
-        }
-        const declarations = symbol.getDeclarations() ?? [];
-        if (
-          declarations.some((declaration) =>
-            program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
-          )
-        ) {
-          return symbol.getName();
-        }
-      }
-      return null;
+    const isLibError = (type) => {
+      const symbol = type.getSymbol();
+      return (
+        symbol?.getName() === "Error" &&
+        (symbol.getDeclarations() ?? []).some((declaration) =>
+          program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+        )
+      );
     };
+    const isAppError = (type) => type.getSymbol()?.getName() === "AppError";
+
+    /**
+     * 型が「Error だが AppError の派生ではない」（組み込み・ライブラリのエラー）なら、その名前。
+     * 親の型をたどって標準の型定義の Error に行き着き、途中に AppError が無いものを指す。
+     * AppError そのもの（基底）も、presenter がステータスを決められず 500 になるので同じに扱う
+     */
+    const nonAppErrorNameOfType = (type) => {
+      if (type.isUnion()) {
+        for (const part of type.types) {
+          const name = nonAppErrorNameOfType(part);
+          if (name !== null) return name;
+        }
+        return null;
+      }
+      if (!someTypeInChain(type, isLibError)) return null;
+      if (!type.isIntersection() && isAppError(type)) return "AppError";
+      if (someTypeInChain(type, isAppError)) return null;
+      const parts = type.isIntersection() ? type.types : [type];
+      return (
+        parts.map((part) => part.getSymbol()?.getName()).find(Boolean) ??
+        "Error"
+      );
+    };
+
+    /** 式の型で見て、AppError の派生でないエラーなら、その名前 */
+    const nonAppErrorNameOf = (node) =>
+      program === null
+        ? null
+        : nonAppErrorNameOfType(services.getTypeAtLocation(node));
+
+    /** catch で受けた値（catch (error) の error）か。受けたものの投げ直しは、型を絞ったあとでも見ない */
+    const isCaught = (node) =>
+      node.type === "Identifier" &&
+      variableOf(node)?.defs[0]?.type === "CatchClause";
 
     /** 名前を宣言している変数（無ければ null） */
     const variableOf = (identifier) => {
@@ -170,10 +192,13 @@ export const appError = {
         ? builtinNameOf(thrown.callee)
         : null;
 
-    const reportThrown = (thrown) => {
+    const reportThrown = (wrapped) => {
       if (allowThrowPlainError) return;
-      if (thrown == null) return;
-      const name = thrownBuiltinNameOf(thrown) ?? builtinTypeNameOf(thrown);
+      if (wrapped == null) return;
+      // `throw err as AppError` のように包んでも、中の値で見る
+      const thrown = unwrap(wrapped);
+      if (isCaught(thrown)) return;
+      const name = thrownBuiltinNameOf(thrown) ?? nonAppErrorNameOf(thrown);
       if (name !== null) {
         context.report({
           node: thrown,
@@ -183,23 +208,14 @@ export const appError = {
       }
     };
 
-    /** 型情報で見て、クラスの親をたどると組み込みの Error に行き着くか（親の名前が Error で終わらないとき） */
-    const extendsErrorByType = (node) => {
-      if (program === null) return false;
+    /** 型情報で見た、クラスの親（extends の式が作るインスタンス）の型。分からなければ空 */
+    const superInstanceTypesOf = (node) => {
+      if (program === null) return [];
       const checker = program.getTypeChecker();
-      const seen = new Set();
-      const reachesError = (type) => {
-        if (seen.has(type)) return false;
-        seen.add(type);
-        if (type.getSymbol()?.getName() === "Error") return true;
-        return (type.getBaseTypes?.() ?? []).some(reachesError);
-      };
-      const constructorType = services.getTypeAtLocation(node.superClass);
-      return constructorType
+      return services
+        .getTypeAtLocation(node.superClass)
         .getConstructSignatures()
-        .some((signature) =>
-          reachesError(checker.getReturnTypeOfSignature(signature)),
-        );
+        .map((signature) => checker.getReturnTypeOfSignature(signature));
     };
 
     const checkClass = (node) => {
@@ -214,6 +230,22 @@ export const appError = {
         });
         return;
       }
+      // 親が、AppError の派生でないエラー（ライブラリのエラー・`identity(Error)` のように式で包んだ Error）
+      const superTypes = superInstanceTypesOf(node);
+      const foreign = superTypes
+        .map(nonAppErrorNameOfType)
+        .find((name) => name !== null && name !== "AppError");
+      if (foreign !== undefined) {
+        context.report({
+          node: node.superClass,
+          messageId: "extendsError",
+          data: { className, name: foreign },
+        });
+        return;
+      }
+      const extendsErrorByType = superTypes.some((type) =>
+        someTypeInChain(type, isLibError),
+      );
       // 名前空間から継承する形（extends errors.NotFoundError）も、後ろの名前で見る
       const superName =
         node.superClass.type === "Identifier"
@@ -222,7 +254,7 @@ export const appError = {
               node.superClass.property.type === "Identifier"
             ? node.superClass.property.name
             : "";
-      if (!superName.endsWith("Error") && !extendsErrorByType(node)) return;
+      if (!superName.endsWith("Error") && !extendsErrorByType) return;
       const hasName = node.body.body.some(
         (member) =>
           member.type === "PropertyDefinition" &&
