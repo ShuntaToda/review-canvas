@@ -52,7 +52,7 @@ export const honoRoutes = {
       destructure:
         "Hono のアプリ・ルーターから {{name}} を取り出しません（取り出すと、ルートの足し方の確かめから外れます）。ルートは router.openapi(…) で足してください。",
       useArgument:
-        "use(…) に渡せるのは、パスと、middleware/ の build<名前>Middleware(…) の呼び出し{{extra}}だけです。関数を直に書く・変数に入れた関数を渡すと、認証を通らずに応答を返すルートになりえます。ミドルウェアは api/handler/api/middleware/<名前>-middleware.ts に build<名前>Middleware として置き、応答を返す処理はルート（router.openapi）に書いてください。",
+        "use(…) に渡せるのは、パスと、middleware/ の build<名前>Middleware(…) の呼び出し{{extra}}だけです。関数を直に書く・変数に入れた関数を渡すと、認証を通らずに応答を返すルートになりえます。ミドルウェアは api/handler/api/middleware/handle-<名前>-middleware.ts に build<名前>Middleware として置き、応答を返す処理はルート（router.openapi）に書いてください。",
     },
   },
   create(context) {

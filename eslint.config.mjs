@@ -64,8 +64,9 @@ const packageBoundaries = [
   })),
   {
     module: "hono/factory",
-    allowedIn: ["api/handler/api/middleware/"],
-    hint: "ミドルウェア（createMiddleware）は api/handler/api/middleware/<名前>-middleware.ts に build<名前>Middleware として置いてください（応答を返さない決まりと、use に渡せるものの確かめが掛かります）。",
+    // テストは、確かめたい状態を作るミドルウェアを組み立てる
+    allowedIn: ["api/handler/api/middleware/", "*.small.test.ts"],
+    hint: "ミドルウェア（createMiddleware）は api/handler/api/middleware/handle-<名前>-middleware.ts に build<名前>Middleware として置いてください（応答を返さない決まりと、use に渡せるものの確かめが掛かります）。",
   },
   {
     module: "@hono/node-server",
