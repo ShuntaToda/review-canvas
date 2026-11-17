@@ -1,5 +1,7 @@
 import { appError } from "./rules/app-error.mjs";
 import { handlerShape } from "./rules/handler-shape.mjs";
+import { honoRoutes } from "./rules/hono-routes.mjs";
+import { middlewareNoResponse } from "./rules/middleware-no-response.mjs";
 import { noAmbientTimeOrRandom } from "./rules/no-ambient-time-or-random.mjs";
 import { noExternalImports } from "./rules/no-external-imports.mjs";
 import { packageBoundaries } from "./rules/package-boundaries.mjs";
@@ -14,6 +16,8 @@ export const localRules = {
   rules: {
     "app-error": appError,
     "handler-shape": handlerShape,
+    "hono-routes": honoRoutes,
+    "middleware-no-response": middlewareNoResponse,
     "no-ambient-time-or-random": noAmbientTimeOrRandom,
     "no-external-imports": noExternalImports,
     "package-boundaries": packageBoundaries,

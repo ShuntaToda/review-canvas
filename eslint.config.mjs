@@ -63,6 +63,11 @@ const packageBoundaries = [
     hint: "HTTP の扱い（リクエスト・レスポンス・ルート）は api/handler に置き、use-case には素の値を渡してください。",
   })),
   {
+    module: "hono/factory",
+    allowedIn: ["api/handler/api/middleware/"],
+    hint: "ミドルウェア（createMiddleware）は api/handler/api/middleware/<名前>-middleware.ts に build<名前>Middleware として置いてください（応答を返さない決まりと、use に渡せるものの確かめが掛かります）。",
+  },
+  {
     module: "@hono/node-server",
     allowedIn: ["api/handler/api/entrypoint/"],
     hint: "Node のサーバーを起こすのは手元の入口（entrypoint/local）だけです。",
@@ -110,54 +115,6 @@ const PRIVATE_KEYWORD = {
     ":matches(PropertyDefinition, MethodDefinition[kind!='constructor'])[accessibility='private']",
   message:
     "クラスの非公開のメンバーは TypeScript の private ではなく #名前 で書いてください（例: `readonly #logger: Logger;`）。実行時にも外から読めなくなります。",
-};
-
-const ROUTE_MESSAGE =
-  "ルートは router.openapi(…) で足してください（`router.openapi(createRoute({...}), handler)` を route/<名前>/<メソッド>-<名前>-handler.ts に書き、同じディレクトリの index.ts から呼ぶ）。get・post・on・route・mount などで直に足すと、openapi.json・画面の型・認証とテストの確かめから外れます。";
-
-/**
- * ルートを足すメンバー呼び出し（router.get(…)・router["post"](…)・app.on(…)・router.mount(…) など）。
- * 名前で見るので、別名（const app = router）にしても掛かる。DI の取り出し（container.get(ID)）と区別するのは形で、
- * 引数が 2 つ以上か、1 つだけの引数が関数の式・文字列（パス）のものを対象にする
- */
-const routeCallOf = (names) => {
-  const pattern = `/^(${names.join("|")})$/`;
-  const callee = `[callee.type='MemberExpression']:matches([callee.computed=false][callee.property.name=${pattern}], [callee.computed=true][callee.property.value=${pattern}], [callee.computed=true][callee.property.type='TemplateLiteral'][callee.property.quasis.0.value.cooked=${pattern}])`;
-  const routeArguments =
-    ":matches([arguments.length>1], [arguments.0.type=/^(ArrowFunctionExpression|FunctionExpression|Literal|TemplateLiteral)$/])";
-  return [
-    {
-      selector: `CallExpression${callee}${routeArguments}`,
-      message: ROUTE_MESSAGE,
-    },
-    // const { get } = router のように取り出すと、上の形から外れる
-    {
-      selector: `VariableDeclarator > ObjectPattern > Property[key.name=${pattern}]`,
-      message: ROUTE_MESSAGE,
-    },
-  ];
-};
-const ROUTE_METHOD_NAMES = [
-  "get",
-  "post",
-  "put",
-  "patch",
-  "delete",
-  "all",
-  "on",
-  "mount",
-  "doc31",
-];
-
-/**
- * ミドルウェア（use）に関数の式を直に書くと、認証を通らずに応答を返すルートになりうる（use は全メソッドのルートとして登録される）。
- * ミドルウェアは middleware/ に build<名前>Middleware として置き、呼び出しの結果を渡す
- */
-const INLINE_MIDDLEWARE = {
-  selector:
-    "CallExpression[callee.type='MemberExpression']:matches([callee.computed=false][callee.property.name='use'], [callee.computed=true][callee.property.value='use'], [callee.computed=true][callee.property.type='TemplateLiteral'][callee.property.quasis.0.value.cooked='use']) > :matches(ArrowFunctionExpression, FunctionExpression)",
-  message:
-    "use(…) に関数を直に書きません。ミドルウェアは api/handler/api/middleware/<名前>-middleware.ts に build<名前>Middleware として置き、`router.use(パス, build<名前>Middleware({ … }))` の形で渡してください。応答を返す処理は、ルート（router.openapi）に書きます。",
 };
 
 /** 環境変数を読む書き方（process.env・globalThis.process）と、process の import */
@@ -437,47 +394,31 @@ export default tseslint.config(
       ],
     },
   },
-  // ルートを足せる場所。ルートは route/ の下のハンドラが router.openapi で足し、app.ts・routes.ts はルーターをマウントするだけ。
+  // ルートとミドルウェアを足せる場所（local/hono-routes。呼ぶ側の型が Hono のときだけ見る）。
+  // ルートは route/ の下のハンドラが router.openapi で足し、ルーター（index.ts）は認証を掛け、routes.ts・app.ts はマウントするだけ。
+  // 入口（entrypoint/lambda・cli）・middleware・hono.ts は、ルートもミドルウェアも足さない（handle(buildApp(…)) の形のまま使う）。
   // 手元のサーバー（entrypoint/local）は、画面と Storybook のファイルを配るルートを自分で持つ（API ではない）ので対象にしない
-  {
-    files: ["api/handler/**/*.ts"],
-    ignores: [
-      "api/handler/api/entrypoint/local/**",
-      "api/handler/api/app.ts",
-      "api/handler/api/routes.ts",
-      "api/**/*.test.ts",
-    ],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        PRIVATE_KEYWORD,
-        INLINE_MIDDLEWARE,
-        ...routeCallOf([...ROUTE_METHOD_NAMES, "route", "doc"]),
-      ],
+  ...[
+    { files: ["api/handler/**/*.ts"], allow: [] },
+    { files: ["api/handler/api/route/**/*-handler.ts"], allow: ["openapi"] },
+    { files: ["api/handler/api/route/*/index.ts"], allow: ["use"] },
+    { files: ["api/handler/api/routes.ts"], allow: ["route"] },
+    // app.ts は、全体に掛けるミドルウェア（CORS・ログ）と、手元でだけ出す OpenAPI の文書（doc）を持つ
+    {
+      files: ["api/handler/api/app.ts"],
+      allow: ["use", "route", "doc"],
+      middleware: ["cors"],
     },
-  },
-  // routes.ts はルーターをマウントする（route）。app.ts はそれに加えて、手元でだけ OpenAPI の文書を出す（doc）
+  ].map(({ files, allow, middleware = [] }) => ({
+    files,
+    ignores: ["api/handler/api/entrypoint/local/**", "api/**/*.test.ts"],
+    rules: { "local/hono-routes": ["error", { allow, middleware }] },
+  })),
+  // ミドルウェアは応答を返さない（use で広く掛かり、OpenAPI にも認証の確かめにも載らないため）
   {
-    files: ["api/handler/api/routes.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        PRIVATE_KEYWORD,
-        INLINE_MIDDLEWARE,
-        ...routeCallOf([...ROUTE_METHOD_NAMES, "doc"]),
-      ],
-    },
-  },
-  {
-    files: ["api/handler/api/app.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        PRIVATE_KEYWORD,
-        INLINE_MIDDLEWARE,
-        ...routeCallOf(ROUTE_METHOD_NAMES),
-      ],
-    },
+    files: ["api/handler/**/middleware/**/*.ts"],
+    ignores: ["api/**/*.test.ts"],
+    rules: { "local/middleware-no-response": "error" },
   },
   // small のテストは外につながない。DynamoDB Local を使うなら medium にする（small だけを Docker なしで回せるように）
   {
