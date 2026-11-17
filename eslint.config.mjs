@@ -248,6 +248,12 @@ export default tseslint.config(
       ],
     },
   },
+  // 値が無いかもしれない所を ! で黙らせない（テストは、作った値を読むだけなので外す）
+  {
+    files: [...apiFiles, ...appFiles],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: { "@typescript-eslint/no-non-null-assertion": "error" },
+  },
   // このリポジトリだけのルール（eslint-rules/）。層ごとのファイルの形・名前・エラーの形
   {
     files: apiFiles,

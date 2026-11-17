@@ -1,4 +1,5 @@
-import { Stack, aws_cloudfront, aws_iam, aws_s3 } from "aws-cdk-lib";
+import type { aws_cloudfront, aws_s3 } from "aws-cdk-lib";
+import { Stack, aws_iam } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { type ReviewCanvasSettings } from "./settings";
 

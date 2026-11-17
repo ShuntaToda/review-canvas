@@ -100,11 +100,16 @@ export const assertReviewerAllowed = (
     return deny("トークンにメールアドレスがありません");
   }
   const email = raw.trim().toLowerCase();
-  const parts = email.split("@");
-  if (parts.length !== 2 || parts[0] === "" || parts[1] === "") {
+  const [local, domain, ...rest] = email.split("@");
+  if (
+    local === undefined ||
+    local === "" ||
+    domain === undefined ||
+    domain === "" ||
+    rest.length > 0
+  ) {
     return deny("メールアドレスの形ではありません");
   }
-  const domain = parts[1]!;
   if (
     !policy.allowedEmails.includes(email) &&
     !policy.allowedEmailDomains.includes(ANY_EMAIL_DOMAIN) &&

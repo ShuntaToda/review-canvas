@@ -116,6 +116,14 @@ export function baseConfig(tsconfigRootDir) {
           },
         ],
         "@typescript-eslint/no-explicit-any": "error",
+        // union を switch で分けるとき、足した値の case の書き忘れを見つける
+        "@typescript-eslint/switch-exhaustiveness-check": [
+          "error",
+          { considerDefaultExhaustiveForUnions: true },
+        ],
+        // 型だけの import は import type にする（実行時に要らない読み込み・循環を作らない）
+        "@typescript-eslint/consistent-type-imports": "error",
+        "no-param-reassign": "error",
         eqeqeq: ["error", "always", { null: "ignore" }],
         "func-style": "error",
         quotes: ["error", "double", { avoidEscape: true }],
