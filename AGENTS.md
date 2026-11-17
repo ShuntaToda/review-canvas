@@ -10,28 +10,70 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `src/` — 画面（React・vite・Tailwind CSS）。`src/features/review/bridge/` は Storybook の iframe に差し込む橋渡し
 - `infra/` — CDK（コンストラクト `ReviewCanvas`・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト
 - `bin/` — CLI（`review-canvas.mjs`）と、AI がコメントを読んで返すための MCP サーバー（`review-canvas-mcp.mjs`。依存を持たない JavaScript。docs/ai.md）
-- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル。`llms.txt` は AI 向けの文書の入口
+- `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形）
+- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル（使う側に写すもの）。`dev-*` はこのリポジトリ自身の開発用のスキル、`.claude/agents/` はレビュー用のサブエージェント、`.claude/hooks/` は編集のたびに検査を返す hook。`llms.txt` は AI 向けの文書の入口
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
 - `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー
 
+どこに何を置くか・足すときの順番は [docs/architecture.md](docs/architecture.md)、なぜこの形かは [docs/adr/](docs/adr/README.md) にあります。API を 1 本足すときは、雛形（`pnpm run new:api`）から始めます。
+
 ## 守ること
+
+下は、道具で縛れない決まりです。道具で縛っている決まりは、その下の表にあります（破ると lint・テスト・CI が落ち、メッセージに直し方が出ます）。
 
 - 生成物を手で直さない: `openapi.json`（`pnpm run openapi:generate`）・`src/generated/`（`pnpm run codegen`）・`review-canvas.config.schema.json`（`pnpm run config:schema`）
 - 設定ファイルの形は `api/infrastructure/config/review-canvas-config.ts`（zod）が正。API・CDK・置くスクリプトはここから読む
 - 使う側に固有の値（組織・リポジトリ・AWS アカウント・Auth0 のテナント・メールのドメイン）を既定値としてコードに書かない。CDK のコンテキスト・環境変数・設定ファイルから受ける
 - 例に使う名前・ドメインは架空のもの（`example.com`・`example.co.jp`・山田 太郎・サンプルのショップ）にする
-- ワークフローの Action はコミットの SHA で固定する。資格情報（`id-token: write`）は AWS を使うジョブにだけ付け、そのジョブで信頼しないブランチのコードを動かさない
+- ワークフローの資格情報（`id-token: write`）は AWS を使うジョブにだけ付け、そのジョブで信頼しないブランチのコードを動かさない
 - スタックの論理 ID・出力の名前・ワークフローの入力・S3 の置き場の形・コメントの項目は、使う側が頼っているので崩さない（docs/development.md「リリースと互換性」）
-- 文書（`docs/` など）を足した・消した・名前を変えたときは、README の「ドキュメント」の表と `llms.txt` の両方を直す
-- コミットのメッセージは日本語で短く 1 行。箇条書き・AI の署名（Co-Authored-By 等）は付けない（lefthook が止める）
+- コミットのメッセージは日本語で短く書く
+- コメントに書くのは「なぜ・出典・外の制約」だけ。道具で縛れる決まりは、コメントではなく道具に移す
+
+## 道具で縛っている決まり
+
+違反したら、メッセージのとおりに直します。`eslint-disable`・ignore・`any`・`!` で黙らせません（どうしても要るときは、`-- 理由` を付けた 1 行だけの disable にし、PR に書く）。決まりを足す・変えるときは [docs/development.md](docs/development.md#道具で縛る決まりを足す)。
+
+| 決まり                                                                                                                                   | 縛っている道具                                                                       | 違反したときのメッセージ（先頭）                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| api の層の import の向き（handler → di-container → infrastructure → use-case → domain）                                                  | eslint `import/no-restricted-paths`                                                  | 「handlerは最外殻です…」「infrastructureを参照できるのは…」                    |
+| 循環 import を作らない                                                                                                                   | eslint `import/no-cycle`                                                             | `Dependency cycle detected`                                                    |
+| domain・use-case・presenter は npm パッケージ・`node:*` を import しない                                                                 | eslint `local/no-external-imports`                                                   | 「domain の層から … は import できません」                                     |
+| npm パッケージを import してよい層（AWS SDK・hono・zod・inversify など）                                                                 | eslint `local/package-boundaries`（表は `eslint.config.mjs` の `packageBoundaries`） | 「… を import してよいのは … だけです」                                        |
+| domain・use-case・presenter で今の時刻・乱数を直に取らない（`FetchNow`・`GenerateId` を受ける）                                          | eslint `local/no-ambient-time-or-random`                                             | 「ここでは今の時刻を直に取りません」                                           |
+| use-case は `<名前>-use-case.ts` に、型 `<名前>UseCase` とクラス `<名前>UseCaseImpl` を 1 つ                                             | eslint `local/use-case-shape`                                                        | 「クラスの名前はファイル名から決めます」ほか                                   |
+| ルートは `<メソッド>-<名前>-handler.ts` に `createRoute` 1 つと `build<名前>Handler` 1 つ。`router.openapi` で足す                       | eslint `local/handler-shape`                                                         | 「ハンドラのファイル名は…」「ルートは router.openapi(…) で足してください」     |
+| 投げるのは `AppError` の派生。エラーのクラスは `name` を持つ                                                                             | eslint `local/app-error`                                                             | 「素の Error は投げません」                                                    |
+| `process.env` を読むのは api/di-container・入口（entrypoint）・infra の bin と scripts だけ                                              | eslint `no-restricted-properties`                                                    | 「環境変数（process.env）を読めるのは…」                                       |
+| api の出力は Logger を通す（入口を除く）                                                                                                 | eslint `no-restricted-globals`                                                       | 「console ではなく Logger…」                                                   |
+| 画面から `fetch`・`localStorage` を直に使わない（`src/support` を通す）                                                                  | eslint `no-restricted-globals`・`no-restricted-properties`                           | 「画面のコードから fetch を直に呼びません」                                    |
+| 画面はサーバー側のパッケージ・`api/` を import しない。feature の中は入口（`index.ts`）から                                              | eslint `no-restricted-imports`・`import/no-restricted-paths`                         | 「サーバー側のパッケージ…は、画面（src/）から import できません」              |
+| ファイル名（api は kebab-case、コンポーネントは `PascalCase.tsx`、フックは `useXxx.ts`、route・middleware の置けるもの）                 | eslint `check-file/*`                                                                | 「api のファイル名は kebab-case…」ほか                                         |
+| テストは `*.small.test.ts`（外につながない）か `*.medium.test.ts`（DynamoDB Local）                                                      | eslint `check-file/filename-blocklist`・`no-restricted-imports`                      | 「テストのファイル名は…」「DynamoDB Local を使うテストは *.medium.test.ts に」 |
+| `eslint-disable` には理由（`-- 理由`）。効いていない disable・ルールを挙げない disable は不可                                            | eslint `@eslint-community/eslint-comments/*`・`reportUnusedDisableDirectives`        | `Unexpected undescribed directive comment`                                     |
+| `any`・`!`（テストの外）・`private`（`#名前` にする）を使わない。union の switch は網羅する                                              | eslint `@typescript-eslint/*`・`no-restricted-syntax`                                | 各ルールのメッセージ                                                           |
+| ユースケースごとに small テスト・`service-id.ts` の ID・DI の登録がある                                                                  | テスト `api/architecture.small.test.ts`                                              | テストの題（「… に small のテストがある（無ければ…を足す）」）                 |
+| ルートはルーターから呼ばれ、OpenAPI に載り、`security` を持ち、トークン無しで 401 を返し、`describe("<メソッド> <パス>")` のテストがある | テスト `api/architecture.small.test.ts`                                              | テストの題                                                                     |
+| MCP サーバーが呼ぶ API は `openapi.json` にある                                                                                          | テスト `bin/review-canvas-mcp-contract.small.test.mjs`                               | テストの題                                                                     |
+| ワークフローの Action はコミットの SHA で固定。依存は exact。docs/ の文書は README の表と `llms.txt` に載せる                            | テスト `scripts/repo-rules.small.test.mjs`                                           | テストの題                                                                     |
+| 使っていない export・ファイル・依存を残さない                                                                                            | `knip`（`pnpm run validate:knip`）                                                   | `Unused files`・`Unused exports` など                                          |
+| 型の厳しさ（`@tsconfig/strictest`。infra は `exactOptionalPropertyTypes` を除く）                                                        | `tsc`（`pnpm run validate:tsc`・`infra:validate`）                                   | TypeScript のエラー                                                            |
+| `openapi.json`・設定の JSON Schema は、コードから作ったものと同じ                                                                        | `pnpm run openapi:check`・`validate:schema`                                          | 差分が出る（作り直す）                                                         |
+| 層ごとのカバレッジの下限                                                                                                                 | `pnpm run test:coverage`（`vitest.config.ts` の `thresholds`）                       | `Coverage for … does not meet … threshold`                                     |
+| 雛形（`new:api`）で作った直後の状態が検査を通る                                                                                          | CI の `scaffold` ジョブ                                                              | 上のどれかが落ちる                                                             |
+| デプロイ先のビルドに擬似ログインを入れない                                                                                               | `pnpm run check:deployed-bundle`                                                     | 終了コード 1                                                                   |
+| コミットのメッセージは 1 行・AI の署名なし                                                                                               | lefthook `commit-msg`                                                                | 「コミットメッセージは 1 行にしてください」                                    |
+
+Claude Code では、編集のたびにそのファイルの eslint・prettier が、手を止める前に tsc が動き、違反が返ります（`.claude/settings.json` の hook）。
 
 ## 確かめる
 
 ```bash
 pnpm install
-pnpm run validate        # eslint・prettier・tsc・cspell・JSON Schema
+pnpm run validate        # eslint・prettier・tsc・cspell・knip・JSON Schema
+pnpm run test:small      # 外につながないテストだけ（Docker なし）
 pnpm run docker:up       # medium テストの DynamoDB Local
-pnpm run test
+pnpm run test:coverage   # すべてのテストと、層ごとのカバレッジの下限
 pnpm run openapi:check
 pnpm run infra:validate && pnpm run infra:test
 pnpm run build && pnpm run build:bridge && pnpm run build:deployed && pnpm run check:deployed-bundle

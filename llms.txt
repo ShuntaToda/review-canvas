@@ -29,5 +29,7 @@ AI がこのリポジトリを扱うときの入口です。
 
 - [docs/security.md](docs/security.md): セキュリティの考え方（別のオリジン・ログイン・AI からの書き込みの扱い）
 - [docs/development.md](docs/development.md): 層分け・テスト・検証・リリースと互換性
+- [docs/architecture.md](docs/architecture.md): 層ごとの置き場・やってはいけないことと縛っている道具・API や画面の機能、コメントの項目を足すときの順番
+- [docs/adr/README.md](docs/adr/README.md): 決定の記録（なぜこの形か）
 - [AGENTS.md](AGENTS.md): コーディングエージェント向けの約束
 - [docs/design-screenshots.md](docs/design-screenshots.md): 設計メモ（コメントにスクリーンショットを残す。まだ作っていない）
