@@ -77,6 +77,12 @@ export const parseArgs = (argv) => {
       `--path は / で始まるパスを指定してください（例: --path /count）`,
     );
   }
+  // Hono の書き方（/items/:id）をそのまま通すと、openapi.json に /items/:id というパスが載る
+  if (routePath !== undefined && /[:*]/.test(routePath)) {
+    throw new Error(
+      `--path のパラメータは {名前} の形で書いてください（例: --path '/items/{itemId}'。:itemId・* は使えません）: ${routePath}`,
+    );
+  }
   return {
     method,
     routeDir,
@@ -375,12 +381,30 @@ export const planNewApi = (args, read) => {
       `${args.method.toUpperCase()} ${fullPath} は、すでにある ${shadowing.join("・")} に先に受けられて呼ばれません（別のルーターのルートなので、順番を自動では直せません）。別のパスを --path で指定するか、手で登録の順番を直してください`,
     );
   }
+  // 逆向き: 足すルートがパラメータを持ち、すでにある固定のパスを隠す場合。同じルーターのルートは先に登録されているので隠れない。
+  // 別のルーターのルートは、マウントの順番しだいで呼ばれなくなる
+  const hidden = existing.filter(
+    (routePath) =>
+      shadows(fullPath, routePath) &&
+      !siblings.some(
+        (sibling) =>
+          sibling.method === args.method &&
+          shapeOf(sibling.fullPath) === shapeOf(routePath),
+      ),
+  );
+  if (hidden.length > 0) {
+    throw new Error(
+      `${args.method.toUpperCase()} ${fullPath} を足すと、別のルーターにある ${hidden.join("・")} への要求を先に受けてしまうおそれがあります（パラメータは何にでも合います）。別のパスを --path で指定するか、隠れる側のルートをこのルーターへ移してください`,
+    );
+  }
   const sample = siblings[0]?.text;
   const tag =
     /tags: \["([^"]+)"\]/.exec(sample ?? "")?.[1] ?? pascalOf(args.routeDir);
 
   const guardsAll = router.includes('router.use("*"');
-  const call = `${guardsAll ? "" : `  router.use("${honoPathOf(args.routePath)}", buildAuthMiddleware({ container }));\n`}  ${n.buildHandler}({ router, container });\n`;
+  // 認証を経路ごとに付けるルーターでは、その経路の認証も足す（同じ経路の認証がすでにあれば足さない）
+  const useLine = `  router.use("${honoPathOf(args.routePath)}", buildAuthMiddleware({ container }));\n`;
+  const call = `${guardsAll || router.includes(useLine) ? "" : useLine}  ${n.buildHandler}({ router, container });\n`;
   // 隠すルートのうち、ルーターで最初に登録しているものの前に差し込む（無ければ最後に足す）
   const firstShadowing = shadowingSiblings
     .map((sibling) => ({
@@ -393,10 +417,26 @@ export const planNewApi = (args, read) => {
       `${n.routerFile} に ${firstShadowing.build}({ … }) の呼び出しが見つからず、その前に差し込めません（${args.method.toUpperCase()} ${fullPath} は、後ろに足すと呼ばれません）。ファイルの形が変わったなら scripts/new-api.mjs を合わせて直してください`,
     );
   }
-  const routerWithCall =
+  // 隠す側のハンドラの直前に、その経路の認証（router.use）が並んでいれば、その前に入れる（認証とハンドラの組を崩さない）
+  const insertIndexOf = (index) => {
+    const before = router.slice(0, index).split("\n");
+    // 最後の要素は、index の行の行頭までの空文字
+    let line = before.length - 2;
+    let offset = index;
+    while (line >= 0 && /^\s*router\.use\(/.test(before[line])) {
+      offset -= before[line].length + 1;
+      line -= 1;
+    }
+    return offset;
+  };
+  const insertIndex =
     firstShadowing === undefined
+      ? undefined
+      : insertIndexOf(firstShadowing.index);
+  const routerWithCall =
+    insertIndex === undefined
       ? insertBefore(router, "  return router;\n", `${call}\n`, n.routerFile)
-      : `${router.slice(0, firstShadowing.index)}${call}${router.slice(firstShadowing.index)}`;
+      : `${router.slice(0, insertIndex)}${call}${router.slice(insertIndex)}`;
 
   return {
     names: n,

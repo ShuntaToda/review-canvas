@@ -52,6 +52,8 @@ describe("parseArgs", () => {
     [["get", "x", "y"], /<ルートのディレクトリ>\/<ハンドラの名前>/],
     [["get", "comment/CommentCount", "y"], /kebab-case/],
     [["get", "comment/x", "y", "--path", "count"], /\/ で始まる/],
+    [["get", "comment/x", "y", "--path", "/items/:id"], /\{名前\} の形で/],
+    [["get", "comment/x", "y", "--path", "/items/*"], /\{名前\} の形で/],
   ])("[異常系]%j は、直し方の分かる文で弾く", (argv, message) => {
     expect(() => parseArgs(argv)).toThrow(message);
   });
@@ -177,6 +179,96 @@ describe("planNewApi", () => {
     );
     expect(router.indexOf("buildGetThreadsHandler({")).toBeLessThan(
       router.indexOf("buildGetZzScaffoldProbeHandler({"),
+    );
+  });
+
+  // 今のリポジトリのルーターでは起きない並びを、仮のファイルで確かめる
+  const fakeRead = (files) => (file) => files[file] ?? read(file);
+  const metaRouterFile = "api/handler/api/route/meta/index.ts";
+  const fakeHandler = (method, routePath) =>
+    `createRoute({\n  method: "${method}",\n  path: "${routePath}",\n});`;
+
+  test("[正常系]隠す側のハンドラの前に認証（router.use）が並んでいれば、その前に入れる", () => {
+    const files = {
+      [metaRouterFile]: [
+        "export const buildMetaRouter = ({ container }) => {",
+        "  const router = createAuthedHono({ container });",
+        '  router.use("/meta", buildAuthMiddleware({ container }));',
+        "  buildGetMetaHandler({ router, container });",
+        '  router.use("/zz-items/:itemId", buildAuthMiddleware({ container }));',
+        "  buildGetZzItemHandler({ router, container });",
+        "",
+        "  return router;",
+        "};",
+        "",
+      ].join("\n"),
+      "api/handler/api/route/meta/get-zz-item-handler.ts": fakeHandler(
+        "get",
+        "/zz-items/{itemId}",
+      ),
+      "openapi.json": JSON.stringify({
+        paths: { "/api/zz-items/{itemId}": { get: {} } },
+      }),
+    };
+    const plan = planNewApi(
+      {
+        ...args,
+        routeDir: "meta",
+        routePath: "/zz-items/count",
+        handlerFiles: ["api/handler/api/route/meta/get-zz-item-handler.ts"],
+      },
+      fakeRead(files),
+    );
+
+    expect(plan.updated[metaRouterFile]).toContain(
+      [
+        "  buildGetMetaHandler({ router, container });",
+        '  router.use("/zz-items/count", buildAuthMiddleware({ container }));',
+        "  buildGetZzScaffoldProbeHandler({ router, container });",
+        '  router.use("/zz-items/:itemId", buildAuthMiddleware({ container }));',
+        "  buildGetZzItemHandler({ router, container });",
+      ].join("\n"),
+    );
+  });
+
+  test("[正常系]同じ経路の認証がすでにあれば、router.use を足さない", () => {
+    const plan = planNewApi(
+      {
+        ...args,
+        method: "post",
+        routeDir: "meta",
+        routePath: "/meta",
+        handlerFiles: handlerFilesOf("meta"),
+      },
+      read,
+    );
+
+    expect(
+      plan.updated[metaRouterFile].match(/router\.use\("\/meta"/g),
+    ).toHaveLength(1);
+  });
+
+  test("[異常系]足すパラメータのルートが、別のルーターにある固定のパスを隠すなら弾く", () => {
+    const files = {
+      "openapi.json": JSON.stringify({
+        paths: {
+          "/api/comments": { get: {} },
+          "/api/comments/summary": { get: {} },
+        },
+      }),
+    };
+
+    expect(() =>
+      planNewApi(
+        {
+          ...args,
+          routePath: "/{commentId}",
+          handlerFiles: handlerFilesOf("comment"),
+        },
+        fakeRead(files),
+      ),
+    ).toThrow(
+      /GET \/api\/comments\/\{commentId\} を足すと、別のルーターにある \/api\/comments\/summary への要求を先に受けて/,
     );
   });
 
