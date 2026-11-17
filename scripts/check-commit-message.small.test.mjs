@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { problemsOf, withoutEditorComments } from "./check-commit-message.mjs";
+import {
+  commentCharOf,
+  problemsOf,
+  withoutEditorComments,
+} from "./check-commit-message.mjs";
 
 describe("problemsOf", () => {
   test.each([
@@ -87,6 +91,37 @@ describe("withoutEditorComments", () => {
     ).toStrictEqual([]);
   });
 
+  test("[正常系]タブで始まる案内（#<TAB>modified:）・競合の一覧・行末の \\r も除く", () => {
+    expect(
+      problemsOf(
+        withoutEditorComments(
+          [
+            "Merge branch 'feature' into main",
+            "",
+            "# Conflicts:",
+            "#\tapi/a.ts",
+            "#",
+            "# It looks like you may be committing a merge.",
+            "# Changes to be committed:",
+            "#\tmodified:   api/a.ts",
+            "#\tnew file:   api/b.ts",
+            "",
+          ].join("\r\n"),
+        ),
+      ),
+    ).toStrictEqual([]);
+  });
+
+  test("[正常系]コメントの文字を変えていれば（core.commentChar）、その文字の行を除き、# の行は本文として数える", () => {
+    const fileText =
+      "直す\n\n; Please enter the commit message\n;\tmodified: a.ts\n";
+
+    expect(problemsOf(withoutEditorComments(fileText, ";"))).toStrictEqual([]);
+    expect(
+      problemsOf(withoutEditorComments("直す\n\n# 本文\n", ";")).join("\n"),
+    ).toMatch(/1 行に/);
+  });
+
   test.each([
     ["-m で付けた # の本文", "直す\n\n#本文\n"],
     [
@@ -97,5 +132,21 @@ describe("withoutEditorComments", () => {
     expect(problemsOf(withoutEditorComments(fileText)).join("\n")).toMatch(
       /1 行に/,
     );
+  });
+});
+
+describe("commentCharOf", () => {
+  test.each([
+    ["設定なしは #", "直す\n", "", "#"],
+    ["設定した文字", "直す\n", ";", ";"],
+    [
+      "auto は案内の行から読む",
+      "直す\n\n% Please enter the commit message for your changes.\n",
+      "auto",
+      "%",
+    ],
+    ["auto で案内が無ければ #", "直す\n", "auto", "#"],
+  ])("[正常系]%s", (_, fileText, configured, expected) => {
+    expect(commentCharOf(fileText, configured)).toBe(expected);
   });
 });

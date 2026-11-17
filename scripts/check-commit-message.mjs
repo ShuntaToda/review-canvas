@@ -17,19 +17,51 @@ const REVERT_BODY = [
 ];
 
 /** `git commit -v` が付ける切り取り線。ここから後ろは差分で、メッセージではない */
-const SCISSORS = /^# -+ >8 -+$/;
+const SCISSORS = /^\S+ -+ >8 -+$/;
+
+const escapeRegExp = (text) => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * エディタで開いたメッセージのファイルから、git の案内のコメントを除く（コミットには残らない行）。
- * 除くのは「#」だけの行・「# 」で始まる行（git の案内はこの形）と、切り取り線から後ろ。`#123 を直す` のような件名や、
+ * 除くのは、コメントの文字（既定は #）だけの行・その後ろが空白（スペース・タブ）の行と、切り取り線から後ろ。
+ * git の案内は `# On branch …`・`#<TAB>modified: …`・`# Conflicts:` の形で出る。`#123 を直す` のような件名や、
  * `-m "#本文"` で付けた本文は残す（`-m` で渡した行は、# で始まってもコミットに残る）。`-m "# 本文"` は手元では見分けられないが、
  * CI（--range。コミットに残った文面をそのまま見る）が見つける
  */
-export const withoutEditorComments = (fileText) => {
-  const all = fileText.split("\n");
+export const withoutEditorComments = (fileText, commentChar = "#") => {
+  // Windows のエディタが付ける行末の \r は、判定の前に外す
+  const all = fileText.split("\n").map((line) => line.replace(/\r$/, ""));
   const scissors = all.findIndex((line) => SCISSORS.test(line));
   const lines = scissors === -1 ? all : all.slice(0, scissors);
-  return lines.filter((line) => !/^#( |$)/.test(line)).join("\n");
+  const comment = new RegExp(`^${escapeRegExp(commentChar)}(\\s|$)`);
+  return lines.filter((line) => !comment.test(line)).join("\n");
+};
+
+/**
+ * git のコメントの文字（core.commentString・core.commentChar。既定は #）。
+ * auto（メッセージに無い文字を git が選ぶ）のときは、案内の決まった行から読み取る
+ */
+export const commentCharOf = (fileText, configured) => {
+  if (configured !== "" && configured !== "auto") return configured;
+  if (configured === "auto") {
+    const guide = /^(\S+) (?:-+ >8 -+|Please enter the commit message)/m.exec(
+      fileText,
+    );
+    if (guide?.[1] !== undefined) return guide[1];
+  }
+  return "#";
+};
+
+const configuredCommentChar = () => {
+  for (const key of ["core.commentString", "core.commentChar"]) {
+    const result = spawnSync("git", ["config", "--get", key], {
+      encoding: "utf8",
+    });
+    if (result.status === 0 && result.stdout.trim() !== "") {
+      return result.stdout.trim();
+    }
+  }
+  return "";
 };
 
 /** メッセージ（コミットに残る文面）が決まりに合わない点（直し方つき）。合っていれば空 */
@@ -90,8 +122,12 @@ const main = (argv) => {
       "使い方: node scripts/check-commit-message.mjs <メッセージのファイル> | --range <元>..<先>",
     );
   }
+  const fileText = fs.readFileSync(file, "utf8");
   const problems = problemsOf(
-    withoutEditorComments(fs.readFileSync(file, "utf8")),
+    withoutEditorComments(
+      fileText,
+      commentCharOf(fileText, configuredCommentChar()),
+    ),
   );
   if (problems.length > 0) throw new Error(problems.join("\n"));
 };
