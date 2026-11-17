@@ -121,6 +121,25 @@ typedRuleTester.run(
         filename: TYPED_FILENAME,
         code: "export const f = (count: number, now: Date) => [count.toLocaleString(), now.toISOString(), now.getTime()];",
       },
+      // UTC で読む・書くもの
+      {
+        filename: TYPED_FILENAME,
+        code: "export const f = (now: Date) => [now.getUTCFullYear(), now.getUTCDay(), now.setUTCHours(0), new Date(Date.UTC(2026, 0, 1)), new Date(now.getTime())];",
+      },
+      // Date でないものの getDate・toString
+      {
+        filename: TYPED_FILENAME,
+        code: "export const f = (x: { getDate: () => number }, n: number) => [x.getDate(), n.toString()];",
+      },
+      // ロケールとタイムゾーンをその場に書いた整形
+      ...[
+        'now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })',
+        'now.toLocaleDateString(["ja-JP"], { year: "numeric", timeZone: "UTC" })',
+        'now.toLocaleTimeString("en-US", { "timeZone": "UTC" })',
+      ].map((code) => ({
+        filename: TYPED_FILENAME,
+        code: `export const f = (now: Date) => ${code};`,
+      })),
     ],
     invalid: [
       {
@@ -133,10 +152,47 @@ typedRuleTester.run(
         "now.toLocaleString()",
         'now.toLocaleDateString("ja-JP")',
         "now.toLocaleTimeString()",
+        // タイムゾーンかロケールが、その場で決まっていない
+        'now.toLocaleString("ja-JP", { hour12: false })',
+        'now.toLocaleString(undefined, { timeZone: "UTC" })',
+        'now.toLocaleString("ja-JP", options)',
+        'now.toLocaleString("ja-JP", { ...options })',
+        // 呼ばずに取り出す
+        "now.toLocaleString",
+        // 手元のタイムゾーンで読む・書く
+        "now.getFullYear()",
+        "now.getMonth()",
+        "now.getDate()",
+        "now.getDay()",
+        "now.getHours()",
+        "now.getMinutes()",
+        "now.getSeconds()",
+        "now.getMilliseconds()",
+        "now.setFullYear(2026)",
+        "now.setMonth(0)",
+        "now.setDate(1)",
+        "now.setHours(0, 0, 0, 0)",
+        "now.setMinutes(0)",
+        "now.setSeconds(0)",
+        "now.setMilliseconds(0)",
+        'now["getHours"]()',
+        "(now as Date).getHours()",
+        "now.toString()",
+        "now.toDateString()",
+        "now.toTimeString()",
       ].map((code) => ({
         filename: TYPED_FILENAME,
-        code: `export const f = (now: Date) => ${code};`,
+        code: `const options = { timeZone: "UTC" }; export const f = (now: Date) => ${code};`,
         errors: [{ messageId: "environment" }],
+      })),
+      ...[
+        "new Date(2026, 0)",
+        "new Date(2026, 0, 1, 9, 0, 0)",
+        "new globalThis.Date(2026, 0, 1)",
+      ].map((code) => ({
+        filename: TYPED_FILENAME,
+        code: `export const d = ${code};`,
+        errors: [{ messageId: "localConstructor" }],
       })),
     ],
   },

@@ -1,11 +1,29 @@
 import { outermost, propertyNameOf, unwrap } from "../ast-util.mjs";
 
 /** 動かす場所のタイムゾーン・ロケールで結果が変わる Date のメンバー（実行環境は UTC、手元は別のタイムゾーン） */
-const ENVIRONMENT_MEMBERS = [
-  "getTimezoneOffset",
+const LOCALE_MEMBERS = [
   "toLocaleString",
   "toLocaleDateString",
   "toLocaleTimeString",
+];
+const LOCAL_PARTS = [
+  "FullYear",
+  "Month",
+  "Date",
+  "Day",
+  "Hours",
+  "Minutes",
+  "Seconds",
+  "Milliseconds",
+];
+const ENVIRONMENT_MEMBERS = [
+  "getTimezoneOffset",
+  ...LOCALE_MEMBERS,
+  // 手元のタイムゾーンで読む・書くもの（getUTC*・setUTC* は、どこでも同じ結果になるのでよい）
+  ...LOCAL_PARTS.flatMap((part) => [`get${part}`, `set${part}`]),
+  "toString",
+  "toDateString",
+  "toTimeString",
 ];
 
 /** その場で今の時刻・乱数を返すもの（オブジェクトの名前 → メンバーの名前 → 種類） */
@@ -55,7 +73,9 @@ export const noAmbientTimeOrRandom = {
       reference:
         "{{name}} を値として持ち回りません（別名・引数・Reflect などを通すと、今の時刻・乱数を取っても見つけられません）。使えるのは、引数ありの `new Date(値)` と、`Date.UTC(…)`・`Math.max(…)` のように名前を直に書いたメンバーだけです。今の時刻は `fetchNow: FetchNow`、ID・乱数は `generateId: GenerateId` を props・引数で受けてください。",
       environment:
-        "{{name}} は、動かす場所のタイムゾーン・ロケールで結果が変わります（Lambda は UTC、手元は別のタイムゾーン）。日時の計算・整形は @/util/date-util の関数（タイムゾーンを明示する）を使ってください。無ければそこに足します。",
+        "{{name}} は、動かす場所のタイムゾーン・ロケールで結果が変わります（Lambda は UTC、手元は別のタイムゾーン）。UTC で読む・書くなら getUTC*・setUTC*・toISOString、決まったタイムゾーンの計算・整形は @/util/date-util の関数（タイムゾーンを明示する）を使ってください。無ければそこに足します。toLocale*String は、ロケールと `timeZone` をその場に書けば使えます。",
+      localConstructor:
+        "`new Date(年, 月, …)` は、動かす場所のタイムゾーンの日時として読まれます（Lambda は UTC、手元は別のタイムゾーン）。UTC で作るなら `new Date(Date.UTC(年, 月, …))`、決まったタイムゾーンの日時は @/util/date-util の関数を使ってください。無ければそこに足します。",
       time: "ここでは今の時刻を直に取りません（{{code}}）。use-case は props の `fetchNow: FetchNow`（@/domain/support/fetch-now）を呼び、domain の関数は `now: Date` を引数で受けてください。テストでは buildFetchNowDummy で固定できます。",
       random:
         "ここでは乱数・ID を直に作りません（{{code}}）。use-case は props の `generateId: GenerateId`（@/domain/support/generate-id）を呼び、domain の関数は作った値を引数で受けてください。",
@@ -133,6 +153,27 @@ export const noAmbientTimeOrRandom = {
       );
     };
 
+    /** `date.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })` のように、ロケールとタイムゾーンをその場で決めた呼び出しか */
+    const hasExplicitLocaleAndTimeZone = (member) => {
+      const own = outermost(member);
+      const call = own.parent;
+      if (call.type !== "CallExpression" || call.callee !== own) return false;
+      const [locales, options] = call.arguments.map(unwrap);
+      return (
+        locales !== undefined &&
+        (locales.type === "Literal" || locales.type === "ArrayExpression") &&
+        locales.value !== null &&
+        options !== undefined &&
+        options.type === "ObjectExpression" &&
+        options.properties.some(
+          (property) =>
+            property.type === "Property" &&
+            !property.computed &&
+            (property.key.name ?? property.key.value) === "timeZone",
+        )
+      );
+    };
+
     return {
       // 型の位置（`now: Date`）は Identifier でも値の参照ではない。値の参照だけを見る
       Identifier(node) {
@@ -183,6 +224,14 @@ export const noAmbientTimeOrRandom = {
             messageId: "time",
             data: { code: "new Date()" },
           });
+          return;
+        }
+        // new Date(2026, 0, 1)（2 つ以上の引数は、手元のタイムゾーンの年・月・日として読まれる）
+        if (
+          globalNameOf(node.callee) === "Date" &&
+          node.arguments.length >= 2
+        ) {
+          context.report({ node, messageId: "localConstructor" });
         }
       },
       CallExpression(node) {
@@ -228,7 +277,11 @@ export const noAmbientTimeOrRandom = {
           propertyName !== null &&
           ENVIRONMENT_MEMBERS.includes(propertyName) &&
           services.getTypeAtLocation(node.object).getSymbol()?.getName() ===
-            "Date"
+            "Date" &&
+          !(
+            LOCALE_MEMBERS.includes(propertyName) &&
+            hasExplicitLocaleAndTimeZone(node)
+          )
         ) {
           context.report({
             node,
