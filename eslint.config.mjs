@@ -195,6 +195,98 @@ const featureZones = dirNamesIn("src/features").map((name) => ({
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
+const APP_GLOBAL_ALIAS_MESSAGE =
+  "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。";
+
+/**
+ * no-restricted-syntax のセレクタと、掛ける場所。ここだけに書く。
+ * 同じルールを別の節にも書くと、後ろの節が前の節のセレクタを丸ごと置き換え、外したはずの場所に掛かったり、掛けたはずの場所から外れたりする
+ * （scripts/eslint-config.small.test.mjs が、場所ごとに掛かるセレクタを確かめる）
+ */
+const restrictedSyntax = [
+  { files: "api/**/*.ts", ignores: [], selectors: [PRIVATE_KEYWORD] },
+  {
+    // 型の検査を外す書き方。テスト・偽物（*.dummy.ts）・テストの道具は、一部だけの偽物を作るのに使うので外す
+    files: "api/**/*.ts",
+    ignores: [
+      "api/**/*.test.ts",
+      "api/**/*.dummy.ts",
+      "api/**/dummy.ts",
+      "api/util/testing-util/**",
+    ],
+    selectors: [DOUBLE_ASSERTION],
+  },
+  {
+    // process・globalThis の別名と、process の動的 import（環境変数を読む場所の決まりを、名前を変えてすり抜けさせない）
+    files: "api/**/*.ts",
+    ignores: [
+      "api/di-container/**",
+      "api/handler/api/entrypoint/**",
+      "api/**/*.test.ts",
+    ],
+    selectors: [
+      ...API_GLOBAL_ALIASES,
+      {
+        selector:
+          "ImportExpression[source.value=/^(node:)?process$/], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=/^(node:)?process$/]",
+        message: API_PROCESS_ENV_MESSAGE,
+      },
+    ],
+  },
+  {
+    files: "src/**/*.{ts,tsx}",
+    ignores: ["src/**/*.test.{ts,tsx}"],
+    selectors: [DOUBLE_ASSERTION],
+  },
+  {
+    // window・document などを別名にすると、通信・保存を「名前で見る」決まりから外れる
+    files: "src/**/*.{ts,tsx}",
+    ignores: ["src/support/**", "src/config/**", "src/**/*.test.{ts,tsx}"],
+    selectors: [
+      wrappedGlobalOf(
+        ["window", "document", "globalThis", "self", "navigator"],
+        "window・document・globalThis・self・navigator を型のアサーションで包みません（包むと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。通信は src/support/api、保存は src/support/storage を通します。",
+      ),
+      ...[
+        "VariableDeclarator[init.type='Identifier'][init.name=/^(window|document|globalThis|self)$/]",
+        "AssignmentExpression[right.type='Identifier'][right.name=/^(window|document|globalThis|self)$/]",
+        // const d = window.document・const w = globalThis.window のような、メンバーを通した別名
+        "VariableDeclarator[init.type='MemberExpression'][init.object.name=/^(window|globalThis|self)$/][init.property.name=/^(window|document|globalThis|self|navigator)$/]",
+        "AssignmentExpression[right.type='MemberExpression'][right.object.name=/^(window|globalThis|self)$/][right.property.name=/^(window|document|globalThis|self|navigator)$/]",
+      ].map((selector) => ({ selector, message: APP_GLOBAL_ALIAS_MESSAGE })),
+    ],
+  },
+];
+
+/**
+ * 上の表を、ファイルごとに「当てはまる行のセレクタをすべて合わせたもの」が掛かる設定の並びにする。
+ * 行の組み合わせごとに 1 節を作り、行の多い組み合わせを後ろに置く（後ろが勝つので、当てはまる行をすべて含む節が最後に効く）
+ */
+const restrictedSyntaxBlocks = restrictedSyntax
+  .reduce(
+    (subsets, entry) => [
+      ...subsets,
+      ...subsets.map((subset) => [...subset, entry]),
+    ],
+    [[]],
+  )
+  .filter(
+    (subset) =>
+      subset.length > 0 &&
+      subset.every((entry) => entry.files === subset[0].files),
+  )
+  .sort((a, b) => a.length - b.length)
+  .map((subset) => ({
+    files: [subset[0].files],
+    ignores: [...new Set(subset.flatMap((entry) => entry.ignores))],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...subset.flatMap((entry) => entry.selectors),
+      ],
+    },
+  }));
+
 export default tseslint.config(
   // infra/ は別のパッケージ（review-canvas-infra。CDK）で、自分の設定で検査する
   {
@@ -335,7 +427,6 @@ export default tseslint.config(
     plugins: { local: localRules, "check-file": checkFile },
     rules: {
       "local/package-boundaries": ["error", packageBoundaries],
-      "no-restricted-syntax": ["error", PRIVATE_KEYWORD],
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
@@ -343,24 +434,7 @@ export default tseslint.config(
       ],
     },
   },
-  // 型の検査を外す書き方（テストは偽物づくりで使うので外す）。no-restricted-syntax は後ろの設定が前を丸ごと置き換えるので、
-  // 同じファイルに掛かる後ろの設定（process の節・画面の出入口の節）にも同じものを並べる
-  {
-    files: apiFiles,
-    ignores: [
-      "api/**/*.test.ts",
-      "api/**/*.dummy.ts",
-      "api/util/testing-util/**",
-    ],
-    rules: {
-      "no-restricted-syntax": ["error", PRIVATE_KEYWORD, DOUBLE_ASSERTION],
-    },
-  },
-  {
-    files: appFiles,
-    ignores: ["src/**/*.test.{ts,tsx}"],
-    rules: { "no-restricted-syntax": ["error", DOUBLE_ASSERTION] },
-  },
+  ...restrictedSyntaxBlocks,
   // 値が無いかもしれない所を ! で黙らせない（テストは、作った値を読むだけなので外す）
   {
     files: [...apiFiles, ...appFiles],
@@ -418,17 +492,6 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         processImports(API_PROCESS_ENV_MESSAGE),
-      ],
-      "no-restricted-syntax": [
-        "error",
-        PRIVATE_KEYWORD,
-        DOUBLE_ASSERTION,
-        ...API_GLOBAL_ALIASES,
-        {
-          selector:
-            "ImportExpression[source.value=/^(node:)?process$/], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=/^(node:)?process$/]",
-          message: API_PROCESS_ENV_MESSAGE,
-        },
       ],
     },
   },
@@ -732,26 +795,6 @@ export default tseslint.config(
         ...STORAGE_GLOBALS.map((name) => ({
           name,
           message: storageMessageOf(name),
-        })),
-      ],
-      // window・document などを別名にすると、上と下の「名前で見る」決まりから外れる
-      "no-restricted-syntax": [
-        "error",
-        DOUBLE_ASSERTION,
-        wrappedGlobalOf(
-          ["window", "document", "globalThis", "self", "navigator"],
-          "window・document・globalThis・self・navigator を型のアサーションで包みません（包むと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。通信は src/support/api、保存は src/support/storage を通します。",
-        ),
-        ...[
-          "VariableDeclarator[init.type='Identifier'][init.name=/^(window|document|globalThis|self)$/]",
-          "AssignmentExpression[right.type='Identifier'][right.name=/^(window|document|globalThis|self)$/]",
-          // const d = window.document・const w = globalThis.window のような、メンバーを通した別名
-          "VariableDeclarator[init.type='MemberExpression'][init.object.name=/^(window|globalThis|self)$/][init.property.name=/^(window|document|globalThis|self|navigator)$/]",
-          "AssignmentExpression[right.type='MemberExpression'][right.object.name=/^(window|globalThis|self)$/][right.property.name=/^(window|document|globalThis|self|navigator)$/]",
-        ].map((selector) => ({
-          selector,
-          message:
-            "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。",
         })),
       ],
       "no-restricted-properties": [
