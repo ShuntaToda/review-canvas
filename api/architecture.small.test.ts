@@ -3,7 +3,10 @@ import path from "node:path";
 import { registerContainer } from "@/di-container/register-container";
 import * as serviceId from "@/di-container/service-id";
 import { OPEN_API_CONFIG } from "@/handler/api/app";
-import { buildHandlerTestApp } from "@/handler/api/build-test-app";
+import {
+  AUTH_HEADERS,
+  buildHandlerTestApp,
+} from "@/handler/api/build-test-app";
 
 /**
  * つくりの決まりを確かめるテスト。lint が 1 ファイルの中しか見られない「ファイルどうしの対応」（ユースケースとテスト・DI の登録、
@@ -119,7 +122,7 @@ describe("DI の登録（api/di-container）", () => {
 
 describe("ルート（api/handler/api/route）", () => {
   test("[正常系]アプリに登録されたルートは、OpenAPI に載る操作と 1 対 1 で合う（router.openapi の外で足したルートが無い）", () => {
-    // ミドルウェア（use）は method が ALL。openapi は検証とハンドラを同じメソッド・パスに重ねて登録するので、重なりはまとめる
+    // ミドルウェア（use）は method が ALL（下のテストで確かめる）。openapi は検証とハンドラを同じメソッド・パスに重ねて登録するので、重なりはまとめる
     const registered = [
       ...new Set(
         app.routes
@@ -138,6 +141,66 @@ describe("ルート（api/handler/api/route）", () => {
     // 余計なルートがあれば、ここにメソッドとパスが出る。route/<名前>/<メソッド>-<名前>-handler.ts に router.openapi で書き直す
     expect(registered).toStrictEqual(documented);
   });
+
+  // use・mount は全メソッド（ALL）のルートとして登録される。応答を返す関数を渡すと、OpenAPI にも認証にも載らないルートになる
+  const documentedPaths = operations.map((operation) =>
+    operation.path.replaceAll(/\{([^}]+)\}/g, ":$1"),
+  );
+  const documentedPrefixes = new Set(
+    documentedPaths.map((routePath) =>
+      routePath.split("/").slice(0, 3).join("/"),
+    ),
+  );
+  const middlewarePaths = [
+    ...new Set(
+      app.routes
+        .filter((route) => route.method === "ALL")
+        .map((route) => route.path),
+    ),
+  ].sort();
+
+  test("[正常系]ミドルウェア（use）を読み取れている", () => {
+    expect(middlewarePaths).toContain("/api/*");
+  });
+
+  test.each(middlewarePaths)(
+    "[正常系]全メソッドのルート %s は、ミドルウェアを掛ける場所（/api/*・/api/<OpenAPI に載る名前>/*・OpenAPI に載るパス）にある（use・mount でルートを足さない）",
+    (routePath) => {
+      const allowed =
+        routePath === "/api/*" ||
+        (routePath.endsWith("/*") &&
+          documentedPrefixes.has(routePath.slice(0, -"/*".length))) ||
+        documentedPaths.includes(routePath);
+
+      expect(allowed).toBe(true);
+    },
+  );
+
+  test.each(middlewarePaths)(
+    "[異常系]全メソッドのルート %s は、自分では応答を返さない（OpenAPI に無いメソッド・パスは、ログインしていても 404。応答はルート（router.openapi）に書く）",
+    async (routePath) => {
+      // OpenAPI に載っていないメソッドとパスの組を作る。ミドルウェアだけが掛かり、どのルートにも当たらない
+      const target = routePath
+        .replace(/\*$/, "zz-none/zz-none/zz-none/zz-none")
+        .replaceAll(/:[^/]+/g, "id");
+      const method = ["GET", "POST", "PUT", "PATCH", "DELETE"].find(
+        (candidate) =>
+          !operations.some(
+            (operation) =>
+              operation.method === candidate &&
+              operation.path.replaceAll(/\{([^}]+)\}/g, ":$1") === routePath,
+          ),
+      );
+      expect(method).toBeDefined();
+
+      const response = await app.request(target, {
+        method: method ?? "GET",
+        headers: AUTH_HEADERS,
+      });
+
+      expect(response.status).toBe(404);
+    },
+  );
 
   test("[正常系]ハンドラのファイルの数と、OpenAPI に載る操作の数が同じ（ルーターの index.ts に build 関数の呼び出しを足し忘れていない）", () => {
     expect(operations).toHaveLength(handlerFiles.length);
