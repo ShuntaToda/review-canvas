@@ -1,4 +1,5 @@
 import path from "node:path";
+import { importSourceOf } from "../import-source.mjs";
 
 /** import の名前が、決まりの module に当たるか（"hono" は "hono/cors" にも、"@aws-sdk/*" は "@aws-sdk/client-s3" にも当たる） */
 const matchesModule = (source, module) =>
@@ -52,13 +53,8 @@ export const packageBoundaries = {
       .join("/");
 
     const check = (sourceNode) => {
-      if (
-        sourceNode?.type !== "Literal" ||
-        typeof sourceNode.value !== "string"
-      ) {
-        return;
-      }
-      const source = sourceNode.value;
+      const source = importSourceOf(sourceNode);
+      if (source === null) return;
       for (const boundary of boundaries) {
         if (!matchesModule(source, boundary.module)) continue;
         if (isAllowedFile(relativePath, boundary.allowedIn)) continue;

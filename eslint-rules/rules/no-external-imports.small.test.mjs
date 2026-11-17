@@ -36,5 +36,10 @@ ruleTester.run("no-external-imports", noExternalImports, {
       options,
       errors: [{ messageId: "external" }],
     },
+    {
+      code: "const dayjs = await import(`dayjs`);",
+      options,
+      errors: [{ messageId: "external" }],
+    },
   ],
 });

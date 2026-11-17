@@ -71,5 +71,11 @@ ruleTester.run("package-boundaries", packageBoundaries, {
       options,
       errors: [{ messageId: "notAllowed" }],
     },
+    {
+      filename: at("api/infrastructure/logger/index.ts"),
+      code: "const hono = await import(`hono`);",
+      options,
+      errors: [{ messageId: "notAllowed" }],
+    },
   ],
 });

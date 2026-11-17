@@ -1,3 +1,5 @@
+import { importSourceOf } from "../import-source.mjs";
+
 const isInternal = (source) =>
   source.startsWith(".") || source.startsWith("@/");
 
@@ -27,16 +29,12 @@ export const noExternalImports = {
   create(context) {
     const layer = context.options[0]?.layer ?? "この";
     const check = (node, sourceNode) => {
-      if (
-        sourceNode?.type !== "Literal" ||
-        typeof sourceNode.value !== "string"
-      )
-        return;
-      if (isInternal(sourceNode.value)) return;
+      const source = importSourceOf(sourceNode);
+      if (source === null || isInternal(source)) return;
       context.report({
         node: sourceNode,
         messageId: "external",
-        data: { layer, source: sourceNode.value },
+        data: { layer, source },
       });
     };
     return {
