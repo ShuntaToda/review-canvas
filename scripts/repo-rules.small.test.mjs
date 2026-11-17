@@ -109,3 +109,36 @@ describe("文書（docs/）", () => {
     },
   );
 });
+
+describe("ソースの拡張子（api/・src/）", () => {
+  // lint・型検査・hook・つくりのテストは、.ts と .tsx を対象に書いてある。ほかの拡張子（.mts・.cts・.js・.mjs・.jsx）で置くと、
+  // 層の決まりも自前のルールも掛からないコードになる。対象を広げるより、置ける拡張子を絞る（決まりを 1 か所で保てる）
+  const SOURCE_EXTENSIONS = [".ts", ".tsx"];
+  const OTHER_EXTENSIONS = [".css", ".json", ".svg", ".png", ".md"];
+  const IGNORED_DIRS = ["node_modules", "generated", "tsc-cache", "dist"];
+
+  const filesUnder = (dir) =>
+    fs
+      .readdirSync(path.join(root, dir), { withFileTypes: true })
+      .flatMap((entry) => {
+        const relative = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          return IGNORED_DIRS.includes(entry.name) ? [] : filesUnder(relative);
+        }
+        return [relative];
+      });
+  const files = ["api", "src"].flatMap(filesUnder);
+
+  test("[正常系]ファイルを読み取れている", () => {
+    expect(files.length).toBeGreaterThan(100);
+  });
+
+  test("[正常系]api/・src/ のコードは .ts・.tsx だけ（.mts・.cts・.js・.mjs は置かない。lint と型検査が掛からない）", () => {
+    const allowed = [...SOURCE_EXTENSIONS, ...OTHER_EXTENSIONS];
+
+    // ここに出たファイルは、.ts（React の部品は .tsx）に直す
+    expect(
+      files.filter((file) => !allowed.includes(path.extname(file))),
+    ).toStrictEqual([]);
+  });
+});

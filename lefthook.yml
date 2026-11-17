@@ -85,6 +85,8 @@ pre-push:
         - "scripts/*.mjs"
         - ".claude/hooks/*.mjs"
         - "openapi.json"
+        # api/・src/ に .ts・.tsx 以外のコードを置いていないか（置くと lint が掛からない）
+        - "{api,src}/**/*.{mts,cts,js,mjs,cjs,jsx}"
       run: pnpm run test:structure
       fail_text: "つくりの決まりに合っていません。落ちたテストの題に直し方があります（一覧は AGENTS.md「道具で縛っている決まり」）"
 
