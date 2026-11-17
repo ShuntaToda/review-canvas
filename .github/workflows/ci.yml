@@ -42,7 +42,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # validate は prevalidate で codegen（openapi.json → src/generated）を済ませる
+      # validate は prevalidate で codegen（openapi.json → src/generated）を済ませる。画面の型は毎回 openapi.json から作るので、
+      # API の形と画面のずれは tsc が、openapi.json と API のコードのずれは openapi:check が見つける。
+      # eslint（層・境界・命名・自前のルール）・tsc・knip・cspell・prettier・設定の JSON Schema をまとめて確かめる
       - name: Validate
         run: |
           pnpm run validate
@@ -189,7 +191,42 @@ jobs:
       - name: Start DynamoDB Local
         run: pnpm run docker:up
 
+      # 層ごとのカバレッジの下限（vitest.config.ts の thresholds）も確かめる
       - name: Test
         run: |
-          pnpm run test --silent
+          pnpm run test:coverage --silent
           pnpm run infra:test --silent
+
+  # 雛形（pnpm run new:api）で作った直後の状態が、検査とテストを通ることを確かめる（雛形が決まりからずれたら落ちる）
+  scaffold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scaffold an endpoint
+        run: |
+          pnpm run new:api get comment/scaffold-check scaffold-check
+          pnpm run new:api post meta/scaffold-check-meta scaffold-check-meta
+
+      - name: Validate and test the scaffolded code
+        run: |
+          pnpm run validate
+          pnpm run test:small --silent

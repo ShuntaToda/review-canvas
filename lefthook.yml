@@ -51,11 +51,12 @@ commit-msg:
 pre-push:
   parallel: true
   jobs:
+    # 画面の型（src/generated）を openapi.json から作り直してから確かめる（古い生成物のまま通さない）
     - name: tsc
       glob: "*.{ts,tsx}"
       exclude:
         - "infra/**"
-      run: pnpm run validate:tsc
+      run: pnpm run codegen && pnpm run validate:tsc
 
     - name: tsc-infra
       root: infra/
@@ -73,3 +74,19 @@ pre-push:
       glob: "*.{ts,tsx,md,yml,yaml,json,mjs}"
       run: pnpm exec cspell --cache --gitignore --no-must-find-files {push_files}
       fail_text: "未知の単語であれば cspell.json の words に足してください"
+
+    # つくりの決まり（ユースケースと DI・ルートと OpenAPI と認証・MCP が呼ぶ API）と、自前の lint ルール・雛形のテスト。数秒で終わる
+    - name: structure
+      glob:
+        - "api/**/*.ts"
+        - "bin/*.mjs"
+        - "eslint-rules/**/*.mjs"
+        - "scripts/*.mjs"
+        - "openapi.json"
+      run: pnpm run test:structure
+      fail_text: "つくりの決まりに合っていません。落ちたテストの題に直し方があります（一覧は AGENTS.md「道具で縛っている決まり」）"
+
+    - name: knip
+      glob: "*.{ts,tsx,mjs,json}"
+      run: pnpm run validate:knip
+      fail_text: "使っていない export・ファイル・依存があります。消すか、使う側を書いてください"
