@@ -56,6 +56,79 @@ export const appError = {
     const allowThrowPlainError =
       context.options[0]?.allowThrowPlainError === true;
     const { sourceCode } = context;
+    // 型情報があれば（eslint.config の projectService）、書き方ではなく値の型でも確かめる。
+    // 変数に入れてから投げる・Object.assign で包む・分割代入で取り出した別名などは、構文からは追えない
+    const services = sourceCode.parserServices;
+    const program = services?.program ?? null;
+
+    /** 式の型が組み込みのエラー（TypeScript の標準の型定義にある Error・TypeError など）なら、その名前 */
+    const builtinTypeNameOf = (node) => {
+      if (program === null) return null;
+      const partsOf = (type) =>
+        type.isUnionOrIntersection() ? type.types.flatMap(partsOf) : [type];
+      for (const part of partsOf(services.getTypeAtLocation(node))) {
+        const symbol = part.getSymbol();
+        if (
+          symbol === undefined ||
+          !BUILTIN_ERRORS.includes(symbol.getName())
+        ) {
+          continue;
+        }
+        const declarations = symbol.getDeclarations() ?? [];
+        if (
+          declarations.some((declaration) =>
+            program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+          )
+        ) {
+          return symbol.getName();
+        }
+      }
+      return null;
+    };
+
+    /** 名前を宣言している変数（無ければ null） */
+    const variableOf = (identifier) => {
+      let scope = sourceCode.getScope(identifier);
+      while (scope !== null) {
+        const variable = scope.set.get(identifier.name);
+        if (variable !== undefined) return variable;
+        scope = scope.upper;
+      }
+      return null;
+    };
+
+    /** 式が Promise のコンストラクタ（Promise・globalThis.Promise・その別名）か */
+    const isPromiseConstructor = (node) => {
+      if (program !== null) {
+        return (
+          services.getTypeAtLocation(node).getSymbol()?.getName() ===
+          "PromiseConstructor"
+        );
+      }
+      return (
+        (node.type === "Identifier" &&
+          node.name === "Promise" &&
+          (variableOf(node)?.defs.length ?? 0) === 0) ||
+        globalMemberNameOf(node) === "Promise"
+      );
+    };
+
+    /** 呼んでいるのが、`new Promise((resolve, reject) => …)` の reject（2 つ目の引数）か */
+    const isRejectOfExecutor = (callee) => {
+      if (callee.type !== "Identifier") return false;
+      const [definition] = variableOf(callee)?.defs ?? [];
+      if (definition === undefined || definition.type !== "Parameter") {
+        return false;
+      }
+      const executor = definition.node;
+      const parent = executor.parent;
+      return (
+        executor.params[1] === definition.name &&
+        parent?.type === "NewExpression" &&
+        parent.arguments[0] === executor &&
+        isPromiseConstructor(parent.callee)
+      );
+    };
 
     /**
      * 式が組み込みのエラーを指していれば、その名前を返す。
@@ -99,7 +172,8 @@ export const appError = {
 
     const reportThrown = (thrown) => {
       if (allowThrowPlainError) return;
-      const name = thrownBuiltinNameOf(thrown);
+      if (thrown == null) return;
+      const name = thrownBuiltinNameOf(thrown) ?? builtinTypeNameOf(thrown);
       if (name !== null) {
         context.report({
           node: thrown,
@@ -107,6 +181,25 @@ export const appError = {
           data: { name },
         });
       }
+    };
+
+    /** 型情報で見て、クラスの親をたどると組み込みの Error に行き着くか（親の名前が Error で終わらないとき） */
+    const extendsErrorByType = (node) => {
+      if (program === null) return false;
+      const checker = program.getTypeChecker();
+      const seen = new Set();
+      const reachesError = (type) => {
+        if (seen.has(type)) return false;
+        seen.add(type);
+        if (type.getSymbol()?.getName() === "Error") return true;
+        return (type.getBaseTypes?.() ?? []).some(reachesError);
+      };
+      const constructorType = services.getTypeAtLocation(node.superClass);
+      return constructorType
+        .getConstructSignatures()
+        .some((signature) =>
+          reachesError(checker.getReturnTypeOfSignature(signature)),
+        );
     };
 
     const checkClass = (node) => {
@@ -121,12 +214,15 @@ export const appError = {
         });
         return;
       }
-      if (
-        node.superClass.type !== "Identifier" ||
-        !node.superClass.name.endsWith("Error")
-      ) {
-        return;
-      }
+      // 名前空間から継承する形（extends errors.NotFoundError）も、後ろの名前で見る
+      const superName =
+        node.superClass.type === "Identifier"
+          ? node.superClass.name
+          : node.superClass.type === "MemberExpression" &&
+              node.superClass.property.type === "Identifier"
+            ? node.superClass.property.name
+            : "";
+      if (!superName.endsWith("Error") && !extendsErrorByType(node)) return;
       const hasName = node.body.body.some(
         (member) =>
           member.type === "PropertyDefinition" &&
@@ -145,16 +241,17 @@ export const appError = {
 
     return {
       ThrowStatement: (node) => reportThrown(node.argument),
-      // Promise.reject(new Error()) も、投げるのと同じ
+      // Promise.reject(new Error())・new Promise((_, reject) => reject(new Error())) も、投げるのと同じ
       CallExpression(node) {
         const { callee } = node;
-        if (
+        const isStaticReject =
           callee.type === "MemberExpression" &&
-          callee.object.type === "Identifier" &&
-          callee.object.name === "Promise" &&
-          callee.property.type === "Identifier" &&
-          callee.property.name === "reject"
-        ) {
+          ((!callee.computed && callee.property.name === "reject") ||
+            (callee.computed &&
+              callee.property.type === "Literal" &&
+              callee.property.value === "reject")) &&
+          isPromiseConstructor(callee.object);
+        if (isStaticReject || isRejectOfExecutor(callee)) {
           reportThrown(node.arguments[0]);
         }
       },

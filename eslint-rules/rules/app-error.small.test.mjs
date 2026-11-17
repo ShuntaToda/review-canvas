@@ -1,4 +1,8 @@
-import { ruleTester } from "../rule-tester.mjs";
+import {
+  TYPED_FILENAME,
+  ruleTester,
+  typedRuleTester,
+} from "../rule-tester.mjs";
 import { appError } from "./app-error.mjs";
 
 const allow = [{ allowThrowPlainError: true }];
@@ -90,6 +94,80 @@ ruleTester.run("app-error", appError, {
     {
       code: "class A extends NotFoundError { static name = 'A'; }",
       errors: [{ messageId: "missingName" }],
+    },
+  ],
+});
+
+// 型で見る場合（構文からは追えない書き方）
+const APP_ERRORS = 'import { AppError, NotFoundError } from "./errors";\n';
+const typed = (code) => ({
+  filename: TYPED_FILENAME,
+  code: `${APP_ERRORS}${code}`,
+});
+
+typedRuleTester.run("app-error（型で見る）", appError, {
+  valid: [
+    typed("throw new NotFoundError();"),
+    typed("const e = new NotFoundError(); throw e;"),
+    typed("Promise.reject(new NotFoundError());"),
+    typed("new Promise((_, reject) => reject(new NotFoundError()));"),
+    typed("new Promise<void>((resolve) => resolve());"),
+    // 受け取ったもの（unknown）を投げ直すのは見ない
+    typed("try { JSON.parse(''); } catch (error) { throw error; }"),
+    typed("const f = (e: unknown) => { throw e; };"),
+    // Promise でないものの reject は見ない
+    typed(
+      "const queue = { reject: (e: Error) => e }; queue.reject(new Error());",
+    ),
+    { ...typed("const e = new Error(); throw e;"), options: allow },
+    // 親の名前が Error で終わらなくても、name があれば通す
+    typed(
+      'class Base extends AppError { override name = "Base"; } class Gone extends Base { override name = "Gone"; }',
+    ),
+  ],
+  invalid: [
+    typed("const e = new Error(); throw e;"),
+    typed("throw Object.assign(new Error(), { code: 1 });"),
+    typed("new Promise((_, reject) => reject(new Error()));"),
+    typed("new Promise((_, reject) => { reject(new TypeError()); });"),
+    typed("globalThis.Promise.reject(new Error());"),
+    typed("const P = Promise; P.reject(new Error());"),
+    typed("const { Error: E } = globalThis; throw new E();"),
+    typed("const make = (): Error => new NotFoundError(); throw make();"),
+    typed("const f = (e: NotFoundError | RangeError) => { throw e; };"),
+  ]
+    .map((test) => ({ ...test, errors: [{ messageId: "plainThrow" }] }))
+    .concat([
+      {
+        ...typed(
+          'import * as errors from "./errors"; class A extends errors.NotFoundError {}',
+        ),
+        errors: [{ messageId: "missingName" }],
+      },
+      {
+        ...typed(
+          'class Base extends AppError { override name = "Base"; } class Gone extends Base {}',
+        ),
+        errors: [{ messageId: "missingName" }],
+      },
+    ]),
+});
+
+// 型情報が無いとき（構文だけ）でも、名前空間からの継承と executor の reject は見る
+ruleTester.run("app-error（構文で見る追加分）", appError, {
+  valid: ['class A extends errors.NotFoundError { override name = "A"; }'],
+  invalid: [
+    {
+      code: "class A extends errors.NotFoundError {}",
+      errors: [{ messageId: "missingName" }],
+    },
+    {
+      code: "new Promise((_, reject) => reject(new Error()));",
+      errors: [{ messageId: "plainThrow" }],
+    },
+    {
+      code: "globalThis.Promise.reject(new Error());",
+      errors: [{ messageId: "plainThrow" }],
     },
   ],
 });
