@@ -187,7 +187,8 @@ export const lintProblemsOf = (root, cwd, targets, remaining) => {
       const hints = HINTS.filter(([needle]) =>
         eslint.output.includes(needle),
       ).map(([, hint]) => hint);
-      problems.push([eslint.output, ...hints].join("\n"));
+      // 切るのは eslint の出力だけ。直し方の添え書きと、下の整形の案内は、切った後ろに必ず付ける
+      problems.push([clip(eslint.output), ...hints].join("\n"));
     }
   }
   const prettier = runTool(

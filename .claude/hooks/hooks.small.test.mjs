@@ -116,6 +116,7 @@ describe("typecheckTargetsOf", () => {
     expect(names(["src/App.tsx", "README.md"])).toStrictEqual(["src"]);
     expect(names(["openapi.json"])).toStrictEqual(["src"]);
     expect(names(["infra/lib/settings.ts"])).toStrictEqual(["infra"]);
+    expect(names(["vitest.config.ts"])).toStrictEqual(["node"]);
     expect(names(["README.md"])).toStrictEqual([]);
   });
 });

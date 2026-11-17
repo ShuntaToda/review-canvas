@@ -3,7 +3,6 @@
 // 終了コード 2 のとき、標準エラーの内容が AI に渡る。hook の中の失敗（道具が無い・時間切れ・入力が読めない）では 0 で終え、作業を止めない。
 // Bash で書き換えたファイルはここを通らない（Stop の hook と pre-commit が見つける）
 import {
-  clip,
   deadlineOf,
   ensureGeneratedTypes,
   lintProblemsOf,
@@ -29,7 +28,7 @@ const main = () => {
   if (problems.length === 0) return 0;
 
   process.stderr.write(
-    `${target.file} が決まりに合っていません。メッセージのとおりに直してください（eslint-disable で黙らせない。決まりの一覧は AGENTS.md「道具で縛っている決まり」）。\n${clip(problems.join("\n"))}\n`,
+    `${target.file} が決まりに合っていません。メッセージのとおりに直してください（eslint-disable で黙らせない。決まりの一覧は AGENTS.md「道具で縛っている決まり」）。\n${problems.join("\n")}\n`,
   );
   return 2;
 };

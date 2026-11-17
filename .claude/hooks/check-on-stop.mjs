@@ -21,6 +21,13 @@ import {
 
 /** settings.json の timeout（180 秒）より短くする */
 const BUDGET_MS = 160_000;
+/** tsconfig.node.json の include と同じ */
+const NODE_CONFIG_FILES = [
+  "vite.config.ts",
+  "vite.bridge.config.ts",
+  "vitest.config.ts",
+];
+
 /** 変更のあるファイル（まだコミットしていないもの）から、tsc をかける場所を決める */
 export const typecheckTargetsOf = (changedFiles) => {
   const ts = changedFiles.filter((file) => /\.tsx?$/.test(file));
@@ -41,6 +48,16 @@ export const typecheckTargetsOf = (changedFiles) => {
     ...(ts.some((file) => file.startsWith("src/")) ||
     changedFiles.includes("openapi.json")
       ? [{ dir: ".", args: ["--noEmit"], name: "src" }]
+      : []),
+    // vite・vitest の設定は、画面の tsconfig の外（tsconfig.node.json）で型を確かめる
+    ...(changedFiles.some((file) => NODE_CONFIG_FILES.includes(file))
+      ? [
+          {
+            dir: ".",
+            args: ["-p", "tsconfig.node.json", "--noEmit"],
+            name: "node",
+          },
+        ]
       : []),
     ...(ts.some(
       (file) =>
@@ -98,7 +115,7 @@ const main = () => {
     ...(lintProblems.length === 0
       ? []
       : [
-          `変更したファイルが決まりに合っていません。メッセージのとおりに直してから終えてください（eslint-disable で黙らせない。決まりの一覧は AGENTS.md「道具で縛っている決まり」）。\n${clip(lintProblems.join("\n"))}`,
+          `変更したファイルが決まりに合っていません。メッセージのとおりに直してから終えてください（eslint-disable で黙らせない。決まりの一覧は AGENTS.md「道具で縛っている決まり」）。\n${lintProblems.join("\n")}`,
         ]),
     ...(typeProblems.length === 0
       ? []

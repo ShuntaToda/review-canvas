@@ -33,7 +33,7 @@ pre-commit:
       run: pnpm exec eslint --cache --max-warnings 0 --no-warn-ignored --fix {staged_files}
       stage_fixed: true
       skip: [merge, rebase]
-      fail_text: "codegen が未実行かもしれません: pnpm run codegen"
+      fail_text: "lint の決まりに合っていません。メッセージのとおりにコードを直してください（eslint-disable で黙らせない。型が解決できないという誤りばかりなら、先に pnpm run codegen）"
 
     - name: eslint-infra
       root: infra/
