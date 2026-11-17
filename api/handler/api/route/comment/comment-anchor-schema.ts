@@ -9,10 +9,9 @@ import {
  * 制御文字・行区切り・文字の向きを変える制御文字。
  * Markdown・API を読む人（AI を含む）に、見えない文字で別の指示や見た目を紛れ込ませないため、アンカーには持たせない
  */
-/* eslint-disable no-control-regex -- 制御文字を見つけるための正規表現 */
 const UNSAFE_CHARACTERS =
+  // eslint-disable-next-line no-control-regex -- 制御文字を見つけるための正規表現
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
-/* eslint-enable no-control-regex */
 
 const shortText = (max: number) =>
   z

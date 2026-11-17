@@ -69,12 +69,8 @@ export function baseConfig(tsconfigRootDir) {
         "import/no-unresolved": "error",
         // 循環 import を作らない（層の向きの決まりをすり抜ける相互依存と、読み込み順で undefined になる不具合を防ぐ）
         "import/no-cycle": ["error", { ignoreExternal: true }],
-        // eslint-disable には理由を書く（`-- 理由`）。ファイルまるごと・ルールを挙げない disable はしない
-        "@eslint-community/eslint-comments/require-description": [
-          "error",
-          // 閉じる側（eslint-enable）には要らない。理由は開く側に書く
-          { ignore: ["eslint-enable"] },
-        ],
+        // eslint-disable には理由を書く（`-- 理由`）。ルールを挙げない disable はしない
+        "@eslint-community/eslint-comments/require-description": "error",
         "@eslint-community/eslint-comments/no-unlimited-disable": "error",
         // つくりの決まり（層・境界・自前のルール）は disable で外せない。例外が要る場所は、設定の ignores に理由を書いて扱う
         "@eslint-community/eslint-comments/no-restricted-disable": [
@@ -87,10 +83,13 @@ export function baseConfig(tsconfigRootDir) {
           "no-restricted-imports",
           "no-restricted-syntax",
           "@eslint-community/eslint-comments/*",
+          "check-file/*",
         ],
-        "@eslint-community/eslint-comments/disable-enable-pair": [
+        // コメントで設定を変えない。使えるのは、理由を付けた 1 行だけの disable（-line・-next-line）。
+        // `/* eslint ルール: "off" */`・`/* global */`・ファイルや範囲の `/* eslint-disable */` は、上の「disable できないルール」をすり抜ける
+        "@eslint-community/eslint-comments/no-use": [
           "error",
-          { allowWholeFile: true },
+          { allow: ["eslint-disable-line", "eslint-disable-next-line"] },
         ],
         "unused-imports/no-unused-imports": "error",
         "import/order": ["error", { alphabetize: { order: "asc" } }],

@@ -390,11 +390,10 @@ const aiAnchorLines = (anchor: CommentAnchor): string[] => {
   ];
 };
 
-/* eslint-disable no-control-regex -- 見えない文字を見つけるための正規表現 */
 /** 改行・タブ以外の制御文字と、文字の向きを変える制御文字（ストーリーの名前は index.json から来るので、書き出す前に落とす） */
 const INVISIBLE_CHARACTERS =
+  // eslint-disable-next-line no-control-regex -- 見えない文字を見つけるための正規表現
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
-/* eslint-enable no-control-regex */
 
 /** 見えない文字を落とす（Markdown を読む人・AI に、見た目と違う並びの文字を渡さない） */
 const withoutInvisible = (text: string): string =>

@@ -4,13 +4,13 @@
  * 要素を読むだけで、フォーカス・スクロール・DOM は変えない（play 関数の途中の画面を乱さないため）
  */
 
-/* eslint-disable no-control-regex -- 制御文字を見つけるための正規表現 */
 /** 制御文字・行区切り・文字の向きを変える制御文字 */
 const INVISIBLE_CHARACTERS =
+  // eslint-disable-next-line no-control-regex -- 制御文字を見つけるための正規表現
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 /** CSS の文字列に、そのままでは書けない制御文字 */
+// eslint-disable-next-line no-control-regex -- 制御文字を見つけるための正規表現
 const CSS_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
-/* eslint-enable no-control-regex */
 
 /**
  * 文字を 1 行にまとめ、前後の空白を落として上限の文字数で切る（切ったら「…」を付ける）。
