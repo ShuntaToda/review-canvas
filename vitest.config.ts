@@ -19,9 +19,9 @@ export default defineConfig({
       },
       {
         test: {
-          // このリポジトリだけの ESLint ルール（eslint-rules/）を RuleTester で確かめる
-          name: "eslint-rules",
-          include: ["eslint-rules/**/*.test.mjs"],
+          // 開発の道具: このリポジトリだけの ESLint ルール（eslint-rules/。RuleTester）と、雛形のスクリプト（scripts/）
+          name: "tools",
+          include: ["eslint-rules/**/*.test.mjs", "scripts/**/*.test.mjs"],
           environment: "node",
         },
       },

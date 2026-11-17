@@ -12,9 +12,10 @@
         "src/features/review/bridge/bridge-main.ts",
         "api/handler/api/entrypoint/{cli,lambda,local}/*.ts",
         "bin/*.mjs",
+        "scripts/*.mjs",
         "eslint.config.base.mjs",
       ],
-      "project": ["{api,src,bin,eslint-rules}/**/*.{ts,tsx,mjs}"],
+      "project": ["{api,src,bin,eslint-rules,scripts}/**/*.{ts,tsx,mjs}"],
       // CDK（NodejsFunction）が Lambda をバンドルするときに、パッケージの根で `pnpm exec esbuild` として動かす（infra/lib/review-canvas.ts の projectRoot）
       "ignoreDependencies": ["esbuild"],
       // CI の「Synth embedded」が infra/node_modules の esbuild-register を絶対パスで読む（infra の依存）

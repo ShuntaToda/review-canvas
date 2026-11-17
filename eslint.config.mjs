@@ -115,6 +115,7 @@ export default tseslint.config(
       "!bin/*.mjs",
       // 自前の ESLint ルールも、同じ規則で検査する
       "!eslint-rules/**/*.mjs",
+      "!scripts/*.mjs",
       "api/tsc-cache/**",
       "infra/**",
       // サンプルの Storybook（examples/）は使う側のアプリの見本。型は自分の tsconfig で確かめる（pnpm --dir examples/sample-storybook run validate）
@@ -596,7 +597,7 @@ export default tseslint.config(
   },
   // CLI（bin/）・自前の ESLint ルール（eslint-rules/）は Node でそのまま動かす JavaScript で、型情報を持たない。型を使う規則は外し、Node のグローバルを許す
   {
-    files: ["bin/*.mjs", "eslint-rules/**/*.mjs"],
+    files: ["bin/*.mjs", "eslint-rules/**/*.mjs", "scripts/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,

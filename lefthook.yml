@@ -24,6 +24,8 @@ pre-commit:
       glob:
         - "*.{ts,tsx}"
         - "bin/*.mjs"
+        - "eslint-rules/**/*.mjs"
+        - "scripts/*.mjs"
       exclude:
         - "infra/**"
         - "examples/**"
