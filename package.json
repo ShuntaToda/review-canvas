@@ -41,7 +41,7 @@
     "infra:validate": "pnpm --dir infra run validate",
     "local": "pnpm run config:local && pnpm run build:bridge && pnpm run api ./api/handler/api/entrypoint/local/local.ts",
     "new:api": "node scripts/new-api.mjs",
-    "openapi:check": "pnpm run openapi:generate && git diff --exit-code openapi.json",
+    "openapi:check": "pnpm run api ./api/handler/api/entrypoint/cli/generate-openapi.ts --check",
     "openapi:generate": "pnpm run api ./api/handler/api/entrypoint/cli/generate-openapi.ts",
     "prepare": "lefthook install || true",
     "pretest": "pnpm run codegen",

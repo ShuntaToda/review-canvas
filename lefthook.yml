@@ -74,7 +74,7 @@ pre-push:
         - "api/*.ts"
         - "api/**/*.ts"
       run: pnpm run openapi:check
-      fail_text: "openapi.json が最新でない可能性があります: pnpm run openapi:generate で作り直してください"
+      fail_text: "openapi.json が API のコードと合っていません: pnpm run openapi:generate && pnpm run codegen で作り直し、コミットに入れてください"
 
     - name: cspell
       glob: "*.{ts,tsx,md,yml,yaml,json,mjs}"
