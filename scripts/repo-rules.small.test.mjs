@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -111,34 +112,27 @@ describe("文書（docs/）", () => {
 });
 
 describe("ソースの拡張子（api/・src/）", () => {
-  // lint・型検査・hook・つくりのテストは、.ts と .tsx を対象に書いてある。ほかの拡張子（.mts・.cts・.js・.mjs・.jsx）で置くと、
-  // 層の決まりも自前のルールも掛からないコードになる。対象を広げるより、置ける拡張子を絞る（決まりを 1 か所で保てる）
-  const SOURCE_EXTENSIONS = [".ts", ".tsx"];
-  const OTHER_EXTENSIONS = [".css", ".json", ".svg", ".png", ".md"];
-  const IGNORED_DIRS = ["node_modules", "generated", "tsc-cache", "dist"];
+  // lint・型検査・hook・つくりのテストは、.ts と .tsx を対象に書いてある。コードをほかの拡張子で置くと、
+  // 層の決まりも自前のルールも掛からないコードになる。対象を広げるより、置ける拡張子を絞る（決まりを 1 か所で保てる）。
+  // lefthook.yml の structure の glob と同じ拡張子にそろえる
+  const CODE_EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".mts", ".cts"];
 
-  const filesUnder = (dir) =>
-    fs
-      .readdirSync(path.join(root, dir), { withFileTypes: true })
-      .flatMap((entry) => {
-        const relative = `${dir}/${entry.name}`;
-        if (entry.isDirectory()) {
-          return IGNORED_DIRS.includes(entry.name) ? [] : filesUnder(relative);
-        }
-        return [relative];
-      });
-  const files = ["api", "src"].flatMap(filesUnder);
+  // git が追っているファイルと、これから追うファイル（.gitignore に当たるもの・OS やエディタの置くファイルは見ない）
+  const files = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "api", "src"],
+    { cwd: root, encoding: "utf8" },
+  )
+    .split("\n")
+    .filter((file) => file !== "");
 
   test("[正常系]ファイルを読み取れている", () => {
     expect(files.length).toBeGreaterThan(100);
   });
 
-  test("[正常系]api/・src/ のコードは .ts・.tsx だけ（.mts・.cts・.js・.mjs は置かない。lint と型検査が掛からない）", () => {
-    const allowed = [...SOURCE_EXTENSIONS, ...OTHER_EXTENSIONS];
-
-    // ここに出たファイルは、.ts（React の部品は .tsx）に直す
+  test("[正常系]api/・src/ に .js・.mjs・.cjs・.jsx・.mts・.cts のコードを置かない（lint と型検査が掛からない。.ts、React の部品は .tsx に直す）", () => {
     expect(
-      files.filter((file) => !allowed.includes(path.extname(file))),
+      files.filter((file) => CODE_EXTENSIONS.includes(path.extname(file))),
     ).toStrictEqual([]);
   });
 });
