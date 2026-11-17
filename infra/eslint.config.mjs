@@ -19,12 +19,15 @@ export default tseslint.config(
     rules: {
       "no-restricted-properties": [
         "error",
-        {
-          object: "process",
-          property: "env",
+        ...[
+          { object: "process", property: "env" },
+          { object: "globalThis", property: "process" },
+          { object: "global", property: "process" },
+        ].map((target) => ({
+          ...target,
           message:
             "lib/ では環境変数（process.env）を読めません。入口（bin/review-canvas.ts）で読み、readSettings などの引数・コンストラクトの props で渡してください。",
-        },
+        })),
       ],
     },
   },

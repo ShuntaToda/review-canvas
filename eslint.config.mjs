@@ -13,6 +13,22 @@ import tseslint from "typescript-eslint";
 const apiFiles = ["api/**/*.ts"];
 const appFiles = ["src/**/*.{ts,tsx}"];
 
+const API_PROCESS_ENV_MESSAGE =
+  "環境変数（process.env）を読めるのは api/di-container と api/handler/api/entrypoint だけです。値は di-container で読み（必須なら unwrapEnv）、クラス・関数には props・引数で渡してください。";
+const CONSOLE_GLOBAL = {
+  name: "console",
+  message:
+    "console ではなく Logger（@/domain/support/logger）を props で受けて使ってください（di-container が LOGGER で渡します）。",
+};
+
+const APP_PROCESS_ENV_MESSAGE =
+  "画面（src/）では process.env を読めません。設定は src/config（loadConfig）から受けてください。";
+
+const FETCH_MESSAGE =
+  "画面のコードから fetch・XMLHttpRequest・sendBeacon を直に呼びません。API は src/support/api の apiClient（型は openapi.json から生成）、API 以外の読み込みは src/support/api の関数を通してください（資格情報の付け方を 1 か所で決めるため）。";
+const storageMessageOf = (name) =>
+  `${name} を直に使いません。src/support/storage の関数を通してください（キーの名前と、使えない環境での失敗の扱いを 1 か所で決めるため）。`;
+
 const API_FILE_NAME_MESSAGE =
   "api のファイル名は kebab-case（小文字とハイフン）にしてください（例: create-comment-use-case.ts。テストは <対象>.small.test.ts、偽物は <対象>.dummy.ts）: {{ target }}";
 
@@ -78,6 +94,49 @@ const packageBoundaries = [
     hint: "日時の計算・整形は api/util/date-util の関数を使ってください（無ければそこに足す）。",
   },
 ];
+
+/** クラスの非公開のメンバーの書き方。コンストラクタは #名前 にできないので対象にしない（private constructor は使える） */
+const PRIVATE_KEYWORD = {
+  selector:
+    ":matches(PropertyDefinition, MethodDefinition[kind!='constructor'])[accessibility='private']",
+  message:
+    "クラスの非公開のメンバーは TypeScript の private ではなく #名前 で書いてください（例: `readonly #logger: Logger;`）。実行時にも外から読めなくなります。",
+};
+
+/**
+ * ルートを足すメンバー呼び出し（router.get(…)・router["post"](…)・app.on(…) など）。DI の取り出し（container.get）は除く。
+ * 名前で見るので、別名（const app = router）にしても掛かる
+ */
+const routeCallOf = (names) => {
+  const pattern = `/^(${names.join("|")})$/`;
+  return {
+    selector: `CallExpression[callee.type='MemberExpression'][callee.object.name!='container']:matches([callee.computed=false][callee.property.name=${pattern}], [callee.computed=true][callee.property.value=${pattern}], [callee.computed=true][callee.property.type='TemplateLiteral'][callee.property.quasis.0.value.cooked=${pattern}])`,
+    message:
+      "ルートは router.openapi(…) で足してください（`router.openapi(createRoute({...}), handler)` を route/<名前>/<メソッド>-<名前>-handler.ts に書き、同じディレクトリの index.ts から呼ぶ）。get・post・on・route などで直に足すと、openapi.json・画面の型・認証とテストの確かめから外れます。",
+  };
+};
+const ROUTE_METHOD_NAMES = [
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "all",
+  "on",
+];
+
+/** 環境変数を読む書き方（process.env・globalThis.process）と、process の import */
+const processEnvProperties = (message) => [
+  { object: "process", property: "env", message },
+  ...["globalThis", "global"].map((object) => ({
+    object,
+    property: "process",
+    message,
+  })),
+];
+const processImports = (message) => ({
+  paths: ["node:process", "process"].map((name) => ({ name, message })),
+});
 
 /** ディレクトリの一覧 */
 const dirNamesIn = (relativePath) => {
@@ -158,7 +217,8 @@ export default tseslint.config(
                 "./api/util",
               ],
               from: "./api/di-container",
-              message: "di-containerを参照できるのはhandlerだけです",
+              message:
+                "di-containerを参照できるのはhandlerだけです。要るもの（リポジトリ・fetchNow など）は、クラスの props・関数の引数で受けてください（登録は api/di-container/register-container.ts）",
             },
             {
               target: [
@@ -170,7 +230,8 @@ export default tseslint.config(
                 "./api/util",
               ],
               from: "./api/handler",
-              message: "handlerは最外殻です。他の層から参照できません",
+              message:
+                "handlerは最外殻です。他の層から参照できません。共有したい型・処理は、domain・use-case・util のうち合う層へ移してください",
             },
             {
               target: [
@@ -182,25 +243,37 @@ export default tseslint.config(
               ],
               from: "./api/infrastructure",
               message:
-                "infrastructureを参照できるのはdi-containerとテスト・CLI合成ルートだけです",
+                "infrastructureを参照できるのはdi-containerとテスト・CLI合成ルートだけです。api/domain に型（契約）を置き、実装は di-container が props で渡す形にしてください",
             },
             {
               target: ["./api/domain", "./api/infrastructure", "./api/util"],
               from: "./api/use-case",
               message:
-                "use-caseを参照できるのはdi-container・handler・presenterだけです",
+                "use-caseを参照できるのはdi-container・handler・presenterだけです。共有したい型・処理は api/domain へ移してください",
+            },
+            {
+              target: [
+                "./api/domain",
+                "./api/infrastructure",
+                "./api/use-case",
+                "./api/util",
+              ],
+              from: "./api/presenter",
+              message:
+                "presenterを参照できるのはdi-containerとhandlerだけです（エラーを HTTP の応答へ変えるのは最後の段）。内側の層は AppError の派生を投げるだけにしてください",
             },
             {
               target: ["./api/domain", "./api/presenter", "./api/use-case"],
               from: "./api/util/testing-util",
               message:
-                "testing-utilはテスト・dummy・合成側(handler/di-container/infrastructure)専用です",
+                "testing-utilはテスト・dummy・合成側(handler/di-container/infrastructure)専用です。本体のコードで使う処理は api/util の別のファイルへ移してください",
             },
             // 画面のコードを API から読まない（逆も下で塞ぐ）
             {
               target: "./api",
               from: "./src",
-              message: "API から画面のコードは参照できません",
+              message:
+                "API から画面のコードは参照できません。両方で使うものは openapi.json（契約）を通すか、api 側に置いてください",
             },
           ],
         },
@@ -232,15 +305,7 @@ export default tseslint.config(
     plugins: { local: localRules, "check-file": checkFile },
     rules: {
       "local/package-boundaries": ["error", packageBoundaries],
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            ":matches(PropertyDefinition, MethodDefinition)[accessibility='private']",
-          message:
-            "クラスの非公開のメンバーは TypeScript の private ではなく #名前 で書いてください（例: `readonly #logger: Logger;`）。実行時にも外から読めなくなります。",
-        },
-      ],
+      "no-restricted-syntax": ["error", PRIVATE_KEYWORD],
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
@@ -300,12 +365,11 @@ export default tseslint.config(
     rules: {
       "no-restricted-properties": [
         "error",
-        {
-          object: "process",
-          property: "env",
-          message:
-            "環境変数（process.env）を読めるのは api/di-container と api/handler/api/entrypoint だけです。値は di-container で読み（必須なら unwrapEnv）、クラス・関数には props・引数で渡してください。",
-        },
+        ...processEnvProperties(API_PROCESS_ENV_MESSAGE),
+      ],
+      "no-restricted-imports": [
+        "error",
+        processImports(API_PROCESS_ENV_MESSAGE),
       ],
     },
   },
@@ -314,13 +378,50 @@ export default tseslint.config(
     files: apiFiles,
     ignores: ["api/handler/api/entrypoint/**", "api/**/*.test.ts"],
     rules: {
+      "no-restricted-globals": ["error", CONSOLE_GLOBAL],
+    },
+  },
+  // 内側の層は、プロセスの状態（環境変数・引数・作業ディレクトリ）に触れない
+  {
+    files: ["api/{domain,use-case,presenter}/**/*.ts"],
+    ignores: ["api/**/*.test.ts"],
+    rules: {
       "no-restricted-globals": [
         "error",
+        CONSOLE_GLOBAL,
         {
-          name: "console",
+          name: "process",
           message:
-            "console ではなく Logger（@/domain/support/logger）を props で受けて使ってください（di-container が LOGGER で渡します）。",
+            "domain・use-case・presenter では process（環境変数・引数・作業ディレクトリ）に触れません。要る値は di-container で読み、props・引数で受けてください。",
         },
+      ],
+    },
+  },
+  // ルートを足せる場所。ルートは route/ の下のハンドラが router.openapi で足し、app.ts・routes.ts はルーターをマウントするだけ。
+  // 手元のサーバー（entrypoint/local）は、画面と Storybook のファイルを配るルートを自分で持つ（API ではない）ので対象にしない
+  {
+    files: ["api/handler/**/*.ts"],
+    ignores: [
+      "api/handler/api/entrypoint/local/**",
+      "api/handler/api/app.ts",
+      "api/handler/api/routes.ts",
+      "api/**/*.test.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        PRIVATE_KEYWORD,
+        routeCallOf([...ROUTE_METHOD_NAMES, "route"]),
+      ],
+    },
+  },
+  {
+    files: ["api/handler/api/app.ts", "api/handler/api/routes.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        PRIVATE_KEYWORD,
+        routeCallOf(ROUTE_METHOD_NAMES),
       ],
     },
   },
@@ -403,6 +504,8 @@ export default tseslint.config(
         "error",
         {
           "**/!(*.small|*.medium).test.{ts,tsx}": "*.small.test.ts",
+          // vitest は *.test.* だけを拾う。*.spec.* は黙って動かない
+          "**/*.spec.{ts,tsx}": "*.small.test.ts",
         },
         {
           errorMessage:
@@ -506,12 +609,7 @@ export default tseslint.config(
       ],
       "no-restricted-properties": [
         "error",
-        {
-          object: "process",
-          property: "env",
-          message:
-            "画面（src/）では process.env を読めません。設定は src/config（loadConfig）から受けてください。",
-        },
+        ...processEnvProperties(APP_PROCESS_ENV_MESSAGE),
       ],
     },
   },
@@ -568,37 +666,43 @@ export default tseslint.config(
     rules: {
       "no-restricted-globals": [
         "error",
-        {
-          name: "fetch",
-          message:
-            "画面のコードから fetch を直に呼びません。API は src/support/api の apiClient（型は openapi.json から生成）、API 以外の読み込みは src/support/api の関数を通してください（資格情報の付け方を 1 か所で決めるため）。",
-        },
-        ...["localStorage", "sessionStorage"].map((name) => ({
+        ...["fetch", "XMLHttpRequest"].map((name) => ({
           name,
-          message: `${name} を直に使いません。src/support/storage の関数を通してください（キーの名前と、使えない環境での失敗の扱いを 1 か所で決めるため）。`,
+          message: FETCH_MESSAGE,
+        })),
+        ...["localStorage", "sessionStorage", "indexedDB"].map((name) => ({
+          name,
+          message: storageMessageOf(name),
         })),
       ],
       "no-restricted-properties": [
         "error",
-        {
-          object: "process",
-          property: "env",
-          message:
-            "画面（src/）では process.env を読めません。設定は src/config（loadConfig）から受けてください。",
-        },
-        ...["window", "globalThis"].flatMap((object) => [
-          {
-            object,
-            property: "fetch",
-            message:
-              "画面のコードから fetch を直に呼びません。src/support/api を通してください。",
-          },
-          ...["localStorage", "sessionStorage"].map((property) => ({
+        ...processEnvProperties(APP_PROCESS_ENV_MESSAGE),
+        ...["window", "globalThis", "self"].flatMap((object) => [
+          ...["fetch", "XMLHttpRequest"].map((property) => ({
             object,
             property,
-            message: `${property} を直に使いません。src/support/storage の関数を通してください。`,
+            message: FETCH_MESSAGE,
           })),
+          ...["localStorage", "sessionStorage", "indexedDB"].map(
+            (property) => ({
+              object,
+              property,
+              message: storageMessageOf(property),
+            }),
+          ),
         ]),
+        {
+          object: "navigator",
+          property: "sendBeacon",
+          message: FETCH_MESSAGE,
+        },
+        {
+          object: "document",
+          property: "cookie",
+          message:
+            "document.cookie を直に使いません（ログインのトークンは Cookie に置かない。覚える値は src/support/storage の関数を通す）。",
+        },
       ],
     },
   },

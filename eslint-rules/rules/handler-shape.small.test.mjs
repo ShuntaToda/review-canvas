@@ -36,13 +36,5 @@ ruleTester.run("handler-shape", handlerShape, {
       code: valid.replace('"post"', '"put"'),
       errors: [{ messageId: "methodMismatch" }],
     },
-    {
-      filename,
-      code: valid.replace(
-        "router.openapi(postCommentRoute,",
-        'router.post("/",',
-      ),
-      errors: [{ messageId: "notOpenapi" }],
-    },
   ],
 });

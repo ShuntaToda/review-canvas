@@ -69,7 +69,7 @@ export const buildApp = ({
     },
   );
   if (stageName === "LOCAL") {
-    app.get("/api/doc", (c) => c.json(app.getOpenAPIDocument(OPEN_API_CONFIG)));
+    app.doc("/api/doc", OPEN_API_CONFIG);
   }
 
   app.notFound((c) => {

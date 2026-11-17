@@ -118,6 +118,27 @@ describe("DI の登録（api/di-container）", () => {
 });
 
 describe("ルート（api/handler/api/route）", () => {
+  test("[正常系]アプリに登録されたルートは、OpenAPI に載る操作と 1 対 1 で合う（router.openapi の外で足したルートが無い）", () => {
+    // ミドルウェア（use）は method が ALL。openapi は検証とハンドラを同じメソッド・パスに重ねて登録するので、重なりはまとめる
+    const registered = [
+      ...new Set(
+        app.routes
+          .filter((route) => route.method !== "ALL")
+          .map((route) => `${route.method} ${route.path}`),
+      ),
+    ].sort();
+    // OpenAPI のパスの {x} は、Hono では :x
+    const documented = operations
+      .map(
+        (operation) =>
+          `${operation.method} ${operation.path.replaceAll(/\{([^}]+)\}/g, ":$1")}`,
+      )
+      .sort();
+
+    // 余計なルートがあれば、ここにメソッドとパスが出る。route/<名前>/<メソッド>-<名前>-handler.ts に router.openapi で書き直す
+    expect(registered).toStrictEqual(documented);
+  });
+
   test("[正常系]ハンドラのファイルの数と、OpenAPI に載る操作の数が同じ（ルーターの index.ts に build 関数の呼び出しを足し忘れていない）", () => {
     expect(operations).toHaveLength(handlerFiles.length);
   });

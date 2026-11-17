@@ -26,7 +26,7 @@ export const handlerShape = {
     type: "problem",
     docs: {
       description:
-        "ルートのハンドラは <メソッド>-<名前>-handler.ts に、createRoute を 1 つと build<名前>Handler を 1 つだけ置く",
+        "ルートのハンドラは <メソッド>-<名前>-handler.ts に、createRoute を 1 つと build<名前>Handler を 1 つだけ置く（router.get などで直に足すことは、eslint.config.mjs の no-restricted-syntax が handler 全体で禁じる）",
     },
     schema: [],
     messages: {
@@ -38,8 +38,6 @@ export const handlerShape = {
         "1 ファイルに置くルートは 1 つです（createRoute の呼び出しが {{count}} 個あります）。ルートごとに <メソッド>-<名前>-handler.ts を分けてください。",
       methodMismatch:
         "createRoute の method（{{actual}}）が、ファイル名の先頭（{{expected}}）と違います。どちらかを直してください。",
-      notOpenapi:
-        "ルートは `router.openapi(createRoute({...}), handler)` で足してください。`router.{{method}}(...)` だと openapi.json に載らず、画面の型（src/generated）にも出ません。",
     },
   },
   create(context) {
@@ -55,19 +53,6 @@ export const handlerShape = {
           node.callee.name === "createRoute"
         ) {
           routeCalls = [...routeCalls, node];
-        }
-        if (
-          node.callee.type === "MemberExpression" &&
-          node.callee.object.type === "Identifier" &&
-          node.callee.object.name === "router" &&
-          node.callee.property.type === "Identifier" &&
-          [...METHODS, "all", "on"].includes(node.callee.property.name)
-        ) {
-          context.report({
-            node: node.callee.property,
-            messageId: "notOpenapi",
-            data: { method: node.callee.property.name },
-          });
         }
       },
       "Program:exit"(program) {

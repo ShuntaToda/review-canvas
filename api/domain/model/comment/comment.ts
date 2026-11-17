@@ -190,7 +190,6 @@ export class Comment {
    */
   readonly updatedAt: Date;
 
-  // eslint-disable-next-line no-restricted-syntax -- コンストラクタは #private 構文にできない（privateキーワード必須）ため、#private推奨ルールを除外する
   private constructor(props: CommentProps) {
     this.branch = props.branch;
     this.id = props.id;
