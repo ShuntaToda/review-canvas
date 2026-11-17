@@ -21,15 +21,15 @@ const settings = readSettings({
 // デプロイの経路（deploy・deploy:no-build）は REQUIRE_DIST=true を付け、ビルド結果が無ければ止める
 assertDistForDeploy({
   dirs: DEFAULT_DIST_DIRS,
-  requireDist: process.env.REQUIRE_DIST,
+  requireDist: process.env["REQUIRE_DIST"],
 });
 
 // 出してはいけないアカウント（protectedAccountIds）へは出さない（synth・diff・deploy・destroy のどれでも止める）
 assertDeployAccount({
-  account: process.env.CDK_DEFAULT_ACCOUNT,
+  account: process.env["CDK_DEFAULT_ACCOUNT"],
   expectedAccount: settings.account,
   protectedAccountIds: settings.protectedAccountIds,
-  requireAccount: process.env.REQUIRE_DIST === "true",
+  requireAccount: process.env["REQUIRE_DIST"] === "true",
 });
 
 // 同じアカウントに何人か出すときは -c stackName=ReviewCanvas-<名前> で分ける
@@ -38,8 +38,8 @@ new ReviewCanvasStack(app, settings.stackName, {
   config: loadReviewCanvasConfig(settings.configFile),
   distDirs: DEFAULT_DIST_DIRS,
   env: {
-    account: settings.account ?? process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
+    account: settings.account ?? process.env["CDK_DEFAULT_ACCOUNT"],
+    region: process.env["CDK_DEFAULT_REGION"],
   },
   description: "review-canvas（Storybook の画面にコメントするレビュー用）",
 });

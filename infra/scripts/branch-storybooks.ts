@@ -160,6 +160,19 @@ const NO_CACHE = ["--cache-control", REVALIDATE_CACHE_CONTROL];
  * 目録を書いたあとで、新しいビルドに無い assets/ を消す（途中で止まっても、目録の指す中身は揃ったまま）。
  * ほかは使うたびに確かめ直させる（no-cache。名前の変わらない iframe.html が古いまま残らないように）。最後にキャッシュを消す
  */
+/** Storybook の id で引いた値。無ければ、呼び出す側の組み立ての誤り（undefined を aws の引数に渡さない） */
+const entryOf = (
+  record: Record<string, string>,
+  source: string,
+  what: string,
+): string => {
+  const value = record[source];
+  if (value === undefined) {
+    throw new Error(`${what} に ${source} がありません`);
+  }
+  return value;
+};
+
 export const planPublish = ({
   target,
   branch,
@@ -182,13 +195,16 @@ export const planPublish = ({
   const key = encodeBranchKey(branch);
   const base = `s3://${target.bucket}/${STORYBOOK_PREFIX}${key}/`;
   const sources = Object.keys(dirs);
+  const dirOf = (source: string): string => entryOf(dirs, source, "dirs");
+  const iframeOf = (source: string): string =>
+    entryOf(iframeFiles, source, "iframeFiles");
   const withAssets = sources.filter((source) =>
-    fs.existsSync(path.join(dirs[source], HASHED_ASSETS_DIR)),
+    fs.existsSync(path.join(dirOf(source), HASHED_ASSETS_DIR)),
   );
   const assetsSync = (source: string, prune: boolean): AwsCall => [
     "s3",
     "sync",
-    path.join(dirs[source], HASHED_ASSETS_DIR),
+    path.join(dirOf(source), HASHED_ASSETS_DIR),
     `${base}${source}/${HASHED_ASSETS_DIR}/`,
     ...(prune ? ["--delete"] : []),
     "--cache-control",
@@ -199,7 +215,7 @@ export const planPublish = ({
   const isDefault = branch === target.defaultBranch;
   const workerDir = isDefault
     ? sources
-        .map((source) => dirs[source])
+        .map((source) => dirOf(source))
         .find((dir) => fs.existsSync(path.join(dir, MOCK_SERVICE_WORKER_FILE)))
     : undefined;
   return [
@@ -208,7 +224,7 @@ export const planPublish = ({
       [
         "s3",
         "sync",
-        dirs[source],
+        dirOf(source),
         `${base}${source}/`,
         "--delete",
         // assets/ は上で置き、iframe.html と橋渡しは下で置く（除いたものは --delete でも消さない）
@@ -240,19 +256,19 @@ export const planPublish = ({
       [
         "s3",
         "cp",
-        iframeFiles[source],
+        iframeOf(source),
         `${base}${source}/${IFRAME_HTML}`,
         ...NO_CACHE,
         "--content-type",
         "text/html",
         "--no-progress",
       ],
-      ...(fs.existsSync(path.join(dirs[source], STORY_INDEX_JSON))
+      ...(fs.existsSync(path.join(dirOf(source), STORY_INDEX_JSON))
         ? [
             [
               "s3",
               "cp",
-              path.join(dirs[source], STORY_INDEX_JSON),
+              path.join(dirOf(source), STORY_INDEX_JSON),
               `${base}${source}/${STORY_INDEX_JSON}`,
               ...NO_CACHE,
               "--content-type",
@@ -411,8 +427,8 @@ export const parseArgs = (
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--") continue;
-    const [name, inline] = arg.startsWith("--")
+    if (arg === undefined || arg === "--") continue;
+    const [name = arg, inline] = arg.startsWith("--")
       ? arg.split(/=(.*)/s, 2)
       : [arg];
     if (name in VALUE_OPTIONS) {

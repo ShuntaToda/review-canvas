@@ -28,7 +28,7 @@ export class AppError extends Error {
   readonly context?: Record<string, unknown>;
   constructor(message: string, options?: AppErrorOptions) {
     super(message, options);
-    this.context = options?.context;
+    if (options?.context !== undefined) this.context = options.context;
   }
 }
 

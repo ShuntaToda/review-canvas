@@ -13,8 +13,6 @@
     "target": "ES2024",
     "types": ["vitest/globals", "node"],
     "allowSyntheticDefaultImports": true,
-    "exactOptionalPropertyTypes": false,
-    "strictNullChecks": true,
     "resolveJsonModule": true
   }
 }

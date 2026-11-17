@@ -72,6 +72,13 @@ const config = parseReviewCanvasConfig({
   excludeTitlePrefixes: ["Components/"],
 });
 
+/** 1 件あるはずの一覧の先頭（無ければ落とす） */
+const firstOf = <T>(items: ReadonlyArray<T>): T => {
+  const [item] = items;
+  if (item === undefined) throw new Error("一覧が空です");
+  return item;
+};
+
 // バンドルを避ける（NodejsFunction の esbuild を走らせない）
 const synthStack = (settings: ReviewCanvasSettings) => {
   const app = new App({ context: { "aws:cdk:bundling-stacks": [] } });
@@ -164,7 +171,7 @@ describe("API の Lambda", () => {
       JSON.stringify(statement.Resource).includes("CommentTable"),
     );
     expect(tableStatements).toHaveLength(1);
-    expect([tableStatements[0].Action].flat().sort()).toStrictEqual(
+    expect([tableStatements[0]?.Action].flat().sort()).toStrictEqual(
       [
         "dynamodb:ConditionCheckItem",
         "dynamodb:GetItem",
@@ -307,13 +314,13 @@ describe("CloudFront", () => {
       "/api/*",
     ]);
     const [api] = behaviors;
-    expect(api.AllowedMethods).toHaveLength(7);
+    expect(api?.AllowedMethods).toHaveLength(7);
     // マネージドポリシーの ID（CachingDisabled・AllViewerExceptHostHeader）
-    expect(api.CachePolicyId).toBe("4135ea2d-6df8-44a3-9df3-4b5a84be39ad");
-    expect(api.OriginRequestPolicyId).toBe(
+    expect(api?.CachePolicyId).toBe("4135ea2d-6df8-44a3-9df3-4b5a84be39ad");
+    expect(api?.OriginRequestPolicyId).toBe(
       "b689b0a8-53d0-40ab-baf2-68738e2966ac",
     );
-    expect(api.FunctionAssociations).toBeUndefined();
+    expect(api?.FunctionAssociations).toBeUndefined();
   });
 
   test("どちらの配信の既定（S3）のビヘイビアも、置いたファイルの Cache-Control に従う CachingOptimized（Storybook の assets/ の immutable がエッジでも効く）", () => {
@@ -495,7 +502,7 @@ describe("配信の中身", () => {
       "AppAssetsDeployment",
       "AppDeployment",
     ]);
-    expect(byId["AppDeployment"].Prune).toBe(false);
+    expect(byId["AppDeployment"]?.Prune).toBe(false);
     expect(byId["AppAssetsDeployment"]).toMatchObject({
       DestinationBucketKeyPrefix: "assets/",
       Prune: false,
@@ -560,9 +567,11 @@ describe("配信の中身", () => {
     );
 
     expect(appAssets).toHaveLength(1);
-    expect(fs.readdirSync(appAssets[0])).not.toContain("assets");
+    expect(fs.readdirSync(firstOf(appAssets))).not.toContain("assets");
     expect(hashedAssets).toHaveLength(1);
-    expect(fs.readdirSync(hashedAssets[0])).toStrictEqual(["index-abc.js"]);
+    expect(fs.readdirSync(firstOf(hashedAssets))).toStrictEqual([
+      "index-abc.js",
+    ]);
   });
 
   test("画面が読む app-config.json に Auth0 の値と Storybook のオリジンを入れる", () => {
@@ -577,7 +586,7 @@ describe("配信の中身", () => {
 
     expect(configs).toHaveLength(1);
     // Storybook の配信のドメインはデプロイのときに決まるため、置き換えの印（<<marker:…>>）になる。印を値に戻して読む
-    const text = fs.readFileSync(configs[0], "utf8");
+    const text = fs.readFileSync(firstOf(configs), "utf8");
     expect(text).toMatch(/"storybookOrigin":<<marker:/);
     expect(
       JSON.parse(
@@ -699,19 +708,19 @@ describe("GitHub Actions から Storybook を置くロール", () => {
       ["Allow", "cloudfront:CreateInvalidation"],
     ]);
     const [list, write, deny, read, describeStacks, invalidate] = summary;
-    expect(list.condition).toStrictEqual({
+    expect(list?.condition).toStrictEqual({
       StringLike: { "s3:prefix": ["sb/*"] },
     });
-    expect(list.resource).toMatch(/SiteBucket/);
+    expect(list?.resource).toMatch(/SiteBucket/);
     // ブランチの置き場（sb/<キー>/ の下）だけ。sb/ の直下（sb/evil.js 等）には書けない
-    expect(write.resource).toContain('"/sb/*/*"');
-    expect(write.resource).not.toContain('"/sb/*"');
-    expect(deny.resource).toContain('"/sb/main/*"');
+    expect(write?.resource).toContain('"/sb/*/*"');
+    expect(write?.resource).not.toContain('"/sb/*"');
+    expect(deny?.resource).toContain('"/sb/main/*"');
     // 共有のサービスワーカー（Storybook のオリジンの直下で動く）を、ほかのブランチから書き換えさせない
-    expect(deny.resource).toContain('"/sb/mockServiceWorker.js"');
-    expect(read.resource).toContain('"/sb/*/meta.json"');
-    expect(describeStacks.resource).toBe('{"Ref":"AWS::StackId"}');
-    expect(invalidate.resource).toContain("StorybookDistribution");
+    expect(deny?.resource).toContain('"/sb/mockServiceWorker.js"');
+    expect(read?.resource).toContain('"/sb/*/meta.json"');
+    expect(describeStacks?.resource).toBe('{"Ref":"AWS::StackId"}');
+    expect(invalidate?.resource).toContain("StorybookDistribution");
     // バケットの直下（キャンバスの画面のファイル）には書けない
     expect(JSON.stringify(summary)).not.toContain('"/mockServiceWorker.js"');
   });
