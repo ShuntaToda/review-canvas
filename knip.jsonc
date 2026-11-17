@@ -27,6 +27,9 @@
     "infra": {
       "entry": ["bin/review-canvas.ts", "test/embedded-app.ts"],
       "project": ["**/*.ts"],
+      // infra は設定の形（api/infrastructure/config/*.ts。zod の定義）を相対パスで読むので、動かすのに zod が要る。
+      // infra/ の中のファイルは zod を直に import しないため knip には使っていないと見えるが、依存として書いておく
+      "ignoreDependencies": ["zod"],
     },
   },
 }
