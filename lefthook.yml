@@ -44,15 +44,10 @@ pre-commit:
 
 commit-msg:
   jobs:
-    # AI の署名の行（Co-Authored-By: のうち AI のもの・セッションの URL）をコミットメッセージに入れない
-    - name: no-ai-signature
-      run: "! grep -qiE '^(co-authored-by:.*(claude|anthropic|copilot|openai)|claude-session:)' {1}"
-      fail_text: "コミットメッセージから AI の署名の行を消してください"
-
-    # メッセージは 1 行（本文・箇条書き・トレーラーを付けない）。# で始まる行は git のコメント
-    - name: one-line
-      run: 'test "$(grep -v "^#" {1} | grep -c "[^[:space:]]")" -le 1'
-      fail_text: "コミットメッセージは 1 行にしてください（本文・箇条書き・トレーラーは付けない）"
+    # メッセージは 1 行で、AI の署名の行（Co-Authored-By: のうち AI のもの・セッションの URL）を入れない。
+    # CI も PR のコミットに同じスクリプトをかける（--no-verify や GitHub の画面で作ったコミットも見る）
+    - name: commit-message
+      run: node scripts/check-commit-message.mjs {1}
 
 pre-push:
   parallel: true

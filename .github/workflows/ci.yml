@@ -19,6 +19,25 @@ defaults:
 
 # Action はコミットの SHA で固定する（publish.yml と同じ）
 jobs:
+  # コミットメッセージの決まり（1 行・AI の署名なし）。手元の lefthook と同じスクリプトを、PR のコミットの範囲にかける
+  # （マージコミットは見ない。git revert の決まった本文は認める。docs/development.md「コミット」）
+  commit-messages:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-commit-message.mjs --range "${BASE_SHA}..${HEAD_SHA}"
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
