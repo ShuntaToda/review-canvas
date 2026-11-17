@@ -19,6 +19,8 @@
       "project": [
         "{api,src,bin,eslint-rules,scripts,.claude/hooks}/**/*.{ts,tsx,mjs}",
       ],
+      // 型を使う lint ルールのテスト（RuleTester）が、ファイル名と tsconfig を通して読む（import はされない）
+      "ignore": ["eslint-rules/fixtures/**"],
       // CDK（NodejsFunction）が Lambda をバンドルするときに、パッケージの根で `pnpm exec esbuild` として動かす（infra/lib/review-canvas.ts の projectRoot）
       "ignoreDependencies": ["esbuild"],
       // CI の「Synth embedded」が infra/node_modules の esbuild-register を絶対パスで読む（infra の依存）
