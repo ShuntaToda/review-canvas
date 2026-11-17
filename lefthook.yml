@@ -88,6 +88,7 @@ pre-push:
         - "bin/*.mjs"
         - "eslint-rules/**/*.mjs"
         - "scripts/*.mjs"
+        - ".claude/hooks/*.mjs"
         - "openapi.json"
       run: pnpm run test:structure
       fail_text: "つくりの決まりに合っていません。落ちたテストの題に直し方があります（一覧は AGENTS.md「道具で縛っている決まり」）"

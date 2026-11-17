@@ -1,42 +1,31 @@
 #!/usr/bin/env node
-// PostToolUse（Edit・Write）: AI が編集したファイルだけに eslint と prettier --check をかけ、違反を AI に返す。
-// 終了コード 2 のとき、標準エラーの内容が AI に渡る。hook の中の失敗（道具が無い・時間切れ・入力が読めない）では 0 で終え、作業を止めない
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { clip, lintTargetOf, readHookInput, runTool } from "./hook-util.mjs";
+// PostToolUse（Edit・Write・MultiEdit）: AI が編集したファイルだけに eslint と prettier をかけ、違反を AI に返す。
+// 終了コード 2 のとき、標準エラーの内容が AI に渡る。hook の中の失敗（道具が無い・時間切れ・入力が読めない）では 0 で終え、作業を止めない。
+// Bash で書き換えたファイルはここを通らない（Stop の hook と pre-commit が見つける）
+import {
+  clip,
+  deadlineOf,
+  lintProblemsOf,
+  lintTargetOf,
+  readHookInput,
+  repoRootOf,
+} from "./hook-util.mjs";
 
-const TIMEOUT_MS = 60_000;
+/** settings.json の timeout（90 秒）より短くする */
+const BUDGET_MS = 80_000;
 
 const main = () => {
-  const root = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../..",
-  );
+  const root = repoRootOf(import.meta.url);
   const input = readHookInput();
   const target = lintTargetOf(input?.tool_input?.file_path, root);
   if (target === null) return 0;
 
-  const problems = [];
-  if (target.eslint) {
-    const eslint = runTool(
-      target.cwd,
-      "eslint",
-      ["--cache", "--max-warnings", "0", "--no-warn-ignored", target.file],
-      TIMEOUT_MS,
-    );
-    if (eslint !== null && !eslint.ok) problems.push(eslint.output);
-  }
-  const prettier = runTool(
+  const problems = lintProblemsOf(
+    root,
     target.cwd,
-    "prettier",
-    ["--check", "--log-level", "warn", "--ignore-unknown", target.file],
-    TIMEOUT_MS,
+    [target],
+    deadlineOf(BUDGET_MS),
   );
-  if (prettier !== null && !prettier.ok) {
-    problems.push(
-      `整形が決まりと違います。\`pnpm exec prettier --write ${target.file}\` で直してください。`,
-    );
-  }
   if (problems.length === 0) return 0;
 
   process.stderr.write(

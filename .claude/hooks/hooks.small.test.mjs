@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { clip, lintTargetOf } from "./hook-util.mjs";
-import { typecheckTargetsOf } from "./typecheck-on-stop.mjs";
+import { typecheckTargetsOf } from "./check-on-stop.mjs";
+import { clip, lintTargetOf, parseStatus } from "./hook-util.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
@@ -52,6 +54,59 @@ describe("lintTargetOf", () => {
   });
 });
 
+describe("lintTargetOf（リンク越し）", () => {
+  test("[正常系]リンク越しに開いた根でも、根の中のファイルは確かめ、根の外を指すリンクは確かめない", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hook-util-"));
+    try {
+      const linkedRoot = path.join(dir, "linked-root");
+      fs.symlinkSync(root, linkedRoot);
+
+      expect(
+        lintTargetOf(path.join(root, "src/App.tsx"), linkedRoot),
+      ).toStrictEqual({
+        cwd: linkedRoot,
+        file: "src/App.tsx",
+        eslint: true,
+      });
+      expect(
+        lintTargetOf(path.join(linkedRoot, "src/App.tsx"), root),
+      ).toStrictEqual({
+        cwd: root,
+        file: "src/App.tsx",
+        eslint: true,
+      });
+
+      const realRoot = path.join(dir, "real-root");
+      fs.mkdirSync(path.join(realRoot, "src"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "outside.ts"), "");
+      fs.symlinkSync(
+        path.join(dir, "outside.ts"),
+        path.join(realRoot, "src/inside.ts"),
+      );
+      expect(lintTargetOf("src/inside.ts", realRoot)).toBeNull();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("parseStatus", () => {
+  test("[正常系]変更・新規・名前の変更（新しい名前）を拾い、消したものと元の名前は除く", () => {
+    expect(
+      parseStatus(
+        [
+          " M api/a.ts",
+          "?? src/new file.ts",
+          "R  src/renamed.ts",
+          "src/old.ts",
+          " D src/deleted.ts",
+          "",
+        ].join("\0"),
+      ),
+    ).toStrictEqual(["api/a.ts", "src/new file.ts", "src/renamed.ts"]);
+  });
+});
+
 describe("typecheckTargetsOf", () => {
   test("[正常系]変更のあるパッケージだけを選ぶ", () => {
     const names = (files) =>
@@ -97,9 +152,27 @@ describe("hook のスクリプト", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("[正常系]決まりに合わないファイルは、終了コード 2 で直し方を返す", () => {
+    const file = "scripts/zz-hook-probe.mjs";
+    fs.writeFileSync(path.join(root, file), "export const a = {b:1}\n");
+    try {
+      const result = run(
+        "lint-edited-file.mjs",
+        JSON.stringify({ tool_input: { file_path: path.join(root, file) } }),
+      );
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain(
+        `pnpm exec prettier --write -- '${file}'`,
+      );
+    } finally {
+      fs.rmSync(path.join(root, file));
+    }
+  });
+
   test("[正常系]同じ停止で 2 度目（stop_hook_active）は、確かめずに終える", () => {
     expect(
-      run("typecheck-on-stop.mjs", JSON.stringify({ stop_hook_active: true }))
+      run("check-on-stop.mjs", JSON.stringify({ stop_hook_active: true }))
         .status,
     ).toBe(0);
   });
