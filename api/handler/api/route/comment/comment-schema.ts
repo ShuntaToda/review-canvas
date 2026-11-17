@@ -36,7 +36,7 @@ export const branchSchema = z
  * OpenAPI の pattern にフラグは載らないため、u フラグ（\p{Cc}）を使わずに範囲で書く
  */
 const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINE =
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- 制御文字を見つけるための正規表現
   /^(?:[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]|[\n\r\t])+$/;
 
 /** 本文（上限は一覧の1ページの応答の大きさを抑えるため） */

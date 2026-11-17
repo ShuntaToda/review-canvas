@@ -64,8 +64,7 @@ export const CommentForm = ({
         placeholder={placeholder}
         value={body}
         rows={3}
-        // 吹き出しを開いたらすぐ書けるようにする（利用者が開いた直後だけ）
-        // eslint-disable-next-line jsx-a11y/no-autofocus
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- 吹き出しを開いたらすぐ書けるようにする（利用者が開いた直後だけ）
         autoFocus={focusOnMount}
         // 書きかけを戻したときは、続きを書けるようカーソルを末尾に置く
         onFocus={(event) => {

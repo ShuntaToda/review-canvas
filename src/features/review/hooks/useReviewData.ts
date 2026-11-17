@@ -15,6 +15,7 @@ import {
 } from "../model/storybook";
 import { messages } from "@/constants/messages";
 import { apiClient } from "@/support/api/api-client";
+import { fetchWithoutCredentials } from "@/support/api/fetch-without-credentials";
 
 export const reviewApi = buildReviewApi(apiClient);
 
@@ -53,9 +54,9 @@ const fetchStories = async (
   base: string,
   source: StorySource,
 ): Promise<Story[]> => {
-  const response = await fetch(storybookIndexPath(base, source), {
-    credentials: "omit",
-  });
+  const response = await fetchWithoutCredentials(
+    storybookIndexPath(base, source),
+  );
   if (!response.ok) {
     throw new Error(`Storybook の一覧を読めません（${response.status}）`);
   }

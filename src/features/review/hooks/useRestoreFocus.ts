@@ -30,7 +30,6 @@ export const useRestoreFocus = (
         target?.focus({ preventScroll: true });
       });
     };
-    // 開いたときの一度だけ覚える
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 開いたときの一度だけ覚える
   }, []);
 };

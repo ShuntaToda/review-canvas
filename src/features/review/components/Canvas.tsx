@@ -280,8 +280,7 @@ export const Canvas = ({
       role="application"
       aria-label="キャンバス"
       aria-roledescription="キャンバス"
-      // 矢印キーで動かせるよう、Tab で止まれるようにする（role="application" はキー操作を受け持つ要素）
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- 矢印キーで動かせるよう、Tab で止まれるようにする（role="application" はキー操作を受け持つ要素）
       tabIndex={0}
       data-canvas-root
       data-canvas-background

@@ -35,8 +35,7 @@ export const DevLoginPage = () => {
           <input
             value={name}
             maxLength={DEV_NAME_MAX_LENGTH}
-            // ログインの画面を開いたらすぐ打てるようにする（この画面の入力欄は1つだけ）
-            // eslint-disable-next-line jsx-a11y/no-autofocus
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- ログインの画面を開いたらすぐ打てるようにする（この画面の入力欄は1つだけ）
             autoFocus
             className="rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             onChange={(event) => setName(event.target.value)}

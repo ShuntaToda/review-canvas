@@ -56,8 +56,7 @@ export class DevReviewerTokenVerifier implements ReviewerTokenVerifier {
     this.#fetchNow = fetchNow;
   }
 
-  // 同期的に投げた例外も Promise の拒否として返すため async にする
-  // eslint-disable-next-line @typescript-eslint/require-await
+  // eslint-disable-next-line @typescript-eslint/require-await -- 同期的に投げた例外も Promise の拒否として返すため async にする
   async verify(credential: string): Promise<Reviewer> {
     const segments = credential.split(".");
     if (segments.length !== 3) {

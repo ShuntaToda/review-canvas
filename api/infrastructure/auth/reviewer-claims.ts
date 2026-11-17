@@ -35,7 +35,7 @@ const isNumericDate = (value: unknown): value is number =>
 // 改行・タブなどの制御文字（U+0000–001F・U+007F–009F）と、行・段落の区切り、文字の向きを変える制御文字（U+202A–202E・U+2066–2069。
 // 書き出しの Markdown を読む人・AI に、見た目と違う並びの文字を見せない）
 const CONTROL_CHARACTERS =
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- 制御文字を見つけるための正規表現
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
 // 見えない文字（書式の文字 \p{Cf} と既定で無視される文字: ゼロ幅の空白・接合子・ソフトハイフン・BOM・異体字セレクタ・ハングルの空白など）。

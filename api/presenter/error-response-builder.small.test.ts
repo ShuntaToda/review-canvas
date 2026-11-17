@@ -37,7 +37,7 @@ describe("buildErrorResponseBuilder", () => {
   `(
     "[正常系]$ErrorType.name は $expectedStatus になる",
     ({ ErrorType, expectedStatus }) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- test.each の表から受けたクラスには型が付かない
       const error = new ErrorType("test error") as unknown as Error;
       const response = builder(error, mockLogger);
       expect(response.httpStatus).toBe(expectedStatus);

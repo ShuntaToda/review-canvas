@@ -2,6 +2,7 @@ import { appError } from "./rules/app-error.mjs";
 import { handlerShape } from "./rules/handler-shape.mjs";
 import { noAmbientTimeOrRandom } from "./rules/no-ambient-time-or-random.mjs";
 import { noExternalImports } from "./rules/no-external-imports.mjs";
+import { packageBoundaries } from "./rules/package-boundaries.mjs";
 import { useCaseShape } from "./rules/use-case-shape.mjs";
 
 /**
@@ -15,6 +16,7 @@ export const localRules = {
     "handler-shape": handlerShape,
     "no-ambient-time-or-random": noAmbientTimeOrRandom,
     "no-external-imports": noExternalImports,
+    "package-boundaries": packageBoundaries,
     "use-case-shape": useCaseShape,
   },
 };

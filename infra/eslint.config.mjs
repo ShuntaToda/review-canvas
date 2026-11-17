@@ -13,4 +13,19 @@ export default tseslint.config(
       "@typescript-eslint/no-floating-promises": "error",
     },
   },
+  // 環境変数は入口（bin/・scripts/）で読み、コンストラクト（lib/）には値で渡す（使う側の CDK アプリに組み込んでも、環境に左右されないように）
+  {
+    files: ["lib/**/*.ts"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "process",
+          property: "env",
+          message:
+            "lib/ では環境変数（process.env）を読めません。入口（bin/review-canvas.ts）で読み、readSettings などの引数・コンストラクトの props で渡してください。",
+        },
+      ],
+    },
+  },
 );

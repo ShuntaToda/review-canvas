@@ -1,4 +1,5 @@
 import path from "node:path";
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import js from "@eslint/js";
 import prettier from "eslint-config-prettier";
 import importPlugin from "eslint-plugin-import";
@@ -37,6 +38,8 @@ export function baseConfig(tsconfigRootDir) {
     js.configs.recommended,
     ...tseslint.configs.recommendedTypeChecked,
     {
+      // 効いていない eslint-disable を残さない（直したあとの消し忘れ・黙らせるだけの disable を見つける）
+      linterOptions: { reportUnusedDisableDirectives: "error" },
       languageOptions: {
         parserOptions: {
           // tsconfig.json を自動探索して型付きルールを有効化
@@ -45,10 +48,13 @@ export function baseConfig(tsconfigRootDir) {
         },
       },
       plugins: {
+        "@eslint-community/eslint-comments": eslintComments,
         import: importPlugin,
         "unused-imports": unusedImports,
       },
       settings: {
+        // import 先の TypeScript を読めるようにする（無いと import/no-cycle が import 先をたどれず、何も見つけない）
+        "import/parsers": { "@typescript-eslint/parser": [".ts", ".tsx"] },
         "import/resolver": {
           typescript: {
             // 型定義のみのパッケージ(@types/*)も解決できるようにする
@@ -61,6 +67,19 @@ export function baseConfig(tsconfigRootDir) {
       rules: {
         // import順・未使用import・アロー関数などの共通ルール
         "import/no-unresolved": "error",
+        // 循環 import を作らない（層の向きの決まりをすり抜ける相互依存と、読み込み順で undefined になる不具合を防ぐ）
+        "import/no-cycle": ["error", { ignoreExternal: true }],
+        // eslint-disable には理由を書く（`-- 理由`）。ファイルまるごと・ルールを挙げない disable はしない
+        "@eslint-community/eslint-comments/require-description": [
+          "error",
+          // 閉じる側（eslint-enable）には要らない。理由は開く側に書く
+          { ignore: ["eslint-enable"] },
+        ],
+        "@eslint-community/eslint-comments/no-unlimited-disable": "error",
+        "@eslint-community/eslint-comments/disable-enable-pair": [
+          "error",
+          { allowWholeFile: true },
+        ],
         "unused-imports/no-unused-imports": "error",
         "import/order": ["error", { alphabetize: { order: "asc" } }],
         // default export を禁止（名前付きexport／Barrelに統一）。

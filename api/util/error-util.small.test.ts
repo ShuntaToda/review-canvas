@@ -71,7 +71,7 @@ describe("error-util", () => {
     `(
       "[正常系]$ErrorType.name は $expectedName になる",
       ({ ErrorType, expectedName }) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- test.each の表から受けたクラスには型が付かない
         const error = new ErrorType() as unknown as Error;
         expect(error.name).toBe(expectedName);
       },

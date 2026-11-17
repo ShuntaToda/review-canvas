@@ -199,7 +199,8 @@ describe("planPublish", () => {
     const deletes = calls
       .map((call, index) => ({ call, index }))
       .filter(
-        ({ call }) => call.includes("--delete") && call[2]?.endsWith("assets"),
+        ({ call }) =>
+          call.includes("--delete") && call[2]?.endsWith("assets") === true,
       );
 
     expect(deletes).toHaveLength(1);
