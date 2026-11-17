@@ -52,6 +52,19 @@ export default defineConfig({
           functions: 90,
           lines: 90,
         },
+        "api/handler/**": {
+          statements: 95,
+          branches: 80,
+          functions: 97,
+          lines: 95,
+        },
+        // 通信・保存の薄い包み（fetch・localStorage を直に使ってよい唯一の場所）。ブラウザでしか動かない枝が残る
+        "src/support/**": {
+          statements: 66,
+          branches: 60,
+          functions: 68,
+          lines: 66,
+        },
         "src/features/*/model/**": {
           statements: 90,
           branches: 78,
