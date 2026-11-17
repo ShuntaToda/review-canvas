@@ -368,6 +368,9 @@ export class ReviewCanvas extends Construct {
       "StorybookDistribution",
       {
         comment: `review-canvas storybook (${Stack.of(this).stackName})`,
+        // `/` は storybook-rewrite.js が 404 を返すので使われない。S3 をオリジンにする配信の基本の検査
+        // （Security Hub の CloudFront.1）が既定のルートオブジェクトを求めるため付ける
+        defaultRootObject: "index.html",
         defaultBehavior: {
           origin: siteOrigin,
           allowedMethods: aws_cloudfront.AllowedMethods.ALLOW_GET_HEAD,

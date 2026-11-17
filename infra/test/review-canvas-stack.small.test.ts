@@ -359,6 +359,12 @@ describe("CloudFront", () => {
     });
   });
 
+  test("どちらの配信にも既定のルートオブジェクトがある（Security Hub の CloudFront.1）", () => {
+    for (const { config } of distributions()) {
+      expect(config).toHaveProperty("DefaultRootObject", "index.html");
+    }
+  });
+
   test("Storybook の配信は、どのオリジンからも・どの要求ヘッダーが付いていても GET と HEAD を読ませる（一覧の fetch が CORS で落ちない）", () => {
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: Match.objectLike({
