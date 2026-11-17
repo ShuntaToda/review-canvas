@@ -106,7 +106,8 @@ const main = () => {
       remaining(),
     );
     return result !== null && !result.ok
-      ? [`[${target.name}]\n${result.output}`]
+      ? // 切るのはパッケージごと。先のパッケージの長い出力で、後ろのパッケージの見出しが消えないようにする
+        [`[${target.name}]\n${clip(result.output)}`]
       : [];
   });
   if (lintProblems.length === 0 && typeProblems.length === 0) return 0;
@@ -120,7 +121,7 @@ const main = () => {
     ...(typeProblems.length === 0
       ? []
       : [
-          `型の誤りがあります（tsc）。直してから終えてください（any・@ts-expect-error で黙らせない）。画面の型は openapi.json から作るので、API を変えたら pnpm run openapi:generate && pnpm run codegen。\n${clip(typeProblems.join("\n"))}`,
+          `型の誤りがあります（tsc）。直してから終えてください（any・@ts-expect-error で黙らせない）。画面の型は openapi.json から作るので、API を変えたら pnpm run openapi:generate && pnpm run codegen。\n${typeProblems.join("\n")}`,
         ]),
   ];
   process.stderr.write(`${sections.join("\n\n")}\n`);
