@@ -18,15 +18,9 @@ describe("registerContainer", () => {
     vi.unstubAllEnvs();
   });
 
+  // ユースケースは service-id.ts から拾う（足したユースケースを、ここへ書き足し忘れないように）
   test.each([
-    serviceId.GET_REVIEW_META_USE_CASE,
-    serviceId.LIST_BRANCHES_USE_CASE,
-    serviceId.LIST_COMMENTS_USE_CASE,
-    serviceId.CREATE_COMMENT_USE_CASE,
-    serviceId.REPLY_TO_COMMENT_USE_CASE,
-    serviceId.EDIT_COMMENT_USE_CASE,
-    serviceId.SET_COMMENT_RESOLVED_USE_CASE,
-    serviceId.DELETE_COMMENT_USE_CASE,
+    ...Object.values(serviceId).filter((id) => id.endsWith("_USE_CASE")),
     serviceId.REVIEWER_TOKEN_VERIFIER,
   ])("[正常系]%s を解決できる(配線の抜けが無い)", (id) => {
     const container = registerContainer();
