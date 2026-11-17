@@ -347,6 +347,22 @@ export class ReviewCanvas extends Construct {
         }),
       },
     );
+    // マネージドの SimpleCORS は、要求に安全リスト外のヘッダー（Chrome が fetch に付ける priority など）があると
+    // Access-Control-Allow-Origin を付けず、ブラウザが一覧を読めない。そのため要求ヘッダーをすべて許す
+    const storybookResponseHeadersPolicy =
+      new aws_cloudfront.ResponseHeadersPolicy(
+        this,
+        "StorybookResponseHeadersPolicy",
+        {
+          corsBehavior: {
+            accessControlAllowOrigins: ["*"],
+            accessControlAllowHeaders: ["*"],
+            accessControlAllowMethods: ["GET", "HEAD"],
+            accessControlAllowCredentials: false,
+            originOverride: true,
+          },
+        },
+      );
     const storybookDistribution = new aws_cloudfront.Distribution(
       this,
       "StorybookDistribution",
@@ -358,8 +374,7 @@ export class ReviewCanvas extends Construct {
           cachePolicy: aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
           viewerProtocolPolicy:
             aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          responseHeadersPolicy:
-            aws_cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
+          responseHeadersPolicy: storybookResponseHeadersPolicy,
           functionAssociations: [
             {
               function: storybookRewriteFunction,

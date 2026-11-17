@@ -347,10 +347,30 @@ describe("CloudFront", () => {
     expect(JSON.stringify(storybook.FunctionAssociations)).toContain(
       "StorybookRewriteFunction",
     );
-    // マネージドポリシーの ID（SimpleCORS。どのオリジンからも読める）
-    expect(storybook.ResponseHeadersPolicyId).toBe(
+    // マネージドの SimpleCORS は使わない（Chrome が付ける priority ヘッダーがあると Access-Control-Allow-Origin を付けない）
+    expect(storybook.ResponseHeadersPolicyId).not.toBe(
       "60669652-455b-4ae9-85a4-c4c02393f86c",
     );
+    const storybookPolicyId = Object.keys(
+      template.findResources("AWS::CloudFront::ResponseHeadersPolicy"),
+    ).find((id) => id.startsWith("StorybookResponseHeadersPolicy"));
+    expect(storybook.ResponseHeadersPolicyId).toEqual({
+      Ref: storybookPolicyId,
+    });
+  });
+
+  test("Storybook の配信は、どのオリジンからも・どの要求ヘッダーが付いていても GET と HEAD を読ませる（一覧の fetch が CORS で落ちない）", () => {
+    template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
+      ResponseHeadersPolicyConfig: Match.objectLike({
+        CorsConfig: {
+          AccessControlAllowOrigins: { Items: ["*"] },
+          AccessControlAllowHeaders: { Items: ["*"] },
+          AccessControlAllowMethods: { Items: ["GET", "HEAD"] },
+          AccessControlAllowCredentials: false,
+          OriginOverride: true,
+        },
+      }),
+    });
   });
 });
 
@@ -421,7 +441,7 @@ describe("使える人の警告", () => {
 
 describe("画面の配信の応答ヘッダー", () => {
   test("画面と /api/* に、ほかのページの iframe に入れさせない・HTTPS だけ・Content-Type を読み替えさせないヘッダーを付ける（Storybook の配信には付けない）", () => {
-    template.resourceCountIs("AWS::CloudFront::ResponseHeadersPolicy", 1);
+    template.resourceCountIs("AWS::CloudFront::ResponseHeadersPolicy", 2);
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: Match.objectLike({
         SecurityHeadersConfig: Match.objectLike({
@@ -438,9 +458,9 @@ describe("画面の配信の応答ヘッダー", () => {
         }),
       }),
     });
-    const [policyId] = Object.keys(
+    const policyId = Object.keys(
       template.findResources("AWS::CloudFront::ResponseHeadersPolicy"),
-    );
+    ).find((id) => id.startsWith("AppResponseHeadersPolicy"));
     const configs = Object.entries(
       template.findResources("AWS::CloudFront::Distribution"),
     ).map(([id, resource]) => ({
