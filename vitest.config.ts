@@ -18,6 +18,14 @@ export default defineConfig({
         },
       },
       {
+        test: {
+          // このリポジトリだけの ESLint ルール（eslint-rules/）を RuleTester で確かめる
+          name: "eslint-rules",
+          include: ["eslint-rules/**/*.test.mjs"],
+          environment: "node",
+        },
+      },
+      {
         resolve: { alias: { "@/": path.join(__dirname, "api/") } },
         test: {
           name: "api",

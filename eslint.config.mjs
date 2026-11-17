@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { baseConfig, commonIgnores } from "./eslint.config.base.mjs";
+import { localRules } from "./eslint-rules/index.mjs";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
@@ -46,6 +47,8 @@ export default tseslint.config(
       ...commonIgnores,
       // CLI（bin/）は使う側が動かす入口なので、JavaScript でも検査する
       "!bin/*.mjs",
+      // 自前の ESLint ルールも、同じ規則で検査する
+      "!eslint-rules/**/*.mjs",
       "api/tsc-cache/**",
       "infra/**",
       // サンプルの Storybook（examples/）は使う側のアプリの見本。型は自分の tsconfig で確かめる（pnpm --dir examples/sample-storybook run validate）
@@ -238,6 +241,45 @@ export default tseslint.config(
       ],
     },
   },
+  // このリポジトリだけのルール（eslint-rules/）。層ごとのファイルの形・名前・エラーの形
+  {
+    files: apiFiles,
+    plugins: { local: localRules },
+  },
+  {
+    files: apiFiles,
+    // エラーの基底（AppError）を定義するファイル自身は、Error を継承する
+    ignores: ["api/util/error-util.ts"],
+    rules: { "local/app-error": ["error", { allowThrowPlainError: true }] },
+  },
+  {
+    // 利用者のリクエストを扱う側。素の Error を投げると、どれも 500 になる
+    files: [
+      "api/domain/**/*.ts",
+      "api/use-case/**/*.ts",
+      "api/handler/api/route/**/*.ts",
+      "api/handler/api/middleware/**/*.ts",
+    ],
+    ignores: ["api/**/*.test.ts"],
+    rules: { "local/app-error": ["error", { allowThrowPlainError: false }] },
+  },
+  ...["domain", "use-case", "presenter"].map((layer) => ({
+    files: [`api/${layer}/**/*.ts`],
+    ignores: ["api/**/*.test.ts"],
+    rules: {
+      "local/no-external-imports": ["error", { layer }],
+      "local/no-ambient-time-or-random": "error",
+    },
+  })),
+  {
+    files: ["api/use-case/**/*.ts"],
+    ignores: ["api/**/*.test.ts"],
+    rules: { "local/use-case-shape": "error" },
+  },
+  {
+    files: ["api/handler/api/route/**/*-handler.ts"],
+    rules: { "local/handler-shape": "error" },
+  },
   {
     files: ["api/**/*.test.ts"],
     rules: {
@@ -318,9 +360,9 @@ export default tseslint.config(
       ],
     },
   },
-  // CLI（bin/）は Node でそのまま動かす JavaScript で、型情報を持たない。型を使う規則は外し、Node のグローバルを許す
+  // CLI（bin/）・自前の ESLint ルール（eslint-rules/）は Node でそのまま動かす JavaScript で、型情報を持たない。型を使う規則は外し、Node のグローバルを許す
   {
-    files: ["bin/*.mjs"],
+    files: ["bin/*.mjs", "eslint-rules/**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
