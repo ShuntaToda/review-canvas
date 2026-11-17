@@ -24,8 +24,17 @@ const CONSOLE_GLOBAL = {
 const APP_PROCESS_ENV_MESSAGE =
   "画面（src/）では process.env を読めません。設定は src/config（loadConfig）から受けてください。";
 
+/** 画面から外へつなぐグローバルと、ブラウザに値を残すグローバル（src/support の外では直に使わない） */
+const NETWORK_GLOBALS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource"];
+const STORAGE_GLOBALS = [
+  "localStorage",
+  "sessionStorage",
+  "indexedDB",
+  "caches",
+];
+
 const FETCH_MESSAGE =
-  "画面のコードから fetch・XMLHttpRequest・sendBeacon を直に呼びません。API は src/support/api の apiClient（型は openapi.json から生成）、API 以外の読み込みは src/support/api の関数を通してください（資格情報の付け方を 1 か所で決めるため）。";
+  "画面のコードから fetch・XMLHttpRequest・WebSocket・EventSource・sendBeacon を直に使いません。API は src/support/api の apiClient（型は openapi.json から生成）、API 以外の読み込みは src/support/api の関数を通してください（資格情報の付け方を 1 か所で決めるため）。";
 const storageMessageOf = (name) =>
   `${name} を直に使いません。src/support/storage の関数を通してください（キーの名前と、使えない環境での失敗の扱いを 1 か所で決めるため）。`;
 
@@ -711,31 +720,38 @@ export default tseslint.config(
     rules: {
       "no-restricted-globals": [
         "error",
-        ...["fetch", "XMLHttpRequest"].map((name) => ({
-          name,
-          message: FETCH_MESSAGE,
-        })),
-        ...["localStorage", "sessionStorage", "indexedDB"].map((name) => ({
+        ...NETWORK_GLOBALS.map((name) => ({ name, message: FETCH_MESSAGE })),
+        ...STORAGE_GLOBALS.map((name) => ({
           name,
           message: storageMessageOf(name),
+        })),
+      ],
+      // window・document などを別名にすると、上と下の「名前で見る」決まりから外れる
+      "no-restricted-syntax": [
+        "error",
+        ...[
+          "VariableDeclarator[init.type='Identifier'][init.name=/^(window|document|globalThis|self)$/]",
+          "AssignmentExpression[right.type='Identifier'][right.name=/^(window|document|globalThis|self)$/]",
+        ].map((selector) => ({
+          selector,
+          message:
+            "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。",
         })),
       ],
       "no-restricted-properties": [
         "error",
         ...processEnvProperties(APP_PROCESS_ENV_MESSAGE),
         ...["window", "globalThis", "self"].flatMap((object) => [
-          ...["fetch", "XMLHttpRequest"].map((property) => ({
+          ...NETWORK_GLOBALS.map((property) => ({
             object,
             property,
             message: FETCH_MESSAGE,
           })),
-          ...["localStorage", "sessionStorage", "indexedDB"].map(
-            (property) => ({
-              object,
-              property,
-              message: storageMessageOf(property),
-            }),
-          ),
+          ...STORAGE_GLOBALS.map((property) => ({
+            object,
+            property,
+            message: storageMessageOf(property),
+          })),
         ]),
         {
           object: "navigator",
