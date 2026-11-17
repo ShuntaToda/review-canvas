@@ -45,7 +45,7 @@ npm パッケージを import してよい場所は `eslint.config.mjs` の `pac
 
 - 投げるのは `AppError`（`api/util/error-util.ts`）の派生だけです（`local/app-error`。`throw`・`Promise.reject`・`new Promise` の `reject` を見る）。値の型が「Error だが AppError の派生ではない」もの（組み込みのエラー・`HTTPException` や `ZodError` などライブラリのエラー）は落ちます。変数に入れてから投げる・`Object.assign` で包む・`as` で包むといった書き方も、型で見つけます
 - `AppError` そのもの（基底）も投げません。presenter は派生のクラスからステータスを決めるので、基底のままでは 500 になります
-- `catch` で受けたものをそのまま投げ直すのは構いません（`throw error`。`if (e instanceof Error) throw e` のように型を絞ったあとでも同じ）。別のエラーに包むときは、AppError の派生に `cause` で渡します
+- `catch`・`.catch((error) => …)` で受けたものをそのまま投げ直すのは構いません（`throw error`。`if (e instanceof Error) throw e` のように型を絞ったあとでも同じ）。別のエラーに包むときは、AppError の派生に `cause` で渡します
 - domain に固有のエラーは `api/domain/model/<名前>/<名前>-errors.ts` に置き、`override name = "<クラス名>"` を書きます（API の応答の `error` になる）
 - 起動時の設定の誤り（infrastructure・di-container）は素の `Error` で落とします（利用者には返さない）
 

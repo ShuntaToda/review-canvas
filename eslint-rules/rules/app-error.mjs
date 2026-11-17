@@ -1,4 +1,4 @@
-import { someTypeInChain, unwrap } from "../ast-util.mjs";
+import { propertyNameOf, someTypeInChain, unwrap } from "../ast-util.mjs";
 
 /** 組み込みのエラー。どれを投げても presenter は種類を見分けられず、500 になる */
 const BUILTIN_ERRORS = [
@@ -103,10 +103,28 @@ export const appError = {
         ? null
         : nonAppErrorNameOfType(services.getTypeAtLocation(node));
 
-    /** catch で受けた値（catch (error) の error）か。受けたものの投げ直しは、型を絞ったあとでも見ない */
-    const isCaught = (node) =>
-      node.type === "Identifier" &&
-      variableOf(node)?.defs[0]?.type === "CatchClause";
+    /** `.catch((error) => …)`・`.then(…, (error) => …)` に渡した関数の、最初の引数か */
+    const isRejectionHandlerParameter = (definition) => {
+      const handler = definition.node;
+      if (handler.params?.[0] !== definition.name) return false;
+      const call = handler.parent;
+      if (call.type !== "CallExpression") return false;
+      const callee = unwrap(call.callee);
+      if (callee.type !== "MemberExpression") return false;
+      const position = { catch: 0, then: 1 }[propertyNameOf(callee) ?? ""];
+      return position !== undefined && call.arguments[position] === handler;
+    };
+
+    /** 受けた値（catch (error) の error・.catch((error) => …) の error）か。受けたものの投げ直しは、型を絞ったあとでも見ない */
+    const isCaught = (node) => {
+      if (node.type !== "Identifier") return false;
+      const definition = variableOf(node)?.defs[0];
+      return (
+        definition?.type === "CatchClause" ||
+        (definition?.type === "Parameter" &&
+          isRejectionHandlerParameter(definition))
+      );
+    };
 
     /** 名前を宣言している変数（無ければ null） */
     const variableOf = (identifier) => {

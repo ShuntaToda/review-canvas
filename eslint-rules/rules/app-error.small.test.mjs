@@ -120,6 +120,16 @@ typedRuleTester.run("app-error（型で見る）", appError, {
       "try { JSON.parse(''); } catch (e) { if (e instanceof Error) throw e; }",
     ),
     typed("try { JSON.parse(''); } catch (e) { throw e as Error; }"),
+    // .catch・.then の 2 つめに渡した関数で受けたものも、投げ直せる
+    typed(
+      "export const f = (p: Promise<void>) => p.catch((error: Error) => { throw error; });",
+    ),
+    typed(
+      "export const f = (p: Promise<void>) => p.then(() => {}, function (error: Error) { throw error; });",
+    ),
+    typed(
+      "export const f = (p: Promise<void>) => p.catch((error: Error) => Promise.reject(error));",
+    ),
     // Promise でないものの reject は見ない
     typed(
       "const queue = { reject: (e: Error) => e }; queue.reject(new Error());",
@@ -133,6 +143,16 @@ typedRuleTester.run("app-error（型で見る）", appError, {
   invalid: [
     typed("const e = new Error(); throw e;"),
     typed("throw Object.assign(new Error(), { code: 1 });"),
+    // .catch に渡した関数でも、受けたもの以外（2 つめの引数・.then の 1 つめ・新しく作ったエラー）は見る
+    typed(
+      "export const f = (p: Promise<void>) => p.catch((error: Error) => { throw new Error(error.message); });",
+    ),
+    typed(
+      "export const f = (p: Promise<Error>) => p.then((value: Error) => { throw value; });",
+    ),
+    typed(
+      "export const f = (xs: Array<Error>) => xs.map((x: Error) => { throw x; });",
+    ),
     typed("new Promise((_, reject) => reject(new Error()));"),
     typed("new Promise((_, reject) => { reject(new TypeError()); });"),
     typed("globalThis.Promise.reject(new Error());"),
