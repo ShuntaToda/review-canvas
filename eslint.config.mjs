@@ -117,6 +117,44 @@ const PRIVATE_KEYWORD = {
     "クラスの非公開のメンバーは TypeScript の private ではなく #名前 で書いてください（例: `readonly #logger: Logger;`）。実行時にも外から読めなくなります。",
 };
 
+/** 型の書き方だけの包み（`x as T`・`x satisfies T`・`x!`・`<T>x`） */
+const TYPE_WRAPPER =
+  ":matches(TSAsExpression, TSSatisfiesExpression, TSNonNullExpression, TSTypeAssertion)";
+
+/**
+ * グローバルのオブジェクトを型のアサーションで包まない。`(window as Window).fetch`・`(globalThis as X).process` のように包むと、
+ * 名前で見る決まり（no-restricted-properties）から外れる
+ */
+const wrappedGlobalOf = (names, message) => ({
+  selector: `${TYPE_WRAPPER} > Identifier.expression[name=/^(${names.join("|")})$/]`,
+  message,
+});
+
+/**
+ * 二重のアサーション（`x as unknown as T`）。型の検査を丸ごと外す書き方で、型で見る lint のルールもすり抜ける。
+ * テストは偽物づくりで使うので対象にしない
+ */
+const DOUBLE_ASSERTION = {
+  selector:
+    "TSAsExpression > :matches(TSAsExpression, TSTypeAssertion)[typeAnnotation.type=/^TS(Unknown|Any)Keyword$/]",
+  message:
+    "二重のアサーション（as unknown as T）は使いません。型が合わない理由を直すか、値を確かめる関数（型ガード・zod のスキーマ）で絞ってください。型に無いプロパティを読むだけなら Reflect.get(対象, 名前) が使えます。",
+};
+
+/** globalThis・global を変数に入れる書き方と、process の動的 import（api。組み立てる場所と入口の外） */
+const API_GLOBAL_ALIAS_MESSAGE =
+  "globalThis・global を変数に入れません（別名を通すと、process・Date などを直に使っても見つけられません）。要る値は di-container で読み、props・引数で受けてください。";
+const API_GLOBAL_ALIASES = [
+  ...[
+    "VariableDeclarator[init.type='Identifier'][init.name=/^(globalThis|global)$/]",
+    "AssignmentExpression[right.type='Identifier'][right.name=/^(globalThis|global)$/]",
+  ].map((selector) => ({ selector, message: API_GLOBAL_ALIAS_MESSAGE })),
+  wrappedGlobalOf(
+    ["globalThis", "global", "process"],
+    "globalThis・global・process を型のアサーションで包みません（包むと、名前で見る決まりから外れます）。要る値は di-container で読み、props・引数で受けてください。",
+  ),
+];
+
 /** 環境変数を読む書き方（process.env・globalThis.process）と、process の import */
 const processEnvProperties = (message) => [
   { object: "process", property: "env", message },
@@ -305,6 +343,24 @@ export default tseslint.config(
       ],
     },
   },
+  // 型の検査を外す書き方（テストは偽物づくりで使うので外す）。no-restricted-syntax は後ろの設定が前を丸ごと置き換えるので、
+  // 同じファイルに掛かる後ろの設定（process の節・画面の出入口の節）にも同じものを並べる
+  {
+    files: apiFiles,
+    ignores: [
+      "api/**/*.test.ts",
+      "api/**/*.dummy.ts",
+      "api/util/testing-util/**",
+    ],
+    rules: {
+      "no-restricted-syntax": ["error", PRIVATE_KEYWORD, DOUBLE_ASSERTION],
+    },
+  },
+  {
+    files: appFiles,
+    ignores: ["src/**/*.test.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", DOUBLE_ASSERTION] },
+  },
   // 値が無いかもしれない所を ! で黙らせない（テストは、作った値を読むだけなので外す）
   {
     files: [...apiFiles, ...appFiles],
@@ -362,6 +418,17 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         processImports(API_PROCESS_ENV_MESSAGE),
+      ],
+      "no-restricted-syntax": [
+        "error",
+        PRIVATE_KEYWORD,
+        DOUBLE_ASSERTION,
+        ...API_GLOBAL_ALIASES,
+        {
+          selector:
+            "ImportExpression[source.value=/^(node:)?process$/], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=/^(node:)?process$/]",
+          message: API_PROCESS_ENV_MESSAGE,
+        },
       ],
     },
   },
@@ -670,9 +737,17 @@ export default tseslint.config(
       // window・document などを別名にすると、上と下の「名前で見る」決まりから外れる
       "no-restricted-syntax": [
         "error",
+        DOUBLE_ASSERTION,
+        wrappedGlobalOf(
+          ["window", "document", "globalThis", "self", "navigator"],
+          "window・document・globalThis・self・navigator を型のアサーションで包みません（包むと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。通信は src/support/api、保存は src/support/storage を通します。",
+        ),
         ...[
           "VariableDeclarator[init.type='Identifier'][init.name=/^(window|document|globalThis|self)$/]",
           "AssignmentExpression[right.type='Identifier'][right.name=/^(window|document|globalThis|self)$/]",
+          // const d = window.document・const w = globalThis.window のような、メンバーを通した別名
+          "VariableDeclarator[init.type='MemberExpression'][init.object.name=/^(window|globalThis|self)$/][init.property.name=/^(window|document|globalThis|self|navigator)$/]",
+          "AssignmentExpression[right.type='MemberExpression'][right.object.name=/^(window|globalThis|self)$/][right.property.name=/^(window|document|globalThis|self|navigator)$/]",
         ].map((selector) => ({
           selector,
           message:

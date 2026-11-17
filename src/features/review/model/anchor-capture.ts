@@ -485,14 +485,14 @@ const collectNames = (
 /** 要素か祖先に、UI のフレームワークが付けた内部の値（React の fiber・Vue のコンポーネント）があれば返す */
 const frameworkHandleOf = (
   element: Element,
-  read: (record: Record<string, unknown>) => unknown,
+  read: (target: Element) => unknown,
 ): unknown => {
   for (
     let current: Element | null = element;
     current !== null;
     current = current.parentElement
   ) {
-    const handle = read(current as unknown as Record<string, unknown>);
+    const handle = read(current);
     if (handle != null) return handle;
   }
   return undefined;
@@ -509,11 +509,14 @@ type VueInstance = {
  */
 export const componentChainOf = (element: Element): string[] => {
   try {
-    const fiber = frameworkHandleOf(element, (record) => {
-      const key = Object.keys(record).find((name) =>
+    // フレームワークが要素に足した値は Element の型に無いので、Reflect.get で読む（型のアサーションで別の形に見せない）
+    const fiber = frameworkHandleOf(element, (target) => {
+      const key = Object.keys(target).find((name) =>
         name.startsWith("__reactFiber$"),
       );
-      return key === undefined ? undefined : record[key];
+      return key === undefined
+        ? undefined
+        : (Reflect.get(target, key) as unknown);
     });
     if (isFiber(fiber)) {
       return collectNames(
@@ -527,7 +530,7 @@ export const componentChainOf = (element: Element): string[] => {
     // Vue は数えられない（列挙されない）プロパティで付けるため、名前で直接読む
     const vue = frameworkHandleOf(
       element,
-      (record) => record["__vueParentComponent"],
+      (target) => Reflect.get(target, "__vueParentComponent") as unknown,
     );
     if (vue !== null && typeof vue === "object") {
       return collectNames(
