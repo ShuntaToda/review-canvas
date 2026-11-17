@@ -46,6 +46,8 @@
     "prepare": "lefthook install || true",
     "pretest": "pnpm run codegen",
     "test": "vitest run",
+    "pretest:coverage": "pnpm run codegen",
+    "test:coverage": "vitest run --coverage",
     "pretest:small": "pnpm run codegen",
     "test:small": "vitest run --exclude '**/*.medium.test.ts'",
     "prevalidate": "pnpm run codegen",
