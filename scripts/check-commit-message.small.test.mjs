@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { problemsOf } from "./check-commit-message.mjs";
+import { problemsOf, withoutEditorComments } from "./check-commit-message.mjs";
 
 describe("problemsOf", () => {
   test.each([
     ["1 行", "コメントの並びを直す\n"],
+    ["# で始まる件名", "#123 を直す\n"],
     [
-      "git のコメントの行つき",
-      "コメントの並びを直す\n\n# Please enter the commit message\n# On branch main\n",
+      "取り消しの取り消し（Reapply）の決まった本文",
+      'Reapply "コメントの並びを直す"\n\nThis reverts commit 0123456789abcdef0123456789abcdef01234567.\n',
     ],
     [
       "git revert の決まった本文",
@@ -44,11 +45,57 @@ describe("problemsOf", () => {
       /1 行に/,
     ],
     [
+      "# で始まる本文（-m で付けたもの。コミットに残る）",
+      "直す\n\n#本文\n",
+      /1 行に/,
+    ],
+    ["# で始まる件名と本文", "#123 を直す\n本文\n", /1 行に/],
+    [
+      "案内の形をした本文（--range ではコミットに残った文面）",
+      "直す\n\n# 本文\n",
+      /1 行に/,
+    ],
+    [
       "revert でないのに revert の本文",
       "直す\n\nThis reverts commit 0123456.\n",
       /1 行に/,
     ],
   ])("[異常系]%s は、直し方を返す", (_, message, problem) => {
     expect(problemsOf(message).join("\n")).toMatch(problem);
+  });
+});
+
+describe("withoutEditorComments", () => {
+  test("[正常系]git の案内（# と「# 」で始まる行）と、切り取り線から後ろを除く", () => {
+    expect(
+      problemsOf(
+        withoutEditorComments(
+          [
+            "コメントの並びを直す",
+            "",
+            "# Please enter the commit message for your changes.",
+            "#",
+            "# On branch main",
+            "# ------------------------ >8 ------------------------",
+            "# Do not modify or remove the line above.",
+            "diff --git a/a.ts b/a.ts",
+            "+const a = 1;",
+            "",
+          ].join("\n"),
+        ),
+      ),
+    ).toStrictEqual([]);
+  });
+
+  test.each([
+    ["-m で付けた # の本文", "直す\n\n#本文\n"],
+    [
+      "# で始まる件名の後ろの本文",
+      "#123 を直す\n本文\n# Please enter the commit message\n",
+    ],
+  ])("[異常系]%s は除かず、1 行の決まりで落ちる", (_, fileText) => {
+    expect(problemsOf(withoutEditorComments(fileText)).join("\n")).toMatch(
+      /1 行に/,
+    );
   });
 });

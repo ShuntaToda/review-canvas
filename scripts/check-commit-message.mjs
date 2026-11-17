@@ -16,14 +16,28 @@ const REVERT_BODY = [
   /^changes made to [0-9a-f]{7,40}\.$/,
 ];
 
-/** メッセージが決まりに合わない点（直し方つき）。合っていれば空 */
+/** `git commit -v` が付ける切り取り線。ここから後ろは差分で、メッセージではない */
+const SCISSORS = /^# -+ >8 -+$/;
+
+/**
+ * エディタで開いたメッセージのファイルから、git の案内のコメントを除く（コミットには残らない行）。
+ * 除くのは「#」だけの行・「# 」で始まる行（git の案内はこの形）と、切り取り線から後ろ。`#123 を直す` のような件名や、
+ * `-m "#本文"` で付けた本文は残す（`-m` で渡した行は、# で始まってもコミットに残る）。`-m "# 本文"` は手元では見分けられないが、
+ * CI（--range。コミットに残った文面をそのまま見る）が見つける
+ */
+export const withoutEditorComments = (fileText) => {
+  const all = fileText.split("\n");
+  const scissors = all.findIndex((line) => SCISSORS.test(line));
+  const lines = scissors === -1 ? all : all.slice(0, scissors);
+  return lines.filter((line) => !/^#( |$)/.test(line)).join("\n");
+};
+
+/** メッセージ（コミットに残る文面）が決まりに合わない点（直し方つき）。合っていれば空 */
 export const problemsOf = (message) => {
-  // # で始まる行は git のコメント（エディタで開いたときの案内）
-  const lines = message
-    .split("\n")
-    .filter((line) => !line.startsWith("#") && line.trim() !== "");
+  const lines = message.split("\n").filter((line) => line.trim() !== "");
   const [subject = "", ...body] = lines;
-  const isRevert = subject.startsWith('Revert "');
+  // 取り消しと、その取り消し（git revert を 2 度かけると Reapply になる）
+  const isRevert = /^(Revert|Reapply) "/.test(subject);
   const extra = body.filter(
     (line) =>
       !(isRevert && REVERT_BODY.some((pattern) => pattern.test(line.trim()))),
@@ -76,7 +90,9 @@ const main = (argv) => {
       "使い方: node scripts/check-commit-message.mjs <メッセージのファイル> | --range <元>..<先>",
     );
   }
-  const problems = problemsOf(fs.readFileSync(file, "utf8"));
+  const problems = problemsOf(
+    withoutEditorComments(fs.readFileSync(file, "utf8")),
+  );
   if (problems.length > 0) throw new Error(problems.join("\n"));
 };
 
