@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { registerContainer } from "@/di-container/register-container";
+import {
+  registerContainer,
+  STAGE_NAMES,
+} from "@/di-container/register-container";
 import * as serviceId from "@/di-container/service-id";
 import { OPEN_API_CONFIG } from "@/handler/api/app";
 import {
@@ -133,7 +136,7 @@ describe("ルート（api/handler/api/route）", () => {
 
   // アプリは、動かす場所（stage）と CORS の設定で組み立てが分かれる（app.ts）。分かれた先でだけ足したルートを見逃さないよう、組み合わせごとに確かめる
   describe.each(
-    ["LOCAL", "DEV", "PROD"].flatMap((stageName) =>
+    STAGE_NAMES.flatMap((stageName) =>
       ["", "https://review-canvas.example.com"].map((allowOrigins) => ({
         stageName,
         allowOrigins,
