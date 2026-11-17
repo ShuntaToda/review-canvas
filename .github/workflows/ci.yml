@@ -225,6 +225,9 @@ jobs:
         run: |
           pnpm run new:api get comment/scaffold-check scaffold-check
           pnpm run new:api post meta/scaffold-check-meta scaffold-check-meta
+          # パスのパラメータ（認証の経路は :名前 の書き方になる）と、パラメータのルートに隠れる固定のパス（前に登録される）
+          pnpm run new:api get meta/scaffold-check-source scaffold-check-source --path '/scaffold-sources/{sourceId}'
+          pnpm run new:api get thread/thread-count count-threads --path /count
 
       - name: Validate and test the scaffolded code
         run: |

@@ -12,6 +12,14 @@ const read = (file) => {
     : undefined;
 };
 
+/** そのディレクトリに今あるハンドラ（main が planNewApi に渡すものと同じ） */
+const handlerFilesOf = (routeDir) =>
+  fs
+    .readdirSync(path.join(root, "api/handler/api/route", routeDir))
+    .filter((name) => name.endsWith("-handler.ts"))
+    .sort()
+    .map((name) => `api/handler/api/route/${routeDir}/${name}`);
+
 describe("parseArgs", () => {
   test("[正常系]メソッド・ルートのディレクトリ・ハンドラ・ユースケース・パスを読む", () => {
     expect(
@@ -77,6 +85,7 @@ describe("planNewApi", () => {
     handler: "zz-scaffold-probe",
     useCaseName: "zz-scaffold-probe",
     routePath: "/zz-scaffold-probe",
+    handlerFiles: handlerFilesOf("comment"),
   };
 
   test("[正常系]今のリポジトリに、4 つのファイルを作り、ID・登録・ルーターへ書き足す形を決める", () => {
@@ -117,13 +126,95 @@ describe("planNewApi", () => {
   });
 
   test("[正常系]認証を経路ごとに付けるルーター（meta）には、その経路の認証も書き足す", () => {
-    const plan = planNewApi({ ...args, routeDir: "meta" }, read);
+    const plan = planNewApi(
+      { ...args, routeDir: "meta", handlerFiles: handlerFilesOf("meta") },
+      read,
+    );
 
     expect(plan.fullPath).toBe("/api/zz-scaffold-probe");
     expect(plan.updated["api/handler/api/route/meta/index.ts"]).toContain(
       'router.use("/zz-scaffold-probe", buildAuthMiddleware({ container }));',
     );
   });
+
+  test("[正常系]パスのパラメータは、認証の経路では Hono の書き方（:名前）にする", () => {
+    const plan = planNewApi(
+      {
+        ...args,
+        routeDir: "meta",
+        routePath: "/zz-sources/{sourceId}",
+        handlerFiles: handlerFilesOf("meta"),
+      },
+      read,
+    );
+
+    expect(plan.updated["api/handler/api/route/meta/index.ts"]).toContain(
+      'router.use("/zz-sources/:sourceId", buildAuthMiddleware({ container }));',
+    );
+    expect(
+      plan.created[
+        "api/handler/api/route/meta/get-zz-scaffold-probe-handler.ts"
+      ],
+    ).toContain('path: "/zz-sources/{sourceId}"');
+  });
+
+  test("[正常系]パラメータのルートに隠れる固定のパスは、そのルートの前に登録する", () => {
+    const plan = planNewApi(
+      {
+        ...args,
+        routeDir: "thread",
+        routePath: "/zz-probe-count",
+        handlerFiles: handlerFilesOf("thread"),
+      },
+      read,
+    );
+    const router = plan.updated["api/handler/api/route/thread/index.ts"];
+
+    expect(plan.fullPath).toBe("/api/threads/zz-probe-count");
+    expect(router).toContain("buildGetZzScaffoldProbeHandler({");
+    expect(router.indexOf("buildGetZzScaffoldProbeHandler({")).toBeLessThan(
+      router.indexOf("buildGetThreadHandler({"),
+    );
+    expect(router.indexOf("buildGetThreadsHandler({")).toBeLessThan(
+      router.indexOf("buildGetZzScaffoldProbeHandler({"),
+    );
+  });
+
+  test("[異常系]別のルーターのルートに隠れるパスは、順番を直せないので弾く", () => {
+    expect(() =>
+      planNewApi(
+        {
+          ...args,
+          routeDir: "meta",
+          routePath: "/threads/zz-probe",
+          handlerFiles: handlerFilesOf("meta"),
+        },
+        read,
+      ),
+    ).toThrow(
+      /GET \/api\/threads\/zz-probe は、すでにある \/api\/threads\/\{commentId\} に先に受けられて/,
+    );
+  });
+
+  test.each([
+    ["thread", "/", "GET /api/threads"],
+    ["thread", "/{id}", "GET /api/threads/{commentId}"],
+  ])(
+    "[異常系]同じメソッド・同じパス（%s の %s）は、重なる相手を挙げて弾く",
+    (routeDir, routePath, duplicate) => {
+      expect(() =>
+        planNewApi(
+          {
+            ...args,
+            routeDir,
+            routePath,
+            handlerFiles: handlerFilesOf(routeDir),
+          },
+          read,
+        ),
+      ).toThrow(`${duplicate} が、すでにあります`);
+    },
+  );
 
   test("[異常系]ルーターの無いディレクトリは、作り方を伝えて弾く", () => {
     expect(() => planNewApi({ ...args, routeDir: "nope" }, read)).toThrow(

@@ -37,6 +37,7 @@
     "Passwordless",
     "pipefail",
     "prevalidate",
+    "quasis",
     "shellcheck",
     "spinbutton",
     "SSSZ",

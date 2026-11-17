@@ -254,6 +254,27 @@ const insertBefore = (text, marker, addition, file) => {
   return `${text.slice(0, index)}${addition}${text.slice(index)}`;
 };
 
+/** OpenAPI のパス（/threads/{commentId}）を、区切りごとに分ける */
+const segmentsOf = (routePath) => routePath.split("/").filter((s) => s !== "");
+const isParam = (segment) => /^\{[^}]+\}$/.test(segment);
+/** パラメータの名前の違いを無視した形（同じルートかどうかを比べる） */
+const shapeOf = (routePath) =>
+  segmentsOf(routePath)
+    .map((segment) => (isParam(segment) ? "{}" : segment))
+    .join("/");
+/** pattern のルートが、target のパスへの要求を先に受けてしまうか（パラメータは何にでも合う） */
+const shadows = (pattern, target) => {
+  const a = segmentsOf(pattern);
+  const b = segmentsOf(target);
+  return (
+    a.length === b.length &&
+    shapeOf(pattern) !== shapeOf(target) &&
+    a.every((segment, i) => isParam(segment) || segment === b[i])
+  );
+};
+/** OpenAPI のパスを Hono のパス（:itemId）にする */
+const honoPathOf = (routePath) => routePath.replaceAll(/\{([^}]+)\}/g, ":$1");
+
 /** import を先頭に足す（並びは、あとで eslint --fix が直す） */
 const withImport = (text, line) => `${line}\n${text}`;
 
@@ -300,18 +321,82 @@ export const planNewApi = (args, read) => {
       `${routesFile} で ${n.routerFile} のルーターをマウントしている場所（app.route("/…", …)）が見つかりません`,
     );
   }
-  const fullPath = `/api${mount === "/" ? "" : mount}${args.routePath === "/" ? "" : args.routePath}`;
+  const fullPathOf = (routePath) =>
+    `/api${mount === "/" ? "" : mount}${routePath === "/" ? "" : routePath}`;
+  const fullPath = fullPathOf(args.routePath);
 
-  // タグは、同じディレクトリのハンドラに合わせる
-  const sample =
-    args.sampleHandlerFile === undefined
-      ? undefined
-      : read(args.sampleHandlerFile);
+  // 同じメソッド・同じパスのルートは 2 つ作れない（OpenAPI では 1 つに潰れ、後から足した方は呼ばれない）
+  const openapiPaths = /** @type {Record<string, Record<string, unknown>>} */ (
+    JSON.parse(read("openapi.json") ?? "{}").paths ?? {}
+  );
+  const existing = Object.entries(openapiPaths).flatMap(([routePath, item]) =>
+    args.method in item ? [routePath] : [],
+  );
+  const duplicate = existing.find(
+    (routePath) => shapeOf(routePath) === shapeOf(fullPath),
+  );
+  if (duplicate !== undefined) {
+    throw new Error(
+      `${args.method.toUpperCase()} ${duplicate} が、すでにあります（openapi.json）。別のパスを --path で指定してください`,
+    );
+  }
+
+  // 同じディレクトリのハンドラ（メソッドとパス）。タグをそろえ、登録の順番を決めるのに使う
+  const siblings = (args.handlerFiles ?? []).flatMap((file) => {
+    const text = read(file) ?? "";
+    const method = /\bmethod: "([a-z]+)"/.exec(text)?.[1];
+    const routePath = /\bpath: "([^"]+)"/.exec(text)?.[1];
+    const base = /([^/]+)\.ts$/.exec(file)?.[1];
+    return method === undefined || routePath === undefined || base === undefined
+      ? []
+      : [
+          {
+            method,
+            fullPath: fullPathOf(routePath),
+            build: `build${pascalOf(base)}`,
+            text,
+          },
+        ];
+  });
+  // Hono は先に登録したルートから合わせるので、/threads/{commentId} の後ろに /threads/count を足すと呼ばれない。
+  // 同じルーターの中なら前に差し込み、別のルーターのルートに隠れるなら止める
+  const shadowing = existing.filter((routePath) =>
+    shadows(routePath, fullPath),
+  );
+  const shadowingSiblings = shadowing.map((routePath) =>
+    siblings.find(
+      (sibling) =>
+        sibling.method === args.method &&
+        shapeOf(sibling.fullPath) === shapeOf(routePath),
+    ),
+  );
+  if (shadowingSiblings.includes(undefined)) {
+    throw new Error(
+      `${args.method.toUpperCase()} ${fullPath} は、すでにある ${shadowing.join("・")} に先に受けられて呼ばれません（別のルーターのルートなので、順番を自動では直せません）。別のパスを --path で指定するか、手で登録の順番を直してください`,
+    );
+  }
+  const sample = siblings[0]?.text;
   const tag =
     /tags: \["([^"]+)"\]/.exec(sample ?? "")?.[1] ?? pascalOf(args.routeDir);
 
   const guardsAll = router.includes('router.use("*"');
-  const call = `${guardsAll ? "" : `  router.use("${args.routePath}", buildAuthMiddleware({ container }));\n`}  ${n.buildHandler}({ router, container });\n\n`;
+  const call = `${guardsAll ? "" : `  router.use("${honoPathOf(args.routePath)}", buildAuthMiddleware({ container }));\n`}  ${n.buildHandler}({ router, container });\n`;
+  // 隠すルートのうち、ルーターで最初に登録しているものの前に差し込む（無ければ最後に足す）
+  const firstShadowing = shadowingSiblings
+    .map((sibling) => ({
+      build: sibling.build,
+      index: router.indexOf(`  ${sibling.build}({`),
+    }))
+    .sort((a, b) => a.index - b.index)[0];
+  if (firstShadowing !== undefined && firstShadowing.index === -1) {
+    throw new Error(
+      `${n.routerFile} に ${firstShadowing.build}({ … }) の呼び出しが見つからず、その前に差し込めません（${args.method.toUpperCase()} ${fullPath} は、後ろに足すと呼ばれません）。ファイルの形が変わったなら scripts/new-api.mjs を合わせて直してください`,
+    );
+  }
+  const routerWithCall =
+    firstShadowing === undefined
+      ? insertBefore(router, "  return router;\n", `${call}\n`, n.routerFile)
+      : `${router.slice(0, firstShadowing.index)}${call}${router.slice(firstShadowing.index)}`;
 
   return {
     names: n,
@@ -344,7 +429,7 @@ export const planNewApi = (args, read) => {
         `import { ${n.useCaseType}Impl } from "@/use-case/${n.useCaseBase}";`,
       ),
       [n.routerFile]: withImport(
-        insertBefore(router, "  return router;\n", call, n.routerFile),
+        routerWithCall,
         `import { ${n.buildHandler} } from "./${n.handlerBase}";`,
       ),
     },
@@ -365,21 +450,14 @@ const main = () => {
     "api/handler/api/route",
     args.routeDir,
   );
-  const sampleHandler = fs.existsSync(routeDirAbsolute)
+  const handlerFiles = fs.existsSync(routeDirAbsolute)
     ? fs
         .readdirSync(routeDirAbsolute)
-        .find((name) => name.endsWith("-handler.ts"))
-    : undefined;
-  const plan = planNewApi(
-    {
-      ...args,
-      sampleHandlerFile:
-        sampleHandler === undefined
-          ? undefined
-          : `api/handler/api/route/${args.routeDir}/${sampleHandler}`,
-    },
-    read,
-  );
+        .filter((name) => name.endsWith("-handler.ts"))
+        .sort()
+        .map((name) => `api/handler/api/route/${args.routeDir}/${name}`)
+    : [];
+  const plan = planNewApi({ ...args, handlerFiles }, read);
 
   const files = { ...plan.created, ...plan.updated };
   for (const [file, text] of Object.entries(files)) {
