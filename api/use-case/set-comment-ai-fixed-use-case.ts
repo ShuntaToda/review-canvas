@@ -9,7 +9,7 @@ import type { Logger } from "@/domain/support/logger";
 export type SetCommentAiFixedUseCaseInput = {
   branch: string;
   commentId: string;
-  /** true=AI 修正済み（確認待ち）の印を付ける / false=印を外す（差し戻す） */
+  /** true=確認待ちの印を付ける / false=印を外す（差し戻す） */
   aiFixed: boolean;
   /** 操作した人（印を付けた人として表示名と利用者IDを残す） */
   reviewer: Reviewer;
@@ -31,7 +31,7 @@ export type SetCommentAiFixedUseCase = UseCase<
 >;
 
 /**
- * スレッドに「AI 修正済み（確認待ち）」の印を付ける・外す。解決済みのスレッドは CommentAlreadyResolvedError
+ * スレッドに「確認待ち」の印を付ける・外す。解決済みのスレッドは CommentAlreadyResolvedError
  */
 export class SetCommentAiFixedUseCaseImpl implements SetCommentAiFixedUseCase {
   readonly #commentRepository: CommentRepository;

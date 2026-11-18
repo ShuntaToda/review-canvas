@@ -20,6 +20,12 @@ import {
   SIDE_TITLE_SCREEN_WIDTH,
 } from "../model/layout";
 import { nextLiveFrames, sameFrames } from "../model/live-frames";
+import {
+  isWaitingStale,
+  nextWaiting,
+  refreshesDraft,
+  type WaitingPlace,
+} from "../model/pending-place";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
 import type { ShotCatalog } from "../model/story-shots";
@@ -153,34 +159,18 @@ export const Canvas = ({
 
   // 画像の画面に置こうとしているコメント（iframe に切り替わるのを待っている）。待ちは 1 つだけで、
   // 別の所をクリックしたら前の待ちは取り消す。道具・ページを変えたら置かない
-  const [waiting, setWaiting] = useState<{
-    source: StorySource;
-    storyId: string;
-    point: Point;
-  } | null>(null);
+  const [waiting, setWaiting] = useState<WaitingPlace<StorySource> | null>(
+    null,
+  );
   const effectiveTool = spaceHeld ? "move" : tool;
-  if (
-    waiting !== null &&
-    (waiting.source !== source || effectiveTool !== "comment")
-  ) {
+  if (waiting !== null && isWaitingStale(waiting, source, effectiveTool)) {
     setWaiting(null);
   }
   const setPendingPlace = (storyId: string, point: Point | null) =>
-    setWaiting((current) =>
-      point === null
-        ? current?.storyId === storyId
-          ? null
-          : current
-        : { source, storyId, point },
-    );
+    setWaiting((current) => nextWaiting(current, source, storyId, point));
   const place: CanvasProps["onPlace"] = (storyId, point, anchor) => {
     // 置いたら、ほかの画面の待ちは取り消す（いまの下書きに手がかりを足し直すだけのときは、そのまま）
-    const refreshesDraft =
-      draft !== null &&
-      draft.storyId === storyId &&
-      draft.x === point.x &&
-      draft.y === point.y;
-    if (!refreshesDraft) setWaiting(null);
+    if (!refreshesDraft(draft, storyId, point)) setWaiting(null);
     onPlace(storyId, point, anchor);
   };
 

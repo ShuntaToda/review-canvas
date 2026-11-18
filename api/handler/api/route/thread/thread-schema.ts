@@ -25,7 +25,7 @@ export const ListThreadsQuerySchema = z.object({
     .openapi({
       param: { name: "status", in: "query" },
       description:
-        "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+        "絞り込む状態。open=未解決（既定）/ ai-fixed=確認待ち/ resolved=解決済み / all=すべて",
       example: "open",
     }),
   source: z

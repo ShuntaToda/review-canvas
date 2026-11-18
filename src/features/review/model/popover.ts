@@ -3,7 +3,7 @@ import type { Size } from "./camera";
 export const POPOVER_WIDTH = 340;
 const GAP = 16;
 const EDGE = 8;
-/** ピンの画面上の大きさ(px。Pin.tsx の size-7)。ピンは、指している位置から右上へ出る */
+/** ピンの画面上の大きさ(px。Pin.tsx が読む)。ピンは、指している位置から右上へ出る */
 export const PIN_SCREEN_SIZE = 28;
 /** 吹き出しの高さの下限(px) */
 const MIN_HEIGHT = 160;

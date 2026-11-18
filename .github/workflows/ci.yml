@@ -170,6 +170,12 @@ jobs:
             echo "::error::スクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
             exit 1
           fi
+          # ブラウザへ文字列で渡す読み取り（中身の高さ・主な要素）が、ビルドした形でも動いている
+          measured="$(jq '[.shots[] | select((.contentHeight | type) == "number" and (.elements | type) == "array")] | length' "$out/review-canvas-shots.json")"
+          if [ "$measured" -ne "$shots" ]; then
+            echo "::error::中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
+            exit 1
+          fi
 
       # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない
       - name: Synth

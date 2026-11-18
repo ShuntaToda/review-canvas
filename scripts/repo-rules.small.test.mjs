@@ -6,6 +6,7 @@ import {
   MAX_BASE_HEIGHT_PX,
   MAX_WIDTH_PX,
 } from "../api/infrastructure/config/review-canvas-config.ts";
+import { CAPTURE_TIME_LIMIT_MS } from "../infra/scripts/story-screenshots.ts";
 import { MAX_CUSTOM_WIDTH } from "../src/features/review/model/custom-widths.ts";
 import {
   MAX_SHOT_HEIGHT,
@@ -159,5 +160,42 @@ describe("幅・高さの上限（壊れないためだけの値。場所ごと�
 
   test("設定の baseHeight の上限は、画像 1 枚（キャンバスの枠）の高さの上限と同じ", () => {
     expect(MAX_BASE_HEIGHT_PX).toBe(MAX_SHOT_HEIGHT);
+  });
+});
+
+describe("ビルドと撮影のジョブの時間の上限（.github/workflows/publish.yml の build）", () => {
+  const workflow = read(".github/workflows/publish.yml");
+  const job =
+    /\n {2}build:\n([\s\S]*?)\n {2}publish:\n/.exec(workflow)?.[1] ?? "";
+  const jobLimit = Number(/\n {4}timeout-minutes: (\d+)/.exec(job)?.[1]);
+  /** step の名前ごとの timeout-minutes（付いていなければ NaN） */
+  const stepLimits = Object.fromEntries(
+    job
+      .split(/\n {6}- name: /)
+      .slice(1)
+      .map((step) => [
+        step.split("\n")[0],
+        Number(/\n {8}timeout-minutes: (\d+)/.exec(step)?.[1]),
+      ]),
+  );
+  const longSteps = [
+    "Install dependencies of target branch",
+    "Build Storybooks",
+    "Install Chromium",
+    "Screenshots",
+  ];
+
+  test("[正常系]時間のかかる step はどれも上限を持ち、合計はジョブの上限より短い（step の時間切れより先に、ジョブごと落ちない）", () => {
+    for (const name of longSteps) {
+      expect(stepLimits[name], name).toBeGreaterThan(0);
+    }
+    const total = longSteps.reduce((sum, name) => sum + stepLimits[name], 0);
+    expect(jobLimit).toBeGreaterThan(total);
+  });
+
+  test("[正常系]撮影のスクリプトの時間の上限は、Screenshots の step の上限より短い（step が落ちる前に、撮れた分の目録を書いて終える）", () => {
+    expect(CAPTURE_TIME_LIMIT_MS).toBeLessThan(
+      stepLimits["Screenshots"] * 60_000,
+    );
   });
 });

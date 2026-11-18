@@ -12,6 +12,7 @@ import {
   tagOf,
   visibleText,
 } from "./anchor-dom";
+import { INTERACTIVE_SELECTORS } from "./story-shots";
 import type { CommentAnchor } from "./threads";
 
 /** 手がかりの上限の大きさ（JSON のバイト数）。API の COMMENT_ANCHOR_MAX_BYTES と同じ */
@@ -27,24 +28,7 @@ const COMPONENT_LIMIT = 12;
 const SELECTOR_MAX_DEPTH = 8;
 
 /** 押せる要素（中の文字・アイコンを押しても、この要素を指したとみなす） */
-const INTERACTIVE_SELECTOR = [
-  "a[href]",
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "summary",
-  "label",
-  '[role="button"]',
-  '[role="link"]',
-  '[role="checkbox"]',
-  '[role="radio"]',
-  '[role="switch"]',
-  '[role="tab"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="combobox"]',
-].join(", ");
+const INTERACTIVE_SELECTOR = INTERACTIVE_SELECTORS.join(", ");
 
 /** 押した要素から押せる要素までさかのぼる段数の上限（カードの中のどこかを押しても、カードの外のリンクを指さない） */
 const INTERACTIVE_MAX_DEPTH = 4;

@@ -2,6 +2,7 @@
 import { captureAnchor } from "./anchor-capture";
 import { describeAnchor, describeTarget } from "./anchor-describe";
 import {
+  isUnlocatedPin,
   type LocatedPin,
   locateAnchor,
   locatedKey,
@@ -306,5 +307,14 @@ describe("describeTarget", () => {
     [`<div></div>`, "div", "要素"],
   ])("[正常系]%s は、レビューする人の言葉で %s", (html, selector, expected) => {
     expect(describeTarget(anchorOf(html, selector))).toBe(expected);
+  });
+});
+
+describe("isUnlocatedPin", () => {
+  test("[正常系]要素の手がかりを持ち、いまの幅の画面でまだ探していないピンだけが「まだ探していない」", () => {
+    const anchor = { version: 1 } as CommentAnchor;
+    expect(isUnlocatedPin(anchor, undefined)).toBe(true);
+    expect(isUnlocatedPin(anchor, { kind: "missing" })).toBe(false);
+    expect(isUnlocatedPin(undefined, undefined)).toBe(false);
   });
 });

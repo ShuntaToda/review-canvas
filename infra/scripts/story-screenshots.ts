@@ -9,13 +9,19 @@ import {
   type StorybookWindow,
 } from "../../src/features/review/model/story-render";
 import {
+  collectShotElements,
   isShotPath,
+  MAX_SHOT_ELEMENTS,
   MAX_SHOT_HEIGHT,
+  measureContentHeight,
   parseShotsManifest,
+  SHOT_ELEMENT_SELECTOR,
+  SHOT_ELEMENT_TEXT_LENGTH,
   SHOTS_DIR,
   SHOTS_MANIFEST_FILE,
   shotPath,
   THUMB_SCALE,
+  type ShotElement,
   type ShotsManifest,
   type StoryShot,
 } from "../../src/features/review/model/story-shots";
@@ -28,6 +34,8 @@ import {
  * - 幅は設定の widths のそれぞれ。高さは、画面の最低の高さ（baseHeight）の画面で開き、中身に合わせた全体（fullPage）
  * - Storybook のプレビュー（window.__STORYBOOK_PREVIEW__）の currentRender.phase が、描画と play 関数の終わり
  *   （completed・afterEach・finished。失敗は errored・aborted）になるのを待ってから撮る。段階の並びは storybook の StoryRender（preview/runtime.js）
+ * - 撮るときに、中身の高さ（切り上げる前）と主な要素（押せる要素・見出し）の矩形と文字も目録に残す。
+ *   キャンバスが、画像の上でクリックした位置の要素が動く画面でも同じかを確かめるのに使う（src/features/review/model/pending-place.ts）
  * - 画像と目録は、ビルド結果の中（<outDir>/review-canvas-shots/・<outDir>/review-canvas-shots.json）に書く。
  *   Storybook をビルドし直すと outDir ごと作り直されるので、古いビルドの画像は残らない
  *
@@ -39,10 +47,18 @@ import {
 const STORY_TIMEOUT_MS = 30_000;
 
 /**
- * Storybook 1 つ分を撮る時間の上限(ms)。超えたら残りは撮らずに、撮れた分だけの目録を書く。
- * ワークフローの Screenshots の step の timeout-minutes（.github/workflows/publish.yml）より短くして、step が落ちる前に終える
+ * 1 枚を撮り終えるまでの上限(ms)。開く・描画を待つ・撮るのそれぞれの上限（STORY_TIMEOUT_MS）を足した分。
+ * メインスレッドを止めるストーリーでは、ブラウザの中で動かす処理（evaluate）が返らないので、外から時間で打ち切る
  */
-const CAPTURE_TIME_LIMIT_MS = 10 * 60_000;
+const SHOT_TIMEOUT_MS = 3 * STORY_TIMEOUT_MS;
+
+/**
+ * 撮影の時間の上限(ms)。1 回の呼び出しで撮る Storybook の全部で分け合う。
+ * 超えたらブラウザを閉じて動いている処理を止め、残りは撮らずに、撮れた分だけの目録を書く。
+ * ワークフローの Screenshots の step の timeout-minutes（.github/workflows/publish.yml）より短くして、step が落ちる前に終える
+ * （scripts/repo-rules.small.test.mjs が確かめる）
+ */
+export const CAPTURE_TIME_LIMIT_MS = 10 * 60_000;
 
 /** 最初のこの枚数が全部時間切れなら、残りも撮れないとみなして打ち切る（1 枚ずつ 30 秒待ち続けない） */
 const PROBE_SHOTS = 8;
@@ -260,25 +276,110 @@ export const isAllowedRequest = (url: string, origin: string): boolean => {
 };
 
 /**
+ * ブラウザからの WebSocket を通すか（配っているホストとポートだけ）。
+ * WebSocket は通信の横取り（context.route）に掛からないので、別に閉じる（context.routeWebSocket）
+ */
+export const isAllowedWebSocket = (url: string, origin: string): boolean => {
+  try {
+    return new URL(url).host === new URL(origin).host;
+  } catch {
+    return false;
+  }
+};
+
+/** 時間切れ（Playwright の TimeoutError と同じ名前にして、同じように数える） */
+class CaptureTimeoutError extends Error {
+  override name = "TimeoutError";
+}
+
+/** 上限の時間で打ち切る（元の処理は止められないので、呼ぶ側がページを作り直す） */
+export const withTimeout = async <T>(
+  work: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new CaptureTimeoutError(
+                `${label}が ${String(Math.round(ms / 1000))} 秒で終わりませんでした`,
+              ),
+            ),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * ブラウザの中で、中身の高さと主な要素を読む式。キャンバスの橋渡しと同じ関数（story-shots.ts）を文字列にして渡す
+ * （ブラウザの中からは、このファイルの値を読めない）。__name は、ビルドの道具（esbuild）が関数に名前を付けるために差し込む呼び出しの受け皿
+ */
+export const SHOT_CONTENT_SCRIPT = `(() => {
+  const __name = (fn) => fn;
+  return {
+    contentHeight: (${measureContentHeight.toString()})(document),
+    elements: (${collectShotElements.toString()})(
+      document,
+      ${JSON.stringify(SHOT_ELEMENT_SELECTOR)},
+      ${String(MAX_SHOT_ELEMENTS)},
+      ${String(SHOT_ELEMENT_TEXT_LENGTH)},
+    ),
+  };
+})()`;
+
+/** 撮った 1 枚の目録の行に、中身の高さと主な要素を足す（読めなかった・形が違うものは足さない。画像の外の要素は除く） */
+export const withContent = (shot: StoryShot, content: unknown): StoryShot => {
+  if (typeof content !== "object" || content === null) return shot;
+  const { contentHeight, elements } = content as {
+    contentHeight?: unknown;
+    elements?: unknown;
+  };
+  return {
+    ...shot,
+    ...(typeof contentHeight === "number" &&
+    Number.isInteger(contentHeight) &&
+    contentHeight >= 1
+      ? { contentHeight }
+      : {}),
+    ...(Array.isArray(elements)
+      ? {
+          elements: (elements as ShotElement[]).filter(
+            (element) => element.y < shot.height,
+          ),
+        }
+      : {}),
+  };
+};
+
+/**
  * 撮るのを途中でやめるかを決める。
- * - 全体の時間の上限（limitMs）を超えたら、残りは撮らない
+ * - 全体の時間の上限（deadline）を過ぎたら、残りは撮らない
  * - 最初の probeCount 枚が全部時間切れなら、残りも撮らない（Storybook の描画の終わりを読めていない）
  */
 export const createCaptureGuard = ({
-  limitMs,
+  deadline,
   probeCount,
   now,
 }: {
-  limitMs: number;
+  /** 撮影をやめる時刻（now と同じ数え方の ms） */
+  deadline: number;
   probeCount: number;
   now: () => number;
 }): {
   /** 次の 1 枚を撮らない理由（撮ってよければ null） */
   stopReason: () => string | null;
   /** 1 枚の結果を知らせる */
-  record: (outcome: "done" | "timeout") => void;
+  record: (outcome: "finished" | "timeout") => void;
 } => {
-  const startedAt = now();
   let finished = 0;
   let timeouts = 0;
   return {
@@ -286,8 +387,8 @@ export const createCaptureGuard = ({
       if (finished >= probeCount && timeouts === finished) {
         return `最初の ${String(probeCount)} 枚がすべて時間切れだったので、残りは撮りません`;
       }
-      if (now() - startedAt >= limitMs) {
-        return `撮影の時間の上限（${String(Math.round(limitMs / 60_000))} 分）を超えたので、残りは撮りません`;
+      if (now() >= deadline) {
+        return "撮影の時間の上限を超えたので、残りは撮りません";
       }
       return null;
     },
@@ -318,6 +419,7 @@ export const captureStorybook = async ({
   dir,
   widths,
   baseHeight,
+  deadline,
   log,
 }: {
   /** Storybook のビルド結果（index.json・iframe.html のあるディレクトリ） */
@@ -326,6 +428,8 @@ export const captureStorybook = async ({
   widths: ReadonlyArray<number>;
   /** 画面の最低の高さ（設定の baseHeight）。この高さの画面で開く */
   baseHeight: number;
+  /** 撮影をやめる時刻（Date.now() と同じ数え方）。1 回の呼び出しで撮る Storybook の全部で分け合う */
+  deadline: number;
   log: (message: string) => void;
 }): Promise<CaptureResult> => {
   const startedAt = Date.now();
@@ -338,15 +442,35 @@ export const captureStorybook = async ({
     JSON.parse(fs.readFileSync(path.join(dir, "index.json"), "utf8")),
   );
   const plan = planShots(storyIds, widths);
+  if (Date.now() >= deadline) {
+    // 前の Storybook で時間を使い切った。ブラウザを起こさず、空の目録を書く（キャンバスは iframe で出す）
+    const manifest: ShotsManifest = {
+      version: 1,
+      shots: [],
+      playFunctions: {},
+    };
+    fs.writeFileSync(manifestFile, `${JSON.stringify(manifest)}\n`);
+    log("  ! 撮影の時間の上限を超えたので、この Storybook は撮りません");
+    return {
+      manifest,
+      failures: plan.map((item) => ({ ...item, reason: "時間の上限" })),
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
   // 置くスクリプトのほかの操作（消す・一覧）では Playwright を読まない
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ env: browserEnv(process.env) });
   const server = await serveDirectory(dir);
   const guard = createCaptureGuard({
-    limitMs: CAPTURE_TIME_LIMIT_MS,
+    deadline,
     probeCount: PROBE_SHOTS,
     now: Date.now,
   });
+  // 上限を過ぎたらブラウザを閉じ、動いている処理（終わらないストーリーを待っているものも）を失敗させる
+  const closeAtDeadline = setTimeout(
+    () => void browser.close().catch(() => undefined),
+    Math.max(0, deadline - Date.now()),
+  );
   const playFunctions: Record<string, boolean> = {};
   try {
     fs.mkdirSync(shotsDir, { recursive: true });
@@ -357,6 +481,13 @@ export const captureStorybook = async ({
         ? route.continue()
         : route.abort(),
     );
+    await context.routeWebSocket(/.*/, (socket) => {
+      if (isAllowedWebSocket(socket.url(), server.origin)) {
+        socket.connectToServer();
+      } else {
+        void socket.close();
+      }
+    });
     const concurrency = Math.min(MAX_CONCURRENCY, os.availableParallelism());
     const pages = await Promise.all(
       Array.from({ length: Math.min(concurrency, plan.length) }, () =>
@@ -389,6 +520,19 @@ export const captureStorybook = async ({
       );
       return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
     };
+    const renewPages = async (slot: number): Promise<void> => {
+      for (const list of [pages, thumbPages]) {
+        void list[slot]?.close().catch(() => undefined);
+        list[slot] = await withTimeout(
+          context.newPage(),
+          STORY_TIMEOUT_MS,
+          "ページの作り直し",
+        );
+      }
+    };
+    /** ブラウザの中で動かす処理 1 つの上限（Playwright の timeout が先に効くよう、少し長くする） */
+    const inTime = <T>(work: Promise<T>, label: string): Promise<T> =>
+      withTimeout(work, STORY_TIMEOUT_MS + 1_000, label);
     const shoot = async (
       { storyId, width }: { storyId: string; width: number },
       slot: number,
@@ -400,40 +544,55 @@ export const captureStorybook = async ({
         `${server.origin}/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`,
         { waitUntil: "load", timeout: STORY_TIMEOUT_MS },
       );
-      // 描画と play 関数が終わるまで待つ（ブラウザの中で動く関数。外の値は引数で渡す）
-      await page.waitForFunction(
-        (phases: string[]) => {
+      // 描画と play 関数が終わるまで待つ（ブラウザの中で動く関数。外の値は引数で渡す）。
+      // メインスレッドを止めるストーリーでは、ブラウザの中の処理は Playwright の timeout でも返らないので、外からも時間で打ち切る
+      await inTime(
+        page.waitForFunction(
+          (phases: string[]) => {
+            const render = (window as StorybookWindow).__STORYBOOK_PREVIEW__
+              ?.currentRender;
+            return (
+              typeof render?.phase === "string" && phases.includes(render.phase)
+            );
+          },
+          [...SETTLED_STORY_PHASES],
+          { timeout: STORY_TIMEOUT_MS },
+        ),
+        "描画の待ち",
+      );
+      const state = await inTime(
+        page.evaluate(async () => {
+          // Web フォントの読み込みを待つ（待たないと、代わりのフォントで撮れる）
+          await document.fonts.ready;
           const render = (window as StorybookWindow).__STORYBOOK_PREVIEW__
             ?.currentRender;
-          return (
-            typeof render?.phase === "string" && phases.includes(render.phase)
-          );
-        },
-        [...SETTLED_STORY_PHASES],
-        { timeout: STORY_TIMEOUT_MS },
+          return {
+            phase: typeof render?.phase === "string" ? render.phase : null,
+            hasPlayFunction: typeof render?.story?.playFunction === "function",
+            height: document.documentElement.scrollHeight,
+          };
+        }),
+        "フォントの待ち",
       );
-      const state = await page.evaluate(async () => {
-        // Web フォントの読み込みを待つ（待たないと、代わりのフォントで撮れる）
-        await document.fonts.ready;
-        const render = (window as StorybookWindow).__STORYBOOK_PREVIEW__
-          ?.currentRender;
-        return {
-          phase: typeof render?.phase === "string" ? render.phase : null,
-          hasPlayFunction: typeof render?.story?.playFunction === "function",
-          height: document.documentElement.scrollHeight,
-        };
-      });
       playFunctions[storyId] = state.hasPlayFunction;
+      const content = await inTime(
+        page.evaluate<unknown>(SHOT_CONTENT_SCRIPT),
+        "中身の読み取り",
+      ).catch((error: unknown) => {
+        if (isTimeout(error)) throw error;
+        return null;
+      });
       const png = await page.screenshot({
         type: "png",
         fullPage: true,
         animations: "disabled",
+        timeout: STORY_TIMEOUT_MS,
         // 長すぎる画面は上限で切る（キャンバスの枠も同じ高さで切る）
         ...(state.height > MAX_SHOT_HEIGHT
           ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } }
           : {}),
       });
-      let shot = toShot(storyId, width, png);
+      let shot = withContent(toShot(storyId, width, png), content);
       fs.writeFileSync(path.join(dir, shot.path), png);
       try {
         const withSmall = withThumb(shot);
@@ -456,15 +615,23 @@ export const captureStorybook = async ({
       const stop = guard.stopReason();
       if (stop !== null) throw new Error(stop);
       try {
-        const shot = await shoot(item, slot);
-        guard.record("done");
+        const shot = await withTimeout(
+          shoot(item, slot),
+          SHOT_TIMEOUT_MS,
+          "撮影",
+        );
+        guard.record("finished");
         return shot;
       } catch (error) {
-        guard.record(isTimeout(error) ? "timeout" : "done");
+        guard.record(isTimeout(error) ? "timeout" : "finished");
+        // 終わらなかったページは使い回さない（メインスレッドが止まったままだと、次の 1 枚も開けない）
+        if (isTimeout(error) && guard.stopReason() === null) {
+          await renewPages(slot).catch(() => undefined);
+        }
         throw error;
       }
     });
-    await context.close();
+    await context.close().catch(() => undefined);
 
     const shots: StoryShot[] = [];
     const failures: CaptureResult["failures"] = [];
@@ -488,8 +655,9 @@ export const captureStorybook = async ({
     fs.writeFileSync(manifestFile, `${JSON.stringify(manifest)}\n`);
     return { manifest, failures, elapsedMs: Date.now() - startedAt };
   } finally {
+    clearTimeout(closeAtDeadline);
     await server.close();
-    await browser.close();
+    await browser.close().catch(() => undefined);
   }
 };
 
@@ -513,18 +681,16 @@ export const stageShots = ({
   Object.fromEntries(
     Object.entries(dirs).map(([source, dir]) => {
       const found = readManifest(path.join(dir, SHOTS_MANIFEST_FILE));
+      // 途中のディレクトリ（review-canvas-shots/ そのもの）がリンクで、外のファイルを指していても置かない
+      const isOwnPng = (name: string): boolean =>
+        isPngFile(path.join(dir, name)) && isInside(dir, path.join(dir, name));
       const manifest: ShotsManifest = {
         version: 1,
         shots: (found?.shots ?? [])
-          .filter(
-            (shot) =>
-              isShotPath(shot.path) && isPngFile(path.join(dir, shot.path)),
-          )
+          .filter((shot) => isShotPath(shot.path) && isOwnPng(shot.path))
           // 縮小した画像だけが無い・違うときは、縮小を外して元の画像を置く
           .map(({ thumb, ...shot }) =>
-            thumb !== undefined && isPngFile(path.join(dir, thumb))
-              ? { ...shot, thumb }
-              : shot,
+            thumb !== undefined && isOwnPng(thumb) ? { ...shot, thumb } : shot,
           ),
         playFunctions: found?.playFunctions ?? {},
       };
@@ -555,6 +721,17 @@ const readManifest = (file: string): ShotsManifest | null => {
     return parseShotsManifest(JSON.parse(fs.readFileSync(file, "utf8")));
   } catch {
     return null;
+  }
+};
+
+/** ファイルの本当の場所（リンクをたどった先）が、dir の中にあるか */
+const isInside = (dir: string, file: string): boolean => {
+  try {
+    return fs
+      .realpathSync(file)
+      .startsWith(`${fs.realpathSync(dir)}${path.sep}`);
+  } catch {
+    return false;
   }
 };
 

@@ -1,3 +1,4 @@
+import { PIN_SCREEN_SIZE } from "../model/popover";
 import type { ThreadStatus } from "../model/threads";
 
 type PinProps = {
@@ -58,7 +59,7 @@ export const Pin = ({
     data-pin
     data-missing={missing || undefined}
     className={[
-      "absolute flex size-7 items-center justify-center rounded-full rounded-bl-none border-2 border-white text-xs font-bold text-white shadow-md",
+      "absolute flex items-center justify-center rounded-full rounded-bl-none border-2 border-white text-xs font-bold text-white shadow-md",
       PIN_COLORS[status],
       active ? "ring-4 ring-accent/40" : "",
       onOpen === undefined ? "cursor-default" : "cursor-pointer",
@@ -66,6 +67,8 @@ export const Pin = ({
     style={{
       left: x,
       top: y,
+      width: PIN_SCREEN_SIZE,
+      height: PIN_SCREEN_SIZE,
       transform: `translateY(-100%) scale(${1 / zoom})`,
       transformOrigin: "0 100%",
       zIndex: active ? 20 : 10,

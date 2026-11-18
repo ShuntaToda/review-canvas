@@ -16,6 +16,7 @@ import {
 } from "../../src/features/review/model/story-shots";
 import { decodeBranchKey, encodeBranchKey } from "./branch-key";
 import {
+  CAPTURE_TIME_LIMIT_MS,
   captureStorybook,
   type StagedShots,
   stageShots,
@@ -914,6 +915,8 @@ const captureScreenshots = async (
   config: ReviewCanvasConfig,
   dirs: Record<string, string>,
 ): Promise<void> => {
+  // 時間の上限は Storybook ごとでなく、全部で 1 つ（ワークフローの step の上限に収める）
+  const deadline = Date.now() + CAPTURE_TIME_LIMIT_MS;
   for (const { id: source, widths, baseHeight } of config.storybooks) {
     const dir = dirs[source];
     if (dir === undefined) continue;
@@ -924,6 +927,7 @@ const captureScreenshots = async (
       dir,
       widths,
       baseHeight,
+      deadline,
       log: (message) => console.warn(message),
     });
     console.log(

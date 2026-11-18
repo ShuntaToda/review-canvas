@@ -37,6 +37,7 @@ import {
   type LocatedPin,
   locatedKey,
   mergeLocatedPins,
+  isUnlocatedPin,
 } from "../model/anchor-locate";
 import { buildBranchOptions } from "../model/branch-options";
 import {
@@ -575,7 +576,7 @@ export const ReviewWorkspace = ({
     const result = located[locatedKey(page, width, thread.root.id)];
     const missing = result?.kind === "missing";
     pins.push({
-      unlocated: thread.root.anchor !== undefined && result === undefined,
+      unlocated: isUnlocatedPin(thread.root.anchor, result),
       id: thread.root.id,
       number: thread.number,
       ...pinPointOf(thread),

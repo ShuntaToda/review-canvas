@@ -27,13 +27,6 @@ export const commonIgnores = [
 ];
 
 /**
- * 型チェック付き TypeScript の共通ベース設定（flat config）。
- * eslint:recommended ＋ typescript-eslint（recommended-type-checked）＋ import / unused-imports ＋
- * prettier ＋ プロジェクト共通の独自ルールをまとめる。各パッケージの eslint.config.mjs から読み込む。
- *
- * @param {string} tsconfigRootDir 各パッケージの `import.meta.dirname` を渡す（型情報の解決基点）
- */
-/**
  * infra（置くスクリプト）からも相対パスで読む、画面（src/）のファイル。
  * infra の tsconfig・Node（esbuild-register）でそのまま読めるよう、何も import しない（eslint.config.mjs）。
  * infra から読んでよい src のファイルは、これだけ（infra/eslint.config.mjs）
@@ -44,6 +37,13 @@ export const SRC_FILES_READ_BY_INFRA = [
   "src/features/review/model/story-render.ts",
 ];
 
+/**
+ * 型チェック付き TypeScript の共通ベース設定（flat config）。
+ * eslint:recommended ＋ typescript-eslint（recommended-type-checked）＋ import / unused-imports ＋
+ * prettier ＋ プロジェクト共通の独自ルールをまとめる。各パッケージの eslint.config.mjs から読み込む。
+ *
+ * @param {string} tsconfigRootDir 各パッケージの `import.meta.dirname` を渡す（型情報の解決基点）
+ */
 export function baseConfig(tsconfigRootDir) {
   return tseslint.config(
     js.configs.recommended,

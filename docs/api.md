@@ -62,7 +62,7 @@ stateDiagram-v2
 | POST     | `/api/comments/{commentId}/replies`    | スレッドに返信する                                                                                                                                         |
 | PATCH    | `/api/comments/{commentId}`            | 本文を書き換える（書いた本人だけ）                                                                                                                         |
 | PUT      | `/api/comments/{commentId}/resolution` | 解決・再開する（誰でも）                                                                                                                                   |
-| PUT      | `/api/comments/{commentId}/ai-fixed`   | 「AI 修正済み（確認待ち）」の印を付ける・外す（誰でも。付けた人を残す。解決済みなら 409）                                                                  |
+| PUT      | `/api/comments/{commentId}/ai-fixed`   | 「確認待ち」の印を付ける・外す（誰でも。付けた人を残す。解決済みなら 409）                                                                                 |
 | GET      | `/api/threads?branch=&status=`         | スレッド（最初のコメント・返信・ストーリーの情報）を状態で絞って読む（下を参照）                                                                           |
 | GET      | `/api/threads/{commentId}?branch=`     | スレッドを 1 件読む（最初のコメントの ID で指す）                                                                                                          |
 | DELETE   | `/api/comments/{commentId}?branch=`    | 削除する（書いた本人だけ。最初のコメントならスレッドごと）                                                                                                 |
@@ -92,7 +92,7 @@ stateDiagram-v2
 | `body`・`author`・`authorId`            | 本文・書いた人の表示名・利用者 ID（トークンの `sub`。編集・削除の本人確認に使う）                                                     |
 | `commit`                                | 書いた時点でそのブランチに置いてあった Storybook のコミット                                                                           |
 | `resolved`・`resolvedBy`・`resolvedAt`  | 解決の状態（最初のコメントだけが持つ）                                                                                                |
-| `aiFixedBy`・`aiFixedById`・`aiFixedAt` | 「AI 修正済み（確認待ち）」の印を付けた人の表示名・利用者 ID・日時（最初のコメントだけが持つ。印を持つ前のコメントは属性ごと無い）    |
+| `aiFixedBy`・`aiFixedById`・`aiFixedAt` | 「確認待ち」の印を付けた人の表示名・利用者 ID・日時（最初のコメントだけが持つ。印を持つ前のコメントは属性ごと無い）                   |
 | `createdAt`・`updatedAt`                | 日時（ISO 8601）                                                                                                                      |
 | `deletedAt`・`expiresAt`                | 削除したとき（中身を消した「削除済み」として残す）と、その 30 日後（TTL で消える）                                                    |
 

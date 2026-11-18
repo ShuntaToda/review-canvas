@@ -18,6 +18,12 @@ export type AnchorBox = CommentAnchor["box"];
 export type LocatedPin =
   { kind: "found"; x: number; y: number; box: AnchorBox } | { kind: "missing" };
 
+/** 要素の手がかりを持つピンを、いまの幅の画面でまだ探していないか（置いたときの位置に出している。画面を読み込めば要素に合わせる） */
+export const isUnlocatedPin = (
+  anchor: CommentAnchor | undefined,
+  located: LocatedPin | undefined,
+): boolean => anchor !== undefined && located === undefined;
+
 /** 手がかりと同じ種類の要素か（タグかロールが同じ） */
 const sameKind = (element: Element, anchor: CommentAnchor): boolean =>
   tagOf(element) === anchor.tag ||

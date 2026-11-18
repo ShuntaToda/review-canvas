@@ -5,6 +5,7 @@ import { afterAll, describe, expect, test } from "vitest";
 import {
   browserEnv,
   createCaptureGuard,
+  isAllowedWebSocket,
   isAllowedRequest,
   planShots,
   readPngSize,
@@ -12,7 +13,10 @@ import {
   resolveServedFile,
   runPool,
   serveDirectory,
+  SHOT_CONTENT_SCRIPT,
   stageShots,
+  withContent,
+  withTimeout,
   toShot,
   withThumb,
 } from "../scripts/story-screenshots";
@@ -196,7 +200,7 @@ describe("browserEnv・isAllowedRequest", () => {
 describe("createCaptureGuard", () => {
   const guardAt = (clock: { now: number }) =>
     createCaptureGuard({
-      limitMs: 600_000,
+      deadline: 601_000,
       probeCount: 3,
       now: () => clock.now,
     });
@@ -216,7 +220,7 @@ describe("createCaptureGuard", () => {
     const guard = guardAt({ now: 0 });
 
     guard.record("timeout");
-    guard.record("done");
+    guard.record("finished");
     for (let i = 0; i < 10; i += 1) guard.record("timeout");
 
     expect(guard.stopReason()).toBeNull();
@@ -225,13 +229,80 @@ describe("createCaptureGuard", () => {
   test("全体の時間の上限を超えたら、残りは撮らない", () => {
     const clock = { now: 1_000 };
     const guard = guardAt(clock);
-    guard.record("done");
+    guard.record("finished");
 
     clock.now = 600_999;
     expect(guard.stopReason()).toBeNull();
     clock.now = 601_000;
 
-    expect(guard.stopReason()).toContain("時間の上限（10 分）");
+    expect(guard.stopReason()).toContain("時間の上限");
+  });
+});
+
+describe("isAllowedWebSocket", () => {
+  test("配っているホストとポートへの WebSocket だけを通す", () => {
+    const origin = "http://127.0.0.1:4000";
+    expect(isAllowedWebSocket("ws://127.0.0.1:4000/socket", origin)).toBe(true);
+    expect(isAllowedWebSocket("ws://127.0.0.1:4001/socket", origin)).toBe(
+      false,
+    );
+    expect(isAllowedWebSocket("wss://example.com/socket", origin)).toBe(false);
+    expect(isAllowedWebSocket("::", origin)).toBe(false);
+  });
+});
+
+describe("withTimeout", () => {
+  test("上限の時間までに終われば結果を返し、終わらなければ時間切れ（TimeoutError）で失敗させる", async () => {
+    await expect(withTimeout(Promise.resolve(1), 1_000, "撮影")).resolves.toBe(
+      1,
+    );
+    const error: unknown = await withTimeout(
+      new Promise(() => undefined),
+      10,
+      "撮影",
+    ).catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ name: "TimeoutError" });
+  });
+});
+
+describe("withContent・SHOT_CONTENT_SCRIPT", () => {
+  const shot = {
+    storyId: "a--b",
+    width: 375,
+    height: 812,
+    path: "review-canvas-shots/a--b-375-0123456789abcdef.png",
+  };
+  const element = {
+    tag: "button",
+    x: 0,
+    y: 100,
+    width: 80,
+    height: 40,
+    text: "",
+  };
+
+  test("中身の高さと主な要素を行に足す（画像で切った先の要素は除く）", () => {
+    expect(
+      withContent(shot, {
+        contentHeight: 420,
+        elements: [element, { ...element, y: 812 }],
+      }),
+    ).toStrictEqual({ ...shot, contentHeight: 420, elements: [element] });
+  });
+
+  test("読めなかった・数が多すぎて残さなかったものは足さない", () => {
+    expect(withContent(shot, null)).toStrictEqual(shot);
+    expect(
+      withContent(shot, { contentHeight: 0, elements: null }),
+    ).toStrictEqual(shot);
+  });
+
+  test("ブラウザへ渡す式は、キャンバスと同じ測り方の関数と、残す要素の決まりを持つ", () => {
+    expect(SHOT_CONTENT_SCRIPT).toContain("getBoundingClientRect");
+    expect(SHOT_CONTENT_SCRIPT).toContain(
+      JSON.stringify("a[href]").slice(1, -1),
+    );
+    expect(SHOT_CONTENT_SCRIPT).not.toContain("import");
   });
 });
 
@@ -298,6 +369,32 @@ describe("stageShots", () => {
     expect(
       fs.readFileSync(path.join(dir, "review-canvas-shots.json"), "utf8"),
     ).toBe(written);
+  });
+
+  test("画像の置き場そのものが外を指すリンクなら、中の PNG は置かない", () => {
+    const dir = path.join(root, "linked-dir");
+    const outside = path.join(root, "outside-shots");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(outside, { recursive: true });
+    const file = "review-canvas-shots/a--b-375-0123456789abcdef.png";
+    fs.writeFileSync(
+      path.join(outside, path.basename(file)),
+      pngHead(375, 812),
+    );
+    fs.symlinkSync(outside, path.join(dir, "review-canvas-shots"));
+    fs.writeFileSync(
+      path.join(dir, "review-canvas-shots.json"),
+      JSON.stringify({
+        version: 1,
+        shots: [{ storyId: "a--b", width: 375, height: 812, path: file }],
+        playFunctions: {},
+      }),
+    );
+    const outDir = fs.mkdtempSync(path.join(root, "out-"));
+
+    const staged = stageShots({ dirs: { shop: dir }, outDir });
+
+    expect(staged["shop"]?.dir).toBeNull();
   });
 
   test("目録が無い・読めないときは空の目録を書く（前に置いた画像をキャンバスが読みに行かないように）", () => {

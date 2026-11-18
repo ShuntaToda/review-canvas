@@ -1673,7 +1673,7 @@
             "AccessToken": []
           }
         ],
-        "summary": "スレッドに「AI 修正済み（確認待ち）」の印を付ける・外す（誰でもできる。付けた人を残す）",
+        "summary": "スレッドに「確認待ち」の印を付ける・外す（誰でもできる。付けた人を残す）",
         "parameters": [
           {
             "schema": {
@@ -1804,11 +1804,11 @@
                 "all"
               ],
               "default": "open",
-              "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+              "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=確認待ち/ resolved=解決済み / all=すべて",
               "example": "open"
             },
             "required": false,
-            "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+            "description": "絞り込む状態。open=未解決（既定）/ ai-fixed=確認待ち/ resolved=解決済み / all=すべて",
             "name": "status",
             "in": "query"
           },

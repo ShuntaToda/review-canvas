@@ -6,6 +6,7 @@ import {
   resolveShortcut,
 } from "../model/shortcuts";
 import { readRenderState } from "../model/story-render";
+import { measureContentHeight } from "../model/story-shots";
 import { decideSize, type MeasureState } from "./measure";
 import {
   acceptParentEvent,
@@ -33,42 +34,6 @@ type Channel = {
 };
 
 type BridgeWindow = Window & { __STORYBOOK_ADDONS_CHANNEL__?: Channel };
-
-/**
- * 中身の高さ（px）を測る。
- * scrollHeight は iframe の高さより小さくならないので、中身が縮んでも縮んだと分からない。
- * body の子要素の下端（下の余白まで）の最も下を中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
- * 子要素の内からはみ出した絶対配置の要素は数えない。測れる子要素が無いときは scrollHeight に戻る
- */
-export const measureContentHeight = (doc: Document): number => {
-  const body = doc.body;
-  const fallback = () =>
-    Math.max(doc.documentElement.scrollHeight, body?.scrollHeight ?? 0);
-  if (body === null) return fallback();
-  const view = doc.defaultView;
-  if (view === null) return fallback();
-  const px = (value: string) => {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  let bottom = 0;
-  for (const child of Array.from(body.children)) {
-    const rect = child.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) continue;
-    const style = view.getComputedStyle(child);
-    if (style.position === "fixed") continue;
-    bottom = Math.max(bottom, rect.bottom + px(style.marginBottom));
-  }
-  if (bottom <= 0) return fallback();
-  const bodyStyle = view.getComputedStyle(body);
-  return Math.ceil(
-    bottom +
-      view.scrollY +
-      px(bodyStyle.paddingBottom) +
-      px(bodyStyle.borderBottomWidth) +
-      px(bodyStyle.marginBottom),
-  );
-};
 
 /**
  * Storybook の画面（iframe.html）の中で動く橋渡し。配るときに iframe.html へ差し込む（inject.ts）。

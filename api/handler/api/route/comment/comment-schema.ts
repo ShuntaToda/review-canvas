@@ -157,7 +157,7 @@ export const SetCommentResolvedRequestBodySchema = z
   .openapi("SetCommentResolvedRequestBody");
 
 /**
- * 「AI 修正済み（確認待ち）」の印の付け外しのリクエストボディ
+ * 「確認待ち」の印の付け外しのリクエストボディ
  */
 export const SetCommentAiFixedRequestBodySchema = z
   .object({

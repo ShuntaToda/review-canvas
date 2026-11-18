@@ -1,9 +1,14 @@
+// @vitest-environment jsdom
 import {
   buildShotCatalog,
+  collectShotElements,
   EMPTY_SHOT_CATALOG,
   isShotPath,
+  MAX_SHOT_ELEMENTS,
   parseShotsManifest,
   shotPath,
+  SHOT_ELEMENT_SELECTOR,
+  SHOT_ELEMENT_TEXT_LENGTH,
   shotUrlAt,
 } from "./story-shots";
 
@@ -170,5 +175,118 @@ describe("縮小した画像", () => {
     expect(shotUrlAt({ url: "full.png", height: 100 }, 0.05, 1)).toBe(
       "full.png",
     );
+  });
+});
+
+describe("撮ったときの中身（contentHeight・elements）", () => {
+  const element = {
+    tag: "button",
+    x: 16,
+    y: 300,
+    width: 120,
+    height: 40,
+    text: "注文する",
+  };
+
+  test("[正常系]中身の高さと主な要素を読み、引く口から渡す", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [shot({ contentHeight: 420, elements: [element] })],
+    });
+    expect(manifest?.shots[0]).toMatchObject({
+      contentHeight: 420,
+      elements: [element],
+    });
+    const catalog = buildShotCatalog(manifest, "https://sb.example.com/x/");
+    expect(catalog.find("shop-list--default", 1000)).toMatchObject({
+      contentHeight: 420,
+      elements: [element],
+    });
+  });
+
+  test("[正常系]前の版で撮った目録（どちらも無い）は、そのまま読む", () => {
+    const manifest = parseShotsManifest({ version: 1, shots: [shot()] });
+    expect(manifest?.shots[0]).toEqual(shot());
+  });
+
+  test.each([
+    ["要素の形が違う", [element, { ...element, width: 0 }]],
+    ["タグが違う", [{ ...element, tag: "<script>" }]],
+    ["文字が長すぎる", [{ ...element, text: "あ".repeat(25) }]],
+    [
+      "数が多すぎる",
+      Array.from({ length: MAX_SHOT_ELEMENTS + 1 }, () => element),
+    ],
+    ["並びでない", "button"],
+  ])(
+    "[異常系]主な要素の並びは、%s ときは全部を捨てる（画像は使う）",
+    (_, elements) => {
+      const manifest = parseShotsManifest({
+        version: 1,
+        shots: [shot({ contentHeight: -1, elements })],
+      });
+      expect(manifest?.shots[0]).toEqual(shot());
+    },
+  );
+});
+
+describe("collectShotElements", () => {
+  const setUp = (
+    html: string,
+    rects: Record<string, [number, number, number, number]>,
+  ) => {
+    document.body.innerHTML = html;
+    for (const node of document.body.querySelectorAll("*")) {
+      const [x, y, width, height] = rects[node.id] ?? [0, 0, 0, 0];
+      node.getBoundingClientRect = () => new DOMRect(x, y, width, height);
+    }
+  };
+  const collect = (max = MAX_SHOT_ELEMENTS) =>
+    collectShotElements(
+      document,
+      SHOT_ELEMENT_SELECTOR,
+      max,
+      SHOT_ELEMENT_TEXT_LENGTH,
+    );
+
+  test("[正常系]押せる要素と見出しの矩形と文字を集める（入力欄の中身・隠した要素・SVG は読まず、見えない要素は除く）", () => {
+    setUp(
+      `<h2 id="h">お届け先 <span aria-hidden="true">＊</span></h2>
+       <p id="p">文章</p>
+       <label id="l">お名前 <input id="i" value="山田 太郎"></label>
+       <button id="b"><svg><title>絵</title></svg> 注文を確定して支払いへ進む（合計 3 点・送料込み）</button>
+       <a id="a" href="#">隠れたリンク</a>
+       <a id="n">href の無いリンク</a>`,
+      {
+        h: [16.4, 20.2, 300, 32],
+        p: [16, 60, 300, 20],
+        l: [16, 100, 300, 24],
+        i: [80, 100, 200, 24],
+        b: [16, 140, 240.6, 40],
+        n: [16, 200, 100, 20],
+      },
+    );
+    expect(collect()).toEqual([
+      { tag: "h2", x: 16, y: 20, width: 300, height: 32, text: "お届け先" },
+      { tag: "label", x: 16, y: 100, width: 300, height: 24, text: "お名前" },
+      { tag: "input", x: 80, y: 100, width: 200, height: 24, text: "" },
+      {
+        tag: "button",
+        x: 16,
+        y: 140,
+        width: 241,
+        height: 40,
+        text: "注文を確定して支払いへ進む（合計3点・送料込み）".slice(0, 24),
+      },
+    ]);
+  });
+
+  test("[正常系]数が上限を超える画面では、一部だけ残さずに null を返す", () => {
+    setUp(`<button id="a">1</button><button id="b">2</button>`, {
+      a: [0, 0, 10, 10],
+      b: [0, 20, 10, 10],
+    });
+    expect(collect(2)).toHaveLength(2);
+    expect(collect(1)).toBeNull();
   });
 });

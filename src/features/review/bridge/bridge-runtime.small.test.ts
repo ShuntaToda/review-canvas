@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { installBridge, measureContentHeight } from "./bridge-runtime";
+import { measureContentHeight } from "../model/story-shots";
+import { installBridge } from "./bridge-runtime";
 import {
   BRIDGE_CHANNEL,
   type ParentMessage,

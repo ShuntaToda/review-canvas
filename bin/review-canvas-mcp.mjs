@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // review-canvas の MCP サーバー（stdio）。AI（コーディングエージェント）が、レビューのコメントを読み、直したら返信して
-// 「AI 修正済み（確認待ち）」の印を付けるための道具を出す（docs/ai.md）。
+// 「確認待ち」の印を付けるための道具を出す（docs/ai.md）。
 // 依存を持たない（Node.js の標準だけ）。このファイルだけを node で動かせる:
 //   REVIEW_CANVAS_API_URL=http://localhost:4100 REVIEW_CANVAS_DEV_NAME=local node bin/review-canvas-mcp.mjs
 //
@@ -74,7 +74,7 @@ export const TOOLS = [
           type: "string",
           enum: STATUSES,
           description:
-            "絞り込む状態。open=未解決（既定）/ ai-fixed=AI 修正済み（確認待ち）/ resolved=解決済み / all=すべて",
+            "絞り込む状態。open=未解決（既定）/ ai-fixed=確認待ち/ resolved=解決済み / all=すべて",
         },
         source: {
           type: "string",
@@ -109,7 +109,7 @@ export const TOOLS = [
   {
     name: "mark_ai_fixed",
     description:
-      "スレッドに「AI 修正済み（確認待ち）」の印を付ける。reply に何をどう直したか（変えたファイル・コミット）を書くと、先に返信してから印を付ける。人が画面で確かめて解決にする（解決はしない）。解決済みのスレッドには付けられない",
+      "スレッドに「確認待ち」の印を付ける。reply に何をどう直したか（変えたファイル・コミット）を書くと、先に返信してから印を付ける。人が画面で確かめて解決にする（解決はしない）。解決済みのスレッドには付けられない",
     inputSchema: {
       type: "object",
       properties: {

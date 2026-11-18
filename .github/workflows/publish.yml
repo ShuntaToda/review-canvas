@@ -341,7 +341,9 @@ jobs:
        (needs.check-published.result == 'success' && needs.check-published.outputs.branches != '[]') ||
        (needs.list-published.result == 'success' && needs.list-published.outputs.branches != '[]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # step ごとの上限（依存 10・ビルド 20・Chromium 8・撮影 12）の合計より長くする。
+    # 撮影の時間切れでジョブごと落ちると、成果物が上がらず、そのブランチが置かれなくなる（scripts/repo-rules.small.test.mjs が確かめる）
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -355,12 +357,14 @@ jobs:
       # ここでのビルド・撮影が失敗しても、置くジョブは画像なしで置けるので、この leg は落とさない
       IS_DEFAULT_BRANCH: ${{ matrix.branch == (inputs.default_branch || github.event.repository.default_branch) }}
     steps:
-      # 置くブランチ（push のときは push したコミット。その後にまた push されていても、それは次の実行が置く）
+      # 置くブランチ（push のときは push したコミット。その後にまた push されていても、それは次の実行が置く）。
+      # 既定のブランチは、手で動かしたときも、置くジョブがビルドするコミット（このワークフローを動かしたコミット）にそろえる
+      # （画像だけが、あとから進んだコミットのものにならないように。既定のブランチ以外から動かしたときは、置くジョブが止める）
       - name: Checkout target branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'push' && github.sha || matrix.branch }}
+          ref: ${{ (github.event_name == 'push' || (env.IS_DEFAULT_BRANCH == 'true' && github.ref_name == matrix.branch)) && github.sha || matrix.branch }}
           path: host
 
       - name: Install pnpm
@@ -376,6 +380,7 @@ jobs:
 
       - name: Install dependencies of target branch
         continue-on-error: ${{ env.IS_DEFAULT_BRANCH == 'true' }}
+        timeout-minutes: 10
         working-directory: host
         env:
           INSTALL_COMMAND: ${{ inputs.install_command }}
@@ -385,6 +390,7 @@ jobs:
       # 形の確かめはここでも行い（id・outDir）、置くジョブのスクリプトがもう一度確かめる
       - name: Build Storybooks
         continue-on-error: ${{ env.IS_DEFAULT_BRANCH == 'true' }}
+        timeout-minutes: 20
         run: |
           # CONFIG はワークフローの env（inputs.config）から来る
           # shellcheck disable=SC2153
@@ -440,16 +446,17 @@ jobs:
       # 時間切れでこの leg を落とすと、ほかのブランチも置かれなくなるので、step ごとに時間の上限を持つ
       - name: Install Chromium
         continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 8
         working-directory: tool
         run: |
           pnpm install --frozen-lockfile
           pnpm --dir infra exec playwright install --with-deps --only-shell chromium
 
-      # 撮影のスクリプトは、Storybook 1 つにつき 10 分で残りを撮らずに終える（infra/scripts/story-screenshots.ts）
+      # 撮影のスクリプトは、全部の Storybook を合わせて 10 分でブラウザを閉じ、撮れた分だけの目録を書いて終える
+      # （infra/scripts/story-screenshots.ts の CAPTURE_TIME_LIMIT_MS。この step の上限より短い）
       - name: Screenshots
         continue-on-error: true
-        timeout-minutes: 15
+        timeout-minutes: 12
         working-directory: tool
         run: |
           pnpm --dir infra run screenshots \

@@ -214,7 +214,7 @@ export const buildReviewApi = (client: ApiClient) => ({
       }),
     ),
 
-  /** 「AI 修正済み（確認待ち）」の印を付ける・外す（画面からは、直っていないときに外して未解決へ差し戻す） */
+  /** 「確認待ち」の印を付ける・外す（画面からは、直っていないときに外して未解決へ差し戻す） */
   setAiFixed: ({
     branch,
     commentId,

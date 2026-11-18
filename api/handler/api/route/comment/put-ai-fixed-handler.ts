@@ -22,7 +22,7 @@ const putAiFixedRoute = createRoute({
   tags: ["Comments"],
   security: reviewerSecurity,
   summary:
-    "スレッドに「AI 修正済み（確認待ち）」の印を付ける・外す（誰でもできる。付けた人を残す）",
+    "スレッドに「確認待ち」の印を付ける・外す（誰でもできる。付けた人を残す）",
   request: {
     params: CommentIdParamSchema,
     body: {

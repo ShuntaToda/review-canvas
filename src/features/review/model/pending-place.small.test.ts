@@ -1,8 +1,14 @@
 import {
+  anchorMatchesShot,
+  type CapturedElement,
+  isWaitingStale,
+  nextWaiting,
+  refreshesDraft,
   type PendingPlaceSituation,
   pendingPlaceStep,
   sameScreenHeight,
 } from "./pending-place";
+import type { ShotElement } from "./story-shots";
 
 const situation = (
   overrides: Partial<PendingPlaceSituation> = {},
@@ -11,18 +17,29 @@ const situation = (
   bridgeReady: false,
   bridgeMissing: false,
   canLoad: true,
-  shotHeight: 812,
+  settled: false,
+  shot: { height: 812 },
   liveHeight: null,
+  baseHeight: 812,
   ...overrides,
 });
 
 describe("sameScreenHeight", () => {
-  test("[正常系]測り方の端数（2px まで）は同じとみなし、それより違えば中身がずれているとみなす", () => {
-    expect(sameScreenHeight(812, 812)).toBe(true);
-    expect(sameScreenHeight(812, 814)).toBe(true);
-    expect(sameScreenHeight(812, 810)).toBe(true);
-    expect(sameScreenHeight(812, 815)).toBe(false);
-    expect(sameScreenHeight(812, 1200)).toBe(false);
+  test("[正常系]撮ったときの中身の高さがあれば、切り上げる前の高さどうしを比べる（端数 2px までは同じ）", () => {
+    const shot = { height: 812, contentHeight: 420 };
+    expect(sameScreenHeight(shot, 420, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 422, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 418, 812)).toBe(true);
+    // 画面の最低の高さより短い画面どうしでも、違いが分かる
+    expect(sameScreenHeight(shot, 423, 812)).toBe(false);
+    expect(sameScreenHeight(shot, 640, 812)).toBe(false);
+  });
+
+  test("[正常系]撮ったときの中身の高さが無い（前の版で撮った）ときは、画面の最低の高さまで切り上げた高さで比べる", () => {
+    expect(sameScreenHeight({ height: 812 }, 420, 812)).toBe(true);
+    expect(sameScreenHeight({ height: 812 }, 640, 812)).toBe(true);
+    expect(sameScreenHeight({ height: 812 }, 815, 812)).toBe(false);
+    expect(sameScreenHeight({ height: 1200 }, 1201, 812)).toBe(true);
   });
 });
 
@@ -34,35 +51,52 @@ describe("pendingPlaceStep", () => {
     expect(pendingPlaceStep(situation({ revealed: true }))).toBe("wait");
   });
 
-  test("[正常系]動く画面に切り替わり、高さが画像と同じなら、手がかりを集めて置く", () => {
-    expect(
-      pendingPlaceStep(
-        situation({ revealed: true, bridgeReady: true, liveHeight: 812 }),
-      ),
-    ).toBe("capture");
+  test("[正常系]動く画面に切り替わった直後は、高さがまだ届いていなくても・前の高さが届いていても、高さの知らせを待つ", () => {
+    const live = { revealed: true, bridgeReady: true };
+    expect(pendingPlaceStep(situation(live))).toBe("settle");
+    expect(pendingPlaceStep(situation({ ...live, liveHeight: 812 }))).toBe(
+      "settle",
+    );
+    // 描画の途中に届いた高さが違っていても、待つ前には決めない
+    expect(pendingPlaceStep(situation({ ...live, liveHeight: 1040 }))).toBe(
+      "settle",
+    );
   });
 
-  test("[正常系]動く画面の高さが画像と違えば、手がかりを集めず、クリックし直してもらう", () => {
-    expect(
-      pendingPlaceStep(
-        situation({ revealed: true, bridgeReady: true, liveHeight: 1040 }),
-      ),
-    ).toBe("ask-again");
-  });
-
-  test("[正常系]高さをまだ測れていない・画像が無くなったときは、比べずに手がかりを集める", () => {
-    expect(
-      pendingPlaceStep(situation({ revealed: true, bridgeReady: true })),
-    ).toBe("capture");
+  test("[正常系]待ったあと、高さが画像と同じなら、手がかりを集める", () => {
     expect(
       pendingPlaceStep(
         situation({
           revealed: true,
           bridgeReady: true,
-          shotHeight: null,
-          liveHeight: 1040,
+          settled: true,
+          liveHeight: 812,
         }),
       ),
+    ).toBe("capture");
+  });
+
+  test("[正常系]待ったあと、高さが画像と違えば、手がかりを集めず、クリックし直してもらう", () => {
+    const live = { revealed: true, bridgeReady: true, settled: true };
+    expect(pendingPlaceStep(situation({ ...live, liveHeight: 1040 }))).toBe(
+      "ask-again",
+    );
+    expect(
+      pendingPlaceStep(
+        situation({
+          ...live,
+          shot: { height: 812, contentHeight: 420 },
+          liveHeight: 640,
+        }),
+      ),
+    ).toBe("ask-again");
+  });
+
+  test("[正常系]待っても高さが届かない・画像が無くなったときは、比べずに手がかりを集める", () => {
+    const live = { revealed: true, bridgeReady: true, settled: true };
+    expect(pendingPlaceStep(situation(live))).toBe("capture");
+    expect(
+      pendingPlaceStep(situation({ ...live, shot: null, liveHeight: 1040 })),
     ).toBe("capture");
   });
 
@@ -73,5 +107,163 @@ describe("pendingPlaceStep", () => {
     expect(pendingPlaceStep(situation({ canLoad: false }))).toBe(
       "place-without-anchor",
     );
+  });
+});
+
+describe("anchorMatchesShot", () => {
+  const element = (overrides: Partial<ShotElement> = {}): ShotElement => ({
+    tag: "button",
+    x: 100,
+    y: 200,
+    width: 120,
+    height: 40,
+    text: "注文する",
+    ...overrides,
+  });
+  const anchor = (
+    overrides: Partial<CapturedElement> = {},
+  ): CapturedElement => ({
+    tag: "button",
+    role: "button",
+    text: "注文する",
+    box: { x: 100, y: 200, width: 120, height: 40 },
+    ...overrides,
+  });
+  const point = { x: 150, y: 220 };
+
+  test("[正常系]主な要素を残していない画像（前の版で撮った）では比べない", () => {
+    expect(anchorMatchesShot(undefined, point, anchor())).toBe(true);
+  });
+
+  test("[正常系]画像でクリックした位置にあった押せる要素と、タグと文字が同じなら合っている", () => {
+    expect(anchorMatchesShot([element()], point, anchor())).toBe(true);
+    // フォントの違いで矩形が少し違っても、同じ要素とみなす
+    expect(
+      anchorMatchesShot(
+        [element()],
+        point,
+        anchor({ box: { x: 96, y: 204, width: 131, height: 44 } }),
+      ),
+    ).toBe(true);
+    // 長い文字は、目録の側が途中で切ってある
+    expect(
+      anchorMatchesShot(
+        [element({ text: "注文を確定して支払いへ進" })],
+        point,
+        anchor({ text: "注文を確定して 支払いへ進む（3 点）" }),
+      ),
+    ).toBe(true);
+  });
+
+  test("[正常系]高さが同じでも、並びが入れ替わって別の要素が手がかりになったら、ずれているとみなす", () => {
+    expect(
+      anchorMatchesShot([element()], point, anchor({ text: "キャンセル" })),
+    ).toBe(false);
+    expect(
+      anchorMatchesShot(
+        [element()],
+        point,
+        anchor({ tag: "a", role: "link", text: "注文する" }),
+      ),
+    ).toBe(false);
+    // 画像では何も無かった位置に、押せる要素が出ている
+    expect(anchorMatchesShot([], point, anchor())).toBe(false);
+    expect(anchorMatchesShot([element({ x: 400 })], point, anchor())).toBe(
+      false,
+    );
+  });
+
+  test("[正常系]文字の無い要素（入力欄・アイコンのボタン）は、どちらも文字が無いときだけ合う", () => {
+    const input = element({ tag: "input", text: "" });
+    expect(
+      anchorMatchesShot(
+        [input],
+        point,
+        anchor({ tag: "input", role: "textbox", text: null }),
+      ),
+    ).toBe(true);
+    expect(anchorMatchesShot([element({ text: "" })], point, anchor())).toBe(
+      false,
+    );
+  });
+
+  test("[正常系]主な要素でない所（文章・余白）の手がかりは、画像でもその位置に押せる要素が無ければ合っている", () => {
+    const text = anchor({
+      tag: "p",
+      role: null,
+      text: "お届け先",
+      box: { x: 90, y: 190, width: 300, height: 60 },
+    });
+    expect(anchorMatchesShot([], point, text)).toBe(true);
+    // 見出しの中の文字を指したときも合っている
+    expect(
+      anchorMatchesShot(
+        [element({ tag: "h2", text: "お届け先", width: 600 })],
+        point,
+        anchor({ tag: "span", role: null, text: "お届け先" }),
+      ),
+    ).toBe(true);
+  });
+
+  test("[正常系]画像では押せる要素があった位置で、その外の要素が手がかりになったら、ずれているとみなす。中の深い要素なら合っている", () => {
+    const card = element({
+      tag: "a",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 400,
+      text: "商品",
+    });
+    expect(
+      anchorMatchesShot(
+        [card],
+        point,
+        anchor({
+          tag: "span",
+          role: null,
+          box: { x: 120, y: 210, width: 80, height: 20 },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      anchorMatchesShot(
+        [element()],
+        point,
+        anchor({
+          tag: "div",
+          role: null,
+          box: { x: 0, y: 0, width: 1000, height: 2000 },
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("キャンバスに 1 つだけ持つ待ち", () => {
+  const waiting = { source: "pc", storyId: "a", point: { x: 1, y: 2 } };
+
+  test("[正常系]別の所をクリックしたら前の待ちを取り消し、やめるのはその画面の待ちだけ", () => {
+    expect(nextWaiting(waiting, "pc", "b", { x: 3, y: 4 })).toEqual({
+      source: "pc",
+      storyId: "b",
+      point: { x: 3, y: 4 },
+    });
+    expect(nextWaiting(waiting, "pc", "a", null)).toBeNull();
+    expect(nextWaiting(waiting, "pc", "b", null)).toBe(waiting);
+    expect(nextWaiting(null, "pc", "b", null)).toBeNull();
+  });
+
+  test("[正常系]ページを変えた・コメントの道具でなくなったら、待ちを捨てる", () => {
+    expect(isWaitingStale(waiting, "pc", "comment")).toBe(false);
+    expect(isWaitingStale(waiting, "sp", "comment")).toBe(true);
+    expect(isWaitingStale(waiting, "pc", "move")).toBe(true);
+  });
+
+  test("[正常系]いまの下書きと同じ画面・同じ位置に置き直すときだけ、下書きの手がかりの足し直しとみなす", () => {
+    const draft = { storyId: "a", x: 1, y: 2 };
+    expect(refreshesDraft(draft, "a", { x: 1, y: 2 })).toBe(true);
+    expect(refreshesDraft(draft, "b", { x: 1, y: 2 })).toBe(false);
+    expect(refreshesDraft(draft, "a", { x: 1, y: 3 })).toBe(false);
+    expect(refreshesDraft(null, "a", { x: 1, y: 2 })).toBe(false);
   });
 });

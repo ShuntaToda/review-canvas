@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 
+import { SRC_FILES_READ_BY_INFRA } from "../eslint.config.base.mjs";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const eslint = new ESLint({ cwd: root });
 
@@ -98,17 +100,16 @@ describe("infra からも読む画面（src/）のファイル", () => {
   const infraDir = path.join(root, "infra");
   const infraEslint = new ESLint({ cwd: infraDir });
 
-  it.each([
-    "src/features/review/bridge/inject.ts",
-    "src/features/review/model/story-shots.ts",
-    "src/features/review/model/story-render.ts",
-  ])("%s は何も import できない", async (file) => {
-    for (const importPath of ["./camera", "@/support/auth", "react"]) {
-      expect(
-        (await refusedBy(eslint, path.join(root, file), importPath)).join(),
-      ).toContain("何も import できません");
-    }
-  });
+  it.each(SRC_FILES_READ_BY_INFRA)(
+    "%s は何も import できない",
+    async (file) => {
+      for (const importPath of ["./camera", "@/support/auth", "react"]) {
+        expect(
+          (await refusedBy(eslint, path.join(root, file), importPath)).join(),
+        ).toContain("何も import できません");
+      }
+    },
+  );
 
   it("ほかの画面のファイルには掛からない", async () => {
     expect(
@@ -120,15 +121,15 @@ describe("infra からも読む画面（src/）のファイル", () => {
     ).toStrictEqual([]);
   });
 
-  it("infra から読める画面のファイルは、決めた 3 つだけ（api の設定の読み込みには掛からない）", async () => {
+  it("infra から読める画面のファイルは、決めたもの（SRC_FILES_READ_BY_INFRA）だけ（api の設定の読み込みには掛からない）", async () => {
     const file = path.join(infraDir, "scripts/story-screenshots.ts");
     const refused = (importPath) => refusedBy(infraEslint, file, importPath);
 
     for (const allowed of [
-      "../../src/features/review/model/story-shots",
-      "../../src/features/review/model/story-render",
-      "../../src/features/review/bridge/inject",
-      "../../src/features/review/bridge/inject.ts",
+      ...SRC_FILES_READ_BY_INFRA.flatMap((srcFile) => [
+        `../../${srcFile}`,
+        `../../${srcFile.replace(/\.ts$/, "")}`,
+      ]),
       "../../api/infrastructure/config/review-canvas-config",
       "./story-screenshots",
     ]) {

@@ -124,7 +124,7 @@ describe("buildMarkdown", () => {
     );
   });
 
-  test("[正常系]AI 修正済み（確認待ち）のスレッドは、Issue の形ではチェックを付けずに印を添え、AI 向けの形では見出しに状態を書く", () => {
+  test("[正常系]確認待ちのスレッドは、Issue の形ではチェックを付けずに印を添え、AI 向けの形では見出しに状態を書く", () => {
     const threads = buildThreads([
       comment({
         id: "01",

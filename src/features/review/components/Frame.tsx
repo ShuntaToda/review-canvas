@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { FrameBridge, storybookOriginOf } from "../bridge/frame-bridge";
+import { usePendingPlace } from "../hooks/usePendingPlace";
 import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
@@ -16,12 +17,10 @@ import {
   type MeasuredAt,
 } from "../model/frame-height";
 import {
-  clampFrameHeight,
   FRAME_LABEL_SCREEN_HEIGHT,
   type FramePlacement,
 } from "../model/layout";
 import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
-import { pendingPlaceStep, sameScreenHeight } from "../model/pending-place";
 import { pinPointFromClick } from "../model/pin-point";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
@@ -128,13 +127,6 @@ const MEASURE_DELAYS_MS = [0, 300, 1000, 2500];
 const LOCATE_DELAYS_MS = [300, 1000, 2500, 5000];
 /** 画面の中身の大きさが変わってから探し直すまでの待ち(ms) */
 const LOCATE_DEBOUNCE_MS = 150;
-/**
- * 画像の画面にコメントを置こうとしてから、iframe に切り替わって要素の手がかりを集められるまで待つ上限(ms)。
- * 超えたら、手がかりなしで置く（待たせ続けない）
- */
-const PLACE_WAIT_MS = 8_000;
-/** 動く画面を出してから、測った高さを画像の高さと比べるまでの待ち(ms)。描画の終わりの知らせと高さの知らせは、前後して届く */
-const LIVE_HEIGHT_WAIT_MS = 150;
 
 /**
  * キャンバスの1枚（Storybook のストーリー1つ）。発行のときに撮った画像があればふだんは画像で出し、
@@ -196,18 +188,6 @@ export const Frame = ({
     null,
   );
   const revealed = mounted && !retiring && revealedGeneration === generation;
-  // 待ちきって手がかりなしで置いたコメントの位置（下書きのあいだに画面を読めたら、手がかりを集め直す）
-  const [recapture, setRecapture] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  if (
-    recapture !== null &&
-    (draftPin === null ||
-      draftPin.x !== recapture.x ||
-      draftPin.y !== recapture.y)
-  ) {
-    setRecapture(null);
-  }
   const [previousMounted, setPreviousMounted] = useState(mounted);
   if (previousMounted !== mounted) {
     setPreviousMounted(mounted);
@@ -255,7 +235,7 @@ export const Frame = ({
   }, [onMeasure]);
   // いまの iframe（付けた回）・いまの幅で測ってもらえたか。それまでは iframe を既定の高さにしておく（model/frame-height.ts）
   const [measuredAt, setMeasuredAt] = useState<MeasuredAt | null>(null);
-  // 動く画面で測った、いまの幅の枠の高さ（画像の高さと比べて、中身がずれていないかを見る）
+  // 動く画面で測った、いまの幅の中身の高さ（画像を撮ったときの高さと比べて、中身がずれていないかを見る）
   const liveHeightRef = useRef<number | null>(null);
   const baseHeight = sources.get(source).baseHeight;
   const sizeContextRef = useRef({ generation, width: w });
@@ -266,7 +246,7 @@ export const Frame = ({
   const acceptSize = (height: number, width: number | undefined): boolean => {
     const current = sizeContextRef.current;
     if (!matchesWidth(width, current.width)) return false;
-    liveHeightRef.current = clampFrameHeight(height, baseHeight);
+    liveHeightRef.current = height;
     onMeasureRef.current(story.id, height);
     setMeasuredAt((previous) =>
       previous?.generation === current.generation &&
@@ -507,117 +487,22 @@ export const Frame = ({
     capturePlace(bridge, point);
   };
 
-  // 待っていたコメントを置く（model/pending-place.ts）。iframe に切り替わって描画が終わったら手がかりを集め、
-  // 画像と中身がずれていたら置かずに知らせ、切り替わらない（倍率が小さすぎる）・橋渡しが無い・待ちきったときは、手がかりなしで置く
-  const onPlaceRef = useRef(onPlace);
-  const capturePlaceRef = useRef(capturePlace);
-  const onPendingPlaceRef = useRef(onPendingPlace);
-  const onScreenChangedRef = useRef(onScreenChanged);
-  const draftPinRef = useRef(draftPin);
-  useLayoutEffect(() => {
-    onPlaceRef.current = onPlace;
-    capturePlaceRef.current = capturePlace;
-    onPendingPlaceRef.current = onPendingPlace;
-    onScreenChangedRef.current = onScreenChanged;
-    draftPinRef.current = draftPin;
-  });
-  const shotHeight = shot?.height ?? null;
-  useEffect(() => {
-    if (pendingPlace === null) return;
-    const bridge = bridgeRef.current;
-    const withoutAnchor = () =>
-      onPlaceRef.current(story.id, pendingPlace, null);
-    const stepNow = () =>
-      pendingPlaceStep({
-        revealed,
-        bridgeReady: bridgeReady && bridge !== null,
-        bridgeMissing,
-        canLoad: shouldLoad || granted,
-        shotHeight,
-        liveHeight: liveHeightRef.current,
-      });
-    const first = stepNow();
-    if (first !== "wait") {
-      const timer = window.setTimeout(
-        () => {
-          onPendingPlaceRef.current(story.id, null);
-          const step = stepNow();
-          if (step === "capture" && bridge !== null) {
-            capturePlaceRef.current(bridge, pendingPlace);
-          } else if (step === "ask-again") {
-            onScreenChangedRef.current(story.id);
-          } else {
-            withoutAnchor();
-          }
-        },
-        // 動く画面を出した直後は、測った高さが届くのを少し待ってから、画像と比べる
-        first === "place-without-anchor" ? 0 : LIVE_HEIGHT_WAIT_MS,
-      );
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => {
-      onPendingPlaceRef.current(story.id, null);
-      withoutAnchor();
-      setRecapture(pendingPlace);
-    }, PLACE_WAIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [
+  usePendingPlace({
+    story,
     pendingPlace,
+    draftPin,
     revealed,
     bridgeReady,
     bridgeMissing,
-    shouldLoad,
-    granted,
-    shotHeight,
-    story.id,
-  ]);
-
-  // 待ちきって手がかりなしで置いたあと、下書きのあいだに画面を読めたら、同じ位置で手がかりを集め直す
-  // （中身が画像とずれていたら集めない。下書きをやめた・置き直したあとの返事は捨てる）
-  useEffect(() => {
-    if (recapture === null || !revealed || !bridgeReady) return;
-    const bridge = bridgeRef.current;
-    if (bridge === null) return;
-    const timer = window.setTimeout(() => {
-      setRecapture(null);
-      const liveHeight = liveHeightRef.current;
-      if (
-        shotHeight !== null &&
-        liveHeight !== null &&
-        !sameScreenHeight(shotHeight, liveHeight)
-      ) {
-        return;
-      }
-      void bridge
-        .capture(recapture, {
-          id: story.id,
-          title: story.title,
-          name: story.name,
-          importPath: story.importPath,
-        })
-        .then((anchor) => {
-          const current = draftPinRef.current;
-          if (
-            anchor !== null &&
-            current !== null &&
-            current.x === recapture.x &&
-            current.y === recapture.y
-          ) {
-            onPlaceRef.current(story.id, recapture, anchor);
-          }
-        });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [
-    recapture,
-    revealed,
-    bridgeReady,
-    shotHeight,
-    story.id,
-    story.title,
-    story.name,
-    story.importPath,
-  ]);
+    canLoad: shouldLoad || granted,
+    shot,
+    baseHeight,
+    bridgeRef,
+    liveHeightRef,
+    onPlace,
+    onPendingPlace,
+    onScreenChanged,
+  });
 
   const highlightPin = pins.find(
     (pin) =>

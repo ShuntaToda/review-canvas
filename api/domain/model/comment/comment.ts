@@ -164,7 +164,7 @@ export class Comment {
   readonly resolvedAt: Date | null;
 
   /**
-   * 「AI 修正済み（確認待ち）」の印を付けた人の表示名（印が無ければnull）。M2M のトークンなら「AI（client の名前）」
+   * 「確認待ち」の印を付けた人の表示名（印が無ければnull）。M2M のトークンなら「AI（client の名前）」
    */
   readonly aiFixedBy: string | null;
 
@@ -388,7 +388,7 @@ export class Comment {
   }
 
   /**
-   * 「AI 修正済み（確認待ち）」の印を付けた・外した（差し戻した）新しいCommentを返す。誰でもできる（解決と同じ）。
+   * 「確認待ち」の印を付けた・外した（差し戻した）新しいCommentを返す。誰でもできる（解決と同じ）。
    * 付けた人は表示名と利用者IDで残す。最初のコメントだけが持つため、返信に対して呼ぶと CommentNotThreadRootError。
    * 解決済みのスレッドには付け外しできない（CommentAlreadyResolvedError。人が確かめ終えた状態を AI が動かさない）
    */
