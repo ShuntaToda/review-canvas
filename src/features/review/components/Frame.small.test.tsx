@@ -100,12 +100,13 @@ describe("StoryIframe", () => {
 
 describe("Frame の高さの知らせ", () => {
   const WIDTH = 375;
+  const SHOT = { url: "https://sb.example.com/shot.png", height: 1319 };
   const sources = buildSourceCatalog({
     storybooks: [
       {
         id: "shop",
         label: "サンプルショップ",
-        widths: [WIDTH],
+        widths: [WIDTH, 768],
         defaultWidth: WIDTH,
         baseHeight: 812,
       },
@@ -120,33 +121,37 @@ describe("Frame の高さの知らせ", () => {
   };
   const finished = { ...playing, phase: "finished" };
 
+  // Frame はストーリーごとに play 関数を持つかを覚え、テストのあいだも残るので、テストごとに別のストーリーを使う
+  type SampleStory = { id: string; title: string; name: string };
+  const story = (title: string, name: string, id: string): SampleStory => ({
+    id,
+    title,
+    name,
+  });
+
   const onMeasure = vi.fn<(storyId: string, height: number) => void>();
   afterEach(() => onMeasure.mockReset());
 
   const frameOf = ({
-    storyId,
+    sample,
     shot,
     keepLoaded = true,
+    width = WIDTH,
   }: {
-    storyId: string;
+    sample: SampleStory;
     shot: ShotView | null;
     keepLoaded?: boolean;
+    width?: number;
   }) => (
     <SourcesContext.Provider value={sources}>
       <Frame
         source="shop"
         placement={{
-          story: {
-            id: storyId,
-            title: "Shop/OrderForm",
-            name: "Filled",
-            importPath: null,
-            source: "shop",
-          },
+          story: { ...sample, importPath: null, source: "shop" },
           x: 0,
           y: 0,
-          w: WIDTH,
-          h: 1319,
+          w: width,
+          h: SHOT.height,
         }}
         zoom={1}
         tool="comment"
@@ -171,7 +176,10 @@ describe("Frame の高さの知らせ", () => {
   );
 
   /** 動く画面に切り替える前の Frame を出し、iframe を読み込んだことにする */
-  const renderFrame = (props: { storyId: string; shot: ShotView | null }) => {
+  const renderFrame = (props: {
+    sample: SampleStory;
+    shot: ShotView | null;
+  }) => {
     vi.useFakeTimers();
     const { container, rerender } = render(frameOf(props));
     const iframe = container.querySelector("iframe");
@@ -179,6 +187,10 @@ describe("Frame の高さの知らせ", () => {
     fireEvent.load(iframe);
     const frameWindow = iframe.contentWindow;
     if (frameWindow === null) throw new Error("iframe の window がありません");
+    const sent: unknown[] = [];
+    vi.spyOn(frameWindow, "postMessage").mockImplementation((data: unknown) => {
+      sent.push(data);
+    });
     const receive = (message: BridgeMessage) =>
       act(() => {
         window.dispatchEvent(
@@ -189,85 +201,157 @@ describe("Frame の高さの知らせ", () => {
           }),
         );
       });
-    return { receive, container, rerender };
+    const ready = (height: number) =>
+      receive({
+        type: "ready",
+        render: playing,
+        focused: false,
+        height,
+        width: WIDTH,
+      });
+    const mode = () =>
+      container
+        .querySelector("[data-frame-mode]")
+        ?.getAttribute("data-frame-mode");
+    const measureRequests = () =>
+      sent.filter(
+        (data) =>
+          typeof data === "object" &&
+          data !== null &&
+          "type" in data &&
+          data.type === "measure",
+      ).length;
+    return {
+      iframe,
+      receive,
+      ready,
+      mode,
+      measureRequests,
+      rerender,
+      reload: () => fireEvent.load(iframe),
+    };
   };
 
   const heightsOf = () => onMeasure.mock.calls.map((call) => call[1]);
 
-  test("[正常系]画像を出しているあいだは途中の高さを並びに渡さず、切り替わったときに最後の高さを 1 回だけ渡す", () => {
-    const { receive, container } = renderFrame({
-      storyId: "shop-orderform--filled",
-      shot: { url: "https://sb.example.com/shot.png", height: 1319 },
+  test("[正常系]画像を出しているあいだは途中の高さを並びに渡さず、iframe はその高さで付け、切り替わったときに最後の高さを 1 回だけ渡す", () => {
+    const { iframe, receive, ready, mode, measureRequests } = renderFrame({
+      sample: story("Shop/OrderForm", "Filled", "shop-orderform--filled"),
+      shot: SHOT,
     });
 
-    receive({
-      type: "ready",
-      render: playing,
-      focused: false,
-      height: 812,
-      width: WIDTH,
-    });
+    ready(812);
+    // iframe は知らせた高さで付ける（画像の高さで付けると、100vh の帯がその高さに伸びる）
+    expect(iframe.style.height).toBe("812px");
     receive({ type: "size", height: 1281, width: WIDTH });
-    receive({ type: "size", height: 1319, width: WIDTH });
+    expect(iframe.style.height).toBe("1281px");
     expect(onMeasure).not.toHaveBeenCalled();
-    expect(
-      container
-        .querySelector("[data-frame-mode]")
-        ?.getAttribute("data-frame-mode"),
-    ).toBe("image");
 
+    // 描き終わりの知らせが、橋渡しが遅らせて送る最後の高さより先に届く。測り直しを頼み、答えを待ってから切り替える
     receive({ type: "render", render: finished });
-    expect(
-      container
-        .querySelector("[data-frame-mode]")
-        ?.getAttribute("data-frame-mode"),
-    ).toBe("live");
+    expect(mode()).toBe("image");
+    expect(measureRequests()).toBe(1);
+    expect(onMeasure).not.toHaveBeenCalled();
+    receive({ type: "size", height: 1319, width: WIDTH });
+    expect(mode()).toBe("live");
     expect(heightsOf()).toStrictEqual([1319]);
+    expect(iframe.style.height).toBe("1319px");
 
     // 切り替わった後の変化は、すぐ渡す
     receive({ type: "size", height: 1400, width: WIDTH });
     expect(heightsOf()).toStrictEqual([1319, 1400]);
   });
 
+  test("[異常系]測り直しの答えが来なければ、待ちきってから持っておいた高さで切り替える", () => {
+    const { ready, receive, mode } = renderFrame({
+      sample: story("Shop/OrderForm", "Default", "shop-orderform--default"),
+      shot: SHOT,
+    });
+
+    ready(812);
+    receive({ type: "size", height: 1281, width: WIDTH });
+    receive({ type: "render", render: finished });
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(mode()).toBe("image");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(mode()).toBe("live");
+    expect(heightsOf()).toStrictEqual([1281]);
+  });
+
   test("[正常系]画像の無い画面は、読み込み中の高さもすぐ渡す", () => {
-    const { receive } = renderFrame({
-      storyId: "shop-orderform--default",
+    const { ready, receive, iframe } = renderFrame({
+      sample: story("Shop/ProductList", "Default", "shop-productlist--default"),
       shot: null,
     });
 
-    receive({
-      type: "ready",
-      render: playing,
-      focused: false,
-      height: 812,
-      width: WIDTH,
-    });
+    ready(812);
     receive({ type: "size", height: 1281, width: WIDTH });
     expect(heightsOf()).toStrictEqual([812, 1281]);
+    // iframe は今までどおり並びの枠の高さ（placement の h）で付ける
+    expect(iframe.style.height).toBe(`${SHOT.height}px`);
   });
 
-  test("[正常系]切り替わる前に iframe を外したら、持っておいた高さを渡さない（次の回に持ち越さない）", () => {
-    const shot = { url: "https://sb.example.com/shot.png", height: 1319 };
-    const storyId = "shop-orderform--empty";
-    const { receive, rerender } = renderFrame({ storyId, shot });
+  test("[境界値]切り替わる前に iframe を外したら、持っておいた高さを渡さない（次の回に持ち越さない）", () => {
+    const sample = story(
+      "Shop/OrderForm",
+      "ValidationError",
+      "shop-orderform--validation-error",
+    );
+    const { ready, receive, rerender } = renderFrame({ sample, shot: SHOT });
 
-    receive({
-      type: "ready",
-      render: playing,
-      focused: false,
-      height: 812,
-      width: WIDTH,
-    });
+    ready(812);
     receive({ type: "size", height: 1281, width: WIDTH });
     // 見えている範囲から離れて外す。外す手順の途中に画像が無くなっても渡さない
-    rerender(frameOf({ storyId, shot, keepLoaded: false }));
-    rerender(frameOf({ storyId, shot: null, keepLoaded: false }));
+    rerender(frameOf({ sample, shot: SHOT, keepLoaded: false }));
+    rerender(frameOf({ sample, shot: null, keepLoaded: false }));
     expect(onMeasure).not.toHaveBeenCalled();
     // 外し終えて回が変わった後も渡さない
     act(() => {
       vi.advanceTimersByTime(5_000);
     });
-    rerender(frameOf({ storyId, shot: null, keepLoaded: false }));
+    rerender(frameOf({ sample, shot: null, keepLoaded: false }));
+    expect(onMeasure).not.toHaveBeenCalled();
+  });
+
+  test("[境界値]画像のあいだに幅を変え、新しい幅で測る前に切り替わったら、前の幅の高さを渡さない", () => {
+    const sample = story(
+      "Shop/ProductList",
+      "Empty",
+      "shop-productlist--empty",
+    );
+    const { ready, receive, rerender, mode } = renderFrame({
+      sample,
+      shot: SHOT,
+    });
+
+    ready(812);
+    receive({ type: "size", height: 1281, width: WIDTH });
+    rerender(frameOf({ sample, shot: SHOT, width: 768 }));
+    receive({ type: "render", render: finished });
+    // 前の幅で測った答えは捨てる
+    receive({ type: "size", height: 1281, width: WIDTH });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(mode()).toBe("live");
+    expect(onMeasure).not.toHaveBeenCalled();
+  });
+
+  test("[境界値]読み込み直した（load がもう一度来た）ら、前の読み込みで持っておいた高さを渡さない", () => {
+    const { ready, receive, reload, mode } = renderFrame({
+      sample: story("Shop/ProductList", "Loading", "shop-productlist--loading"),
+      shot: SHOT,
+    });
+
+    ready(812);
+    reload();
+    // 新しい橋渡しはまだつながっていない。描き終わりの知らせで、測り直しを待たずに切り替える
+    receive({ type: "render", render: finished });
+    expect(mode()).toBe("live");
     expect(onMeasure).not.toHaveBeenCalled();
   });
 });

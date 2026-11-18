@@ -5,7 +5,7 @@ import {
   iframeHeightFor,
   matchesWidth,
   type MeasuredAt,
-  routeMeasuredHeight,
+  reportOrHoldHeight,
 } from "./frame-height";
 import { clampFrameHeight } from "./layout";
 
@@ -18,6 +18,7 @@ describe("iframeHeightFor", () => {
         frameHeight: 1040,
         baseHeight: BASE,
         measuredAt,
+        held: null,
         generation,
         width,
       });
@@ -27,6 +28,39 @@ describe("iframeHeightFor", () => {
     // 幅を変えた・付け直した
     expect(at({ generation: 1, width: 1280 }, 1920)).toBe(BASE);
     expect(at({ generation: 1, width: 1280 }, 1280, 2)).toBe(BASE);
+  });
+
+  test("[正常系]画像を出しているあいだは、iframe を持っておいた高さ（並びの枠の高さではなく）で付ける", () => {
+    const at = (held: HeldHeight | null, width = 375, generation = 1) =>
+      iframeHeightFor({
+        frameHeight: 1343,
+        baseHeight: 812,
+        measuredAt: { generation: 1, width: 375 },
+        held,
+        generation,
+        width,
+      });
+
+    expect(at({ generation: 1, width: 375, height: 812 })).toBe(812);
+    expect(at({ generation: 1, width: 375, height: 1280.4 })).toBe(1281);
+    // 持っておいた高さが無い（切り替わった後・画像の無い画面）なら枠の高さ
+    expect(at(null)).toBe(1343);
+  });
+
+  test("[境界値]持っておいた高さが前の回・前の幅のものなら、iframe には使わない", () => {
+    const held = { generation: 1, width: 375, height: 812 };
+    const at = (generation: number, width: number) =>
+      iframeHeightFor({
+        frameHeight: 1343,
+        baseHeight: 812,
+        measuredAt: { generation, width },
+        held,
+        generation,
+        width,
+      });
+
+    expect(at(2, 375)).toBe(1343);
+    expect(at(1, 768)).toBe(1343);
   });
 
   test("[正常系]測った幅が無い（幅を送らない橋渡し）ときは合うとみなし、違う幅の知らせは合わないとする", () => {
@@ -52,6 +86,7 @@ describe("iframeHeightFor", () => {
           frameHeight,
           baseHeight: BASE,
           measuredAt,
+          held: null,
           generation,
           width,
         });
@@ -83,18 +118,18 @@ describe("iframeHeightFor", () => {
   });
 });
 
-describe("routeMeasuredHeight", () => {
+describe("reportOrHoldHeight", () => {
   const at = { generation: 1, width: 375 };
 
   test("[正常系]画像の無い画面では、知らせた高さをすぐ並びに渡し、持っておかない", () => {
     expect(
-      routeMeasuredHeight({ showingShot: false, height: 1281, at }),
+      reportOrHoldHeight({ showingShot: false, height: 1281, at }),
     ).toStrictEqual({ report: 1281, held: null });
   });
 
   test("[正常系]画像を出しているあいだは、並びに渡さず、測った回・幅と一緒に持っておく", () => {
     expect(
-      routeMeasuredHeight({ showingShot: true, height: 812, at }),
+      reportOrHoldHeight({ showingShot: true, height: 812, at }),
     ).toStrictEqual({
       report: null,
       held: { generation: 1, width: 375, height: 812 },
@@ -109,15 +144,15 @@ describe("heldHeightToReport", () => {
     expect(heldHeightToReport(held, { generation: 1, width: 375 })).toBe(1319);
   });
 
-  test("[正常系]持っておいた高さが前の幅のものなら渡さない", () => {
+  test("[境界値]持っておいた高さが前の幅のものなら渡さない", () => {
     expect(heldHeightToReport(held, { generation: 1, width: 768 })).toBeNull();
   });
 
-  test("[正常系]切り替わる前に iframe を外して付け直した（前の回の）高さは渡さない", () => {
+  test("[境界値]切り替わる前に iframe を外して付け直した（前の回の）高さは渡さない", () => {
     expect(heldHeightToReport(held, { generation: 2, width: 375 })).toBeNull();
   });
 
-  test("[正常系]持っておいた高さが無ければ渡さない", () => {
+  test("[境界値]持っておいた高さが無ければ渡さない", () => {
     expect(heldHeightToReport(null, { generation: 1, width: 375 })).toBeNull();
   });
 });
@@ -136,7 +171,7 @@ describe("画像を出しているあいだの、キャンバスの枠の高さ"
     const frameHeight = (width: number) =>
       clampFrameHeight(heights.get(width) ?? SHOT_HEIGHT, BASE_HEIGHT);
     const receive = (showingShot: boolean, height: number, width = WIDTH) => {
-      const routed = routeMeasuredHeight({
+      const routed = reportOrHoldHeight({
         showingShot,
         height,
         at: { generation, width },
@@ -190,7 +225,7 @@ describe("画像を出しているあいだの、キャンバスの枠の高さ"
     expect(frameHeight(WIDTH)).toBe(1281);
   });
 
-  test("[正常系]持っておいた高さが前の幅のものなら、切り替わってもいまの幅の枠を動かさない", () => {
+  test("[境界値]持っておいた高さが前の幅のものなら、切り替わってもいまの幅の枠を動かさない", () => {
     const { frameHeight, receive, reveal } = setUp();
 
     receive(true, 812, WIDTH);
@@ -199,7 +234,7 @@ describe("画像を出しているあいだの、キャンバスの枠の高さ"
     expect(frameHeight(WIDTH)).toBe(SHOT_HEIGHT);
   });
 
-  test("[正常系]切り替わる前に iframe を外して付け直したら、持っておいた高さを次の回に持ち越さない", () => {
+  test("[境界値]切り替わる前に iframe を外して付け直したら、持っておいた高さを次の回に持ち越さない", () => {
     const { frameHeight, receive, reveal, remount } = setUp();
 
     receive(true, 812);

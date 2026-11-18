@@ -12,12 +12,13 @@ import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
 import {
+  type FrameAt,
   type HeldHeight,
   heldHeightToReport,
   iframeHeightFor,
   matchesWidth,
   type MeasuredAt,
-  routeMeasuredHeight,
+  reportOrHoldHeight,
 } from "../model/frame-height";
 import {
   FRAME_LABEL_SCREEN_HEIGHT,
@@ -124,6 +125,8 @@ const knownPlayFunctions = new Map<string, boolean>();
  * 2 枚目からは返事を待たずに読み込みの枠を返す（1 枚ごとに 4 秒待って、順番待ちが詰まらないように）
  */
 const storybooksWithoutBridge = new Set<string>();
+/** 画像から動く画面に切り替える前に、測り直しの答えを待つ上限(ms) */
+const REVEAL_MEASURE_TIMEOUT_MS = 300;
 /** 幅を変えた・付け直したあとに高さを測り直してもらう時刻(ms)（幅に合わせて描き直すのを待つ） */
 const MEASURE_DELAYS_MS = [0, 300, 1000, 2500];
 /** ピンの要素を探し直す時刻(ms)。最後の回で見つからなければ「要素が見つからない」とする（それより前は、まだ描いていないだけかもしれない） */
@@ -204,6 +207,7 @@ export const Frame = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const bridgeRef = useRef<FrameBridge | null>(null);
   const settleTimerRef = useRef<number | undefined>(undefined);
+  const revealTimerRef = useRef<number | undefined>(undefined);
   // 中身の大きさが変わったときに、ピンの要素を探し直す（下の探し直しの effect が入れる）
   const relocateRef = useRef<(() => void) | null>(null);
   // 読み込み後に付けるキーの受け渡しから、いまの道具を読む
@@ -241,23 +245,31 @@ export const Frame = ({
   // 動く画面で測った、いまの幅の中身の高さ（画像を撮ったときの高さと比べて、中身がずれていないかを見る）
   const liveHeightRef = useRef<number | null>(null);
   const baseHeight = sources.get(source).baseHeight;
-  const sizeContextRef = useRef({ generation, width: w });
+  const sizeContextRef = useRef<FrameAt>({ generation, width: w });
   useLayoutEffect(() => {
     sizeContextRef.current = { generation, width: w };
   }, [generation, w]);
-  // 画像を出しているあいだに測った高さ（並びには、動く画面に切り替わってから渡す。model/frame-height.ts）
+  // 画像を出しているあいだに測った高さ（並びには、動く画面に切り替わってから渡す。iframe はこの高さで付ける。model/frame-height.ts）。
+  // 橋渡しの知らせからは ref で読み書きし、iframe の高さには state を使う
   const heldHeightRef = useRef<HeldHeight | null>(null);
+  const [heldHeight, setHeldHeight] = useState<HeldHeight | null>(null);
+  const holdHeight = (next: HeldHeight | null) => {
+    heldHeightRef.current = next;
+    setHeldHeight(next);
+  };
   // 橋渡しの知らせ（handleLoad の中で作る）から、いま画像を出しているかを読む
   const showingShot = shot !== null && !revealed;
   const showingShotRef = useRef(showingShot);
   useLayoutEffect(() => {
     showingShotRef.current = showingShot;
-    // 外す手順の途中は切り替わったのではない（外し終えると回が変わり、持っておいた高さは渡さなくなる）
+    // 外す手順の途中に画像が無くなった（shot が null になった）ときは、切り替わったのではないので渡さない
+    // （外し終えると回が変わり、持っておいた高さは渡さなくなる）
     if (showingShot || retiring) return;
     const report = heldHeightToReport(heldHeightRef.current, {
       generation,
       width: w,
     });
+    // state は、出すとき（reveal）・次の知らせ・読み込み直しで空にする（iframe の高さには画像を出しているあいだしか使わない）
     heldHeightRef.current = null;
     if (report !== null) onMeasureRef.current(story.id, report);
   }, [showingShot, retiring, generation, w, story.id]);
@@ -266,13 +278,15 @@ export const Frame = ({
     const current = sizeContextRef.current;
     if (!matchesWidth(width, current.width)) return false;
     liveHeightRef.current = height;
-    const routed = routeMeasuredHeight({
+    const decided = reportOrHoldHeight({
       showingShot: showingShotRef.current,
       height,
       at: current,
     });
-    heldHeightRef.current = routed.held;
-    if (routed.report !== null) onMeasureRef.current(story.id, routed.report);
+    holdHeight(decided.held);
+    if (decided.report !== null) {
+      onMeasureRef.current(story.id, decided.report);
+    }
     setMeasuredAt((previous) =>
       previous?.generation === current.generation &&
       previous.width === current.width
@@ -285,6 +299,7 @@ export const Frame = ({
     frameHeight: h,
     baseHeight,
     measuredAt,
+    held: showingShot ? heldHeight : null,
     generation,
     width: w,
   });
@@ -321,6 +336,7 @@ export const Frame = ({
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(settleTimerRef.current);
+      window.clearTimeout(revealTimerRef.current);
       releaseSlot();
     };
     // releaseSlot は ref だけを触る
@@ -555,7 +571,8 @@ export const Frame = ({
     setBridgeReady(false);
     setBridgeMissing(false);
     liveHeightRef.current = null;
-    heldHeightRef.current = null;
+    holdHeight(null);
+    window.clearTimeout(revealTimerRef.current);
     // ストーリーが自分でフォーカスを取ることがある（autofocus・play 関数の user-event など）。
     // 操作モード以外では画面の中にフォーカスを残さず、キャンバスへ戻す（ショートカットが効かなくなり、外したときに落ちるため）。
     // ただし描画・play 関数の途中は奪わない（toHaveFocus・userEvent.type などが失敗し、Storybook と違う途中の状態になるため）。
@@ -568,10 +585,32 @@ export const Frame = ({
     const busy = () =>
       Date.now() - loadedAt < STORY_SETTLE_TIMEOUT_MS &&
       isRenderBusy(current?.render ?? null);
+    // 画像の上に出す前に、測り直しの答えを待っている
+    let revealWaiting = false;
+    const reveal = () => {
+      revealWaiting = false;
+      window.clearTimeout(revealTimerRef.current);
+      setHeldHeight(null);
+      setRevealedGeneration(loadedGeneration);
+    };
     const settle = () => {
       if (busy()) return;
-      // 描画・play 関数が終わったので、画像の上に出す
-      setRevealedGeneration(loadedGeneration);
+      // 描画・play 関数が終わったので、画像の上に出す。画像を出しているあいだは、出す前にいまの高さを測り直してもらう
+      // （橋渡しは大きさの変化を遅らせて知らせるので、描き終わりの知らせが最後の高さより先に届き、切り替わった瞬間に途中の高さを並びに渡してしまう）。
+      // 答えない橋渡しでも、待ちきったら持っておいた高さで出す
+      if (showingShotRef.current && current?.ready === true) {
+        if (!revealWaiting) {
+          revealWaiting = true;
+          current.measure();
+          window.clearTimeout(revealTimerRef.current);
+          revealTimerRef.current = window.setTimeout(
+            reveal,
+            REVEAL_MEASURE_TIMEOUT_MS,
+          );
+        }
+      } else {
+        reveal();
+      }
       // play 関数どうしは同じページの1つのフォーカスを取り合うため、描画が終わるまで枠を握る
       releaseSlot();
       if (toolRef.current === "interact") return;
@@ -630,6 +669,7 @@ export const Frame = ({
         },
         onSize: (height, width) => {
           if (!acceptSize(height, width)) return;
+          if (revealWaiting) reveal();
           relocateRef.current?.();
         },
         onFocusIn: handleFocusIn,
