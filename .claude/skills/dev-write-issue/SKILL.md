@@ -107,9 +107,15 @@ gh issue create --title "[機能] <名前>" --body-file <下書きの .md>
 
 既定は次の 1 つです（AI は画像を置くブランチを作らず、push もしない）。
 
-1. AI は、画像を貼る場所に `【画像を貼る: <画像の絶対パス>】` の印を残した本文を書き、印の一覧を会話で人に渡す
+1. AI は、画像を貼る場所に `【画像を貼る: point-a.png】` のように**ファイル名だけ**の印を残した本文を書き、印ごとの画像の絶対パスの一覧は会話でだけ人に渡す（手元のフォルダ・利用者名を公開の本文に出さない。`check-issue-text.mjs` が `/home/`・`/Users/`・`C:\`・`/tmp/` で始まるパスを見つける）
 2. 投稿した後、人が GitHub の画面で印を画像に置き換える（ドラッグして貼る）
-3. AI は、貼った後の本文を開き直して確かめる: `gh issue view <番号> --comments` などで本文をファイルに取り、`node scripts/check-issue-text.mjs --posted <ファイル>` で印の貼り残しが無いことを見て、画像が表示されているかも見る
+3. AI は、貼った後の本文を 1 件だけ取り直してファイルにし、`node scripts/check-issue-text.mjs --posted <ファイル>` で印の貼り残しが無いことを見て、画像が表示されているかも見る
+
+   ```bash
+   gh issue view <番号> --json body --jq .body > <ファイル>                          # Issue の本文
+   gh api "repos/{owner}/{repo}/issues/comments/<コメントの id>" --jq .body > <ファイル> # コメント
+   gh pr view <番号> --json body --jq .body > <ファイル>                             # PR の本文
+   ```
 
 ## 4. 下書きを確かめ、多視点レビューにかけ、人が言ったら投稿する
 

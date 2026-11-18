@@ -96,4 +96,56 @@ describe("problemsOf", () => {
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(/2 行目: 画像を貼る印が残っています/);
   });
+  test.each([
+    ["/home/", `${IMAGE_MARKER} /home/yamada/work/point-a.png】`],
+    ["/Users/", "画像は /Users/yamada/work/point-a.png にある"],
+    ["C:\\", "画像は C:\\Users\\yamada\\point-a.png にある"],
+    ["/tmp/", "出力: `/tmp/out/point-a.png`"],
+  ])(
+    "[異常系]手元のパス（%s で始まるもの）は、投稿の前でも返す",
+    (start, line) => {
+      const problems = problemsOf(`本文\n${line}\n`);
+
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toMatch(/2 行目: 手元のパス（/);
+      expect(problems[0]).toContain(start);
+    },
+  );
+
+  test("[異常系]手元のパスは、フェンスと HTML のコメントの中でも返す", () => {
+    const problems = problemsOf(
+      "```bash\nls /home/yamada/work\n```\n<!-- /Users/yamada/work -->\n",
+    );
+
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toMatch(/^2 行目: 手元のパス/);
+    expect(problems[1]).toMatch(/^4 行目: 手元のパス/);
+  });
+
+  test("[正常系]ファイル名だけの印・リポジトリの中のパス・URL のパスは、手元のパスとして返さない", () => {
+    const problems = problemsOf(
+      [
+        `${IMAGE_MARKER} point-a.png】`,
+        "`infra/scripts/annotate-screen.ts` と ../review-canvas-work/issue/point-a.png",
+        "https://example.com/home/yamada と ./tmp/out と src/Users/x",
+      ].join("\n"),
+    );
+
+    expect(problems).toEqual([]);
+  });
+
+  test("[異常系]投稿した後の本文（posted）では、フェンスとインラインのコードの中の印も返す", () => {
+    const problems = problemsOf(
+      `\`${IMAGE_MARKER} point-a.png】\`\n\`\`\`\n${IMAGE_MARKER} point-b.png】\n\`\`\`\n`,
+      { posted: true },
+    );
+
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toMatch(/^1 行目: 画像を貼る印が残っています/);
+    expect(problems[1]).toMatch(/^3 行目: 画像を貼る印が残っています/);
+  });
+
+  test("[正常系]投稿の前（posted でない）なら、ファイル名だけの印はそのまま通す", () => {
+    expect(problemsOf(`${IMAGE_MARKER} point-a.png】\n`)).toEqual([]);
+  });
 });

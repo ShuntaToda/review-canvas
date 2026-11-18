@@ -17,10 +17,16 @@ import { fileURLToPath } from "node:url";
 export const MAX_UNBROKEN_BYTES = 150;
 
 /**
- * 画像を貼る場所の印。AI は画像の絶対パスをこの印で本文に残し、人が GitHub の画面で画像に置き換える
+ * 画像を貼る場所の印。AI は画像のファイル名だけをこの印で本文に残し、人が GitHub の画面で画像に置き換える
  * （スキル dev-write-issue「画像の載せ方」）
  */
 export const IMAGE_MARKER = "【画像を貼る:";
+
+/**
+ * 手元のパスの始まり。公開リポジトリの Issue・PR に、作業した人の手元のフォルダ（利用者名を含む）を出さないために見る。
+ * コードの例・HTML のコメントの中も、投稿すればそのまま読めるので外さない
+ */
+const LOCAL_PATH = /(^|[^\w./~-])(\/home\/|\/Users\/|\/tmp\/|[A-Za-z]:\\)/;
 
 /**
  * フェンス（``` か ~~~）の中の行かどうかを、行ごとに返す。フェンスの行そのものも中に数える。
@@ -73,6 +79,7 @@ const isDelimiterRow = (line) => /^\s*\|[\s|:-]+\|\s*$/.test(line);
  * posted: 投稿した後の本文として見る（画像を貼る印が残っていないかも見る）
  */
 export const problemsOf = (markdown, { posted = false } = {}) => {
+  const sourceLines = markdown.split("\n");
   const lines = withoutHtmlComments(markdown).split("\n");
   const fenced = fencedLines(lines);
   const problems = [];
@@ -81,6 +88,18 @@ export const problemsOf = (markdown, { posted = false } = {}) => {
 
   lines.forEach((rawLine, index) => {
     const where = `${index + 1} 行目`;
+    const localPath = LOCAL_PATH.exec(sourceLines[index] ?? "");
+    if (localPath !== null) {
+      problems.push(
+        `${where}: 手元のパス（${localPath[2]}…）があります。作業した人の手元のフォルダは公開の本文に書きません。画像を貼る印はファイル名だけ（【画像を貼る: point-a.png】）にし、絶対パスの一覧は会話で人に渡してください`,
+      );
+    }
+    // 貼り残しの印は、コードの例・インラインのコードの中にあっても貼り残し
+    if (posted && rawLine.includes(IMAGE_MARKER)) {
+      problems.push(
+        `${where}: 画像を貼る印が残っています。人に、GitHub の画面でこの印を画像に置き換えてもらってください（貼れない画像なら、印ごと消して文章で書く）`,
+      );
+    }
     if (fenced[index]) {
       choiceColumn = undefined;
       return;
@@ -98,11 +117,6 @@ export const problemsOf = (markdown, { posted = false } = {}) => {
     if (mention !== null) {
       problems.push(
         `${where}: @${mention[2]} は GitHub が相手に知らせます。人への知らせ・人の名前は書かず、誰に聞くかは人が決めます（コードやパッケージの名前なら \`@${mention[2]}\` のようにバッククォートで囲む）`,
-      );
-    }
-    if (posted && line.includes(IMAGE_MARKER)) {
-      problems.push(
-        `${where}: 画像を貼る印が残っています。人に、GitHub の画面でこの印を画像に置き換えてもらってください（貼れない画像なら、印ごと消して文章で書く）`,
       );
     }
     if (!isTableLine(line)) {
