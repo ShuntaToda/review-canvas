@@ -10,9 +10,20 @@ import type { ShotElement } from "./story-shots";
 
 /**
  * 同じ中身とみなす高さの差。画像を撮った環境（CI の Linux）と見ている端末とでは、フォントの違いで行の高さが少し変わり、
- * 長い画面ほど差が積もる。そのため差は高さに比例させ（1%）、短い画面でも 8px までは同じとみなす
+ * 長い画面ほど差が積もる。そのため差は高さに比例させる。
+ * - strict: 押した点を要素で確かめられないとき（主な要素を残していない画像・押した点に主な要素が無い）。高さだけが頼りなので狭くする
+ * - loose: 押した点に主な要素があり、集めた手がかりをその要素と比べられるとき。フォントの違いだけなら通し、
+ *   中身が増えた・減った（要素が動いて、同じ位置に同じ種類の別の要素が来る）ほどの違いは通さない
  */
-const heightTolerance = (height: number): number => Math.max(8, height * 0.01);
+const HEIGHT_TOLERANCE = {
+  strict: { px: 8, ratio: 0.01 },
+  loose: { px: 24, ratio: 0.05 },
+} as const;
+
+export type HeightTolerance = keyof typeof HEIGHT_TOLERANCE;
+
+const heightTolerance = (height: number, kind: HeightTolerance): number =>
+  Math.max(HEIGHT_TOLERANCE[kind].px, height * HEIGHT_TOLERANCE[kind].ratio);
 
 /** 位置の測り方の端数（px） */
 const POSITION_TOLERANCE = 2;
@@ -29,12 +40,13 @@ export const sameScreenHeight = (
   shot: ShotHeights,
   liveHeight: number,
   baseHeight: number,
+  tolerance: HeightTolerance = "strict",
 ): boolean =>
   shot.contentHeight === undefined
     ? Math.abs(shot.height - clampFrameHeight(liveHeight, baseHeight)) <=
-      heightTolerance(shot.height)
+      heightTolerance(shot.height, tolerance)
     : Math.abs(shot.contentHeight - liveHeight) <=
-      heightTolerance(shot.contentHeight);
+      heightTolerance(shot.contentHeight, tolerance);
 
 export type PendingPlaceSituation = {
   /** iframe の描画・play 関数が終わり、画像の上に出した */
@@ -55,7 +67,7 @@ export type PendingPlaceSituation = {
   baseHeight: number;
   /**
    * 画像を撮ったときの主な要素が、押した点の下にある（hasMainElementAt）。
-   * あるときは、集めた手がかりをその要素と比べて決めるので（anchorMatchesShot）、高さは比べない
+   * あるときは、集めた手がかりをその要素と比べて決めるので（anchorMatchesShot）、高さは緩く比べる
    */
   mainElementAtPoint: boolean;
 };
@@ -67,9 +79,8 @@ export type PendingPlaceStep =
  * 待っているコメント（と、待ちきって手がかりなしで置いたあとの集め直し）をどうするか。
  * - settle: 動く画面は出た。高さの知らせが届くのを少し待ってから、もう一度決める（待つ前に届いていた高さは、描画の途中のものかもしれない）
  * - capture: 動く画面で、クリックした位置の要素の手がかりを集める（待っても高さが届かないときも集める）。
- *   押した点の下に主な要素があった画像では、高さを見ずに集め、集めた手がかりとその要素を比べて決める
- *   （高さはフォントの違いだけでも変わるので、要素で確かめられるときは要素だけで決める）
- * - ask-again: 要素で確かめられず（主な要素を残していない画像・押した点に主な要素が無い）、高さが大きく違うので置かず、クリックし直してもらう
+ *   押した点の下に主な要素があった画像では、高さは緩く比べ（フォントの違いだけなら通す）、集めた手がかりとその要素を比べて決める
+ * - ask-again: 高さが違う（要素で確かめられないときは狭く、確かめられるときは緩く比べる）ので置かず、クリックし直してもらう
  * - place-without-anchor: 手がかりを集められない（橋渡しが無い・読み込めない）ので、手がかりなしで置く
  * - wait: まだ待つ（待ちきったら、呼ぶ側が手がかりなしで置く）
  */
@@ -86,10 +97,14 @@ export const pendingPlaceStep = ({
 }: PendingPlaceSituation): PendingPlaceStep => {
   if (revealed && bridgeReady) {
     if (!settled) return "settle";
-    return mainElementAtPoint ||
-      shot === null ||
+    return shot === null ||
       liveHeight === null ||
-      sameScreenHeight(shot, liveHeight, baseHeight)
+      sameScreenHeight(
+        shot,
+        liveHeight,
+        baseHeight,
+        mainElementAtPoint ? "loose" : "strict",
+      )
       ? "capture"
       : "ask-again";
   }
@@ -102,6 +117,8 @@ export type CapturedElement = {
   tag: string;
   role: string | null;
   text: string | null;
+  /** 要素の見出し（model/anchor-capture.ts の headingBefore） */
+  heading: string | null;
   box: { x: number; y: number; width: number; height: number };
 };
 
@@ -166,8 +183,11 @@ const sameText = (shotText: string, liveText: string | null): boolean => {
 /**
  * 動く画面で集めた手がかりが、画像でクリックした位置の要素と同じか（違えば、中身がずれている）。
  * 画像を撮った環境と見ている端末とでは、フォントの違いで要素の大きさが少し変わるので、矩形そのものは比べず、
- * 「クリックした位置にある要素が、同じ種類・同じ文字か」を見る。
- * - 手がかりが主な要素（押せる要素・見出し）なら、画像でその位置にあった主な要素のどれかと、タグと文字が合うこと
+ * 「クリックした位置にある要素が、同じ種類・同じ文字・同じ見出しの下か」を見る。
+ * - 手がかりを集められなかった（押した点に要素が無い）のに、画像ではその位置に主な要素があったなら、違う
+ *   （遅れて出る画像などで、動く画面の要素がまだその位置に無い）
+ * - 手がかりが主な要素（押せる要素・見出し）なら、画像でその位置にあった主な要素のどれかと、タグと文字が合うこと。
+ *   見出しを残してある画像では、見出しも合うこと（同じ種類・同じ文字の要素が並ぶ画面で、並びがずれて隣の要素が同じ位置に来たのを見分ける）
  * - 手がかりが主な要素でないのに、画像ではその位置に押せる要素があったなら、手がかりの要素の中心がその要素の中にあること
  *   （押せる要素の中の深い所を押したときは、中の要素が手がかりになる。model/anchor-capture.ts の pickTarget）
  * 主な要素を残していない画像（elements が無い）では比べない
@@ -175,14 +195,18 @@ const sameText = (shotText: string, liveText: string | null): boolean => {
 export const anchorMatchesShot = (
   elements: ReadonlyArray<ShotElement> | undefined,
   point: { x: number; y: number },
-  anchor: CapturedElement,
+  anchor: CapturedElement | null,
 ): boolean => {
   if (elements === undefined) return true;
   const under = elements.filter((element) => containsPoint(element, point));
+  if (anchor === null) return under.length === 0;
   if (MAIN_TAGS.has(anchor.tag) || MAIN_ROLES.has(anchor.role ?? "")) {
     return under.some(
       (element) =>
-        element.tag === anchor.tag && sameText(element.text, anchor.text),
+        element.tag === anchor.tag &&
+        sameText(element.text, anchor.text) &&
+        (element.heading === undefined ||
+          sameText(element.heading, anchor.heading)),
     );
   }
   const smallest = under.reduce<ShotElement | null>(

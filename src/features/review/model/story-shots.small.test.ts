@@ -266,10 +266,36 @@ describe("collectShotElements", () => {
         n: [16, 200, 100, 20],
       },
     );
+    const heading = "お届け先";
     expect(collect()).toEqual([
-      { tag: "h2", x: 16, y: 20, width: 300, height: 32, text: "お届け先" },
-      { tag: "label", x: 16, y: 100, width: 300, height: 24, text: "お名前" },
-      { tag: "input", x: 80, y: 100, width: 200, height: 24, text: "" },
+      // 見出しそのものは、自分を数えない（前に見出しが無いので ""）
+      {
+        tag: "h2",
+        x: 16,
+        y: 20,
+        width: 300,
+        height: 32,
+        text: "お届け先",
+        heading: "",
+      },
+      {
+        tag: "label",
+        x: 16,
+        y: 100,
+        width: 300,
+        height: 24,
+        text: "お名前",
+        heading,
+      },
+      {
+        tag: "input",
+        x: 80,
+        y: 100,
+        width: 200,
+        height: 24,
+        text: "",
+        heading,
+      },
       {
         tag: "button",
         x: 16,
@@ -277,7 +303,33 @@ describe("collectShotElements", () => {
         width: 241,
         height: 40,
         text: "注文を確定して支払いへ進む（合計3点・送料込み）".slice(0, 24),
+        heading,
       },
+    ]);
+  });
+
+  test("[正常系]要素ごとに、前にあるいちばん近い見出し（内に見出しがあれば、その最初のもの）を残す", () => {
+    setUp(
+      `<button id="top">先頭</button>
+       <ul>
+         <li><h2>木のマグカップ</h2><button id="a">カートに入れる</button></li>
+         <li><h2>麻のトートバッグ</h2><button id="b">カートに入れる</button></li>
+       </ul>
+       <a id="card" href="#"><h3>真鍮のしおり</h3>くわしく見る</a>`,
+      {
+        top: [0, 0, 80, 30],
+        a: [0, 100, 120, 34],
+        b: [0, 250, 120, 34],
+        card: [0, 400, 300, 80],
+      },
+    );
+    expect(
+      collect()?.map(({ tag, text, heading }) => [tag, text, heading]),
+    ).toEqual([
+      ["button", "先頭", ""],
+      ["button", "カートに入れる", "木のマグカップ"],
+      ["button", "カートに入れる", "麻のトートバッグ"],
+      ["a", "真鍮のしおりくわしく見る", "真鍮のしおり"],
     ]);
   });
 

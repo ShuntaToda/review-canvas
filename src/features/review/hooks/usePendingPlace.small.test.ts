@@ -117,10 +117,10 @@ describe("usePendingPlace", () => {
     expect(hook.onScreenChanged).not.toHaveBeenCalled();
   });
 
-  test("[正常系]押した点に主な要素があれば、高さが違っても集め、同じ要素なら置く（フォントの違いで高さだけ変わる）", async () => {
+  test("[正常系]押した点に主な要素があれば、フォントの違いほどの高さの違い（+20px）では知らせず、同じ要素なら置く", async () => {
     const hook = setUp();
     hook.rerender({ revealed: true, bridgeReady: true });
-    hook.liveHeightRef.current = 640;
+    hook.liveHeightRef.current = 440;
     await advance(LIVE_HEIGHT_WAIT_MS);
 
     expect(hook.onScreenChanged).not.toHaveBeenCalled();
@@ -129,6 +129,40 @@ describe("usePendingPlace", () => {
       POINT,
       anchorOf("注文する"),
     );
+  });
+
+  test("[正常系]押した点に主な要素があっても、高さが大きく違えば集めずに知らせる", async () => {
+    const hook = setUp();
+    hook.rerender({ revealed: true, bridgeReady: true });
+    hook.liveHeightRef.current = 640;
+    await advance(LIVE_HEIGHT_WAIT_MS);
+
+    expect(hook.capture).not.toHaveBeenCalled();
+    expect(hook.onScreenChanged).toHaveBeenCalledWith(STORY.id);
+    expect(hook.onPlace).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]画像では押した点に主な要素があったのに、動く画面で手がかりを集められなければ、手がかりなしで置かずに知らせる", async () => {
+    const hook = setUp();
+    hook.capture.mockResolvedValue(null);
+    hook.rerender({ revealed: true, bridgeReady: true });
+    hook.liveHeightRef.current = 420;
+    await advance(LIVE_HEIGHT_WAIT_MS);
+
+    expect(hook.capture).toHaveBeenCalledTimes(1);
+    expect(hook.onScreenChanged).toHaveBeenCalledWith(STORY.id);
+    expect(hook.onPlace).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]画像でも押した点に主な要素が無ければ、手がかりを集められなくても、手がかりなしで置く", async () => {
+    const hook = setUp({ shot: SHOT_WITHOUT_ELEMENT_AT_POINT });
+    hook.capture.mockResolvedValue(null);
+    hook.rerender({ revealed: true, bridgeReady: true });
+    hook.liveHeightRef.current = 420;
+    await advance(LIVE_HEIGHT_WAIT_MS);
+
+    expect(hook.onScreenChanged).not.toHaveBeenCalled();
+    expect(hook.onPlace).toHaveBeenCalledWith(STORY.id, POINT, null);
   });
 
   test("[正常系]押した点に主な要素が無く高さが大きく違えば集めず、主な要素があって別の要素が手がかりになったら置かずに知らせる", async () => {

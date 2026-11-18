@@ -49,6 +49,12 @@ export type ShotElement = {
   height: number;
   /** 見えている文字（空白を除いて SHOT_ELEMENT_TEXT_LENGTH 文字まで。入力欄の中身は読まない） */
   text: string;
+  /**
+   * 要素の見出し（内の最初の見出し。無ければ前にあるいちばん近い見出し。手がかりの heading と同じ決め方で、文字は text と同じ形）。
+   * 見出しが無ければ ""。同じ種類・同じ文字の要素が並ぶ画面（商品ごとの「カートに入れる」など）で、どの要素かを見分ける。
+   * 残す前の版で撮った目録には無い（見出しは比べない）
+   */
+  heading?: string;
 };
 
 /** 1 枚に残す主な要素の数の上限。超える画面では要素を残さない（一部だけ残すと、残っていない要素を「無くなった」と見誤る） */
@@ -164,6 +170,22 @@ export const collectShotElements = (
     walk(element);
     return text.replace(/\s+/g, "").slice(0, textLength);
   };
+  const headings = Array.from(
+    doc.body.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
+  );
+  // 手がかりの見出し（model/anchor-capture.ts の headingBefore）と同じ決め方
+  const headingOf = (element: Element): string => {
+    let found: Element | null = null;
+    for (const heading of headings) {
+      if (heading === element) continue;
+      const position = heading.compareDocumentPosition(element);
+      // 要素が見出しを中に持つ（8=CONTAINS）。並びは文書の順なので、最初に当たったものが内の最初の見出し
+      if ((position & 8) !== 0) return textOf(heading);
+      // 見出しの後ろにある（4=FOLLOWING）か、見出しの中にある（16=CONTAINED_BY）
+      if ((position & 4) !== 0 || (position & 16) !== 0) found = heading;
+    }
+    return found === null ? "" : textOf(found);
+  };
   const elements: ShotElement[] = [];
   for (const element of Array.from(doc.body.querySelectorAll(selector))) {
     const rect = element.getBoundingClientRect();
@@ -177,6 +199,7 @@ export const collectShotElements = (
       width: Math.round(rect.width),
       height: Math.round(rect.height),
       text: textOf(element),
+      heading: headingOf(element),
     });
   }
   return elements;
@@ -241,7 +264,10 @@ const isCoordinate = (value: unknown): value is number =>
 
 const parseElement = (raw: unknown): ShotElement | null => {
   if (typeof raw !== "object" || raw === null) return null;
-  const { tag, x, y, width, height, text } = raw as Record<string, unknown>;
+  const { tag, x, y, width, height, text, heading } = raw as Record<
+    string,
+    unknown
+  >;
   if (typeof tag !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(tag)) {
     return null;
   }
@@ -251,7 +277,15 @@ const parseElement = (raw: unknown): ShotElement | null => {
   if (typeof text !== "string" || text.length > SHOT_ELEMENT_TEXT_LENGTH) {
     return null;
   }
-  return { tag, x, y, width, height, text };
+  // 見出しは、残す前の版で撮った目録には無い。あるのに形が違えば、要素ごと捨てる
+  if (heading === undefined) return { tag, x, y, width, height, text };
+  if (
+    typeof heading !== "string" ||
+    heading.length > SHOT_ELEMENT_TEXT_LENGTH
+  ) {
+    return null;
+  }
+  return { tag, x, y, width, height, text, heading };
 };
 
 /** 主な要素の並び。1 つでも形が違えば全部を捨てる（欠けた並びで比べると、残っていない要素を「無くなった」と見誤る） */

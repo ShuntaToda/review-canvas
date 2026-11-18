@@ -134,17 +134,15 @@ export const usePendingPlace = ({
         if (recapturing) {
           // 下書きをやめた・置き直したあとの返事は捨てる
           const draft = now.draftPin;
-          if (anchor === null || draft?.x !== point.x || draft.y !== point.y) {
-            return;
-          }
+          if (draft?.x !== point.x || draft.y !== point.y) return;
         }
-        if (
-          anchor !== null &&
-          !anchorMatchesShot(now.shot?.elements, point, anchor)
-        ) {
+        // 手がかりを集められなかったときも比べる（画像では押した点に主な要素があったのに、動く画面には無い）
+        if (!anchorMatchesShot(now.shot?.elements, point, anchor)) {
           now.onScreenChanged(storyId);
           return;
         }
+        // 集め直しで手がかりが無いままなら、置き直さない（下書きはそのまま）
+        if (recapturing && anchor === null) return;
         now.onPlace(storyId, point, anchor);
       });
     const first = decide(false);

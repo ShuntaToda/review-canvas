@@ -101,74 +101,166 @@ describe("pendingPlaceStep", () => {
     ).toBe("ask-again");
   });
 
-  describe("フォントの違いだけでは知らせを出さない", () => {
+  describe("フォントの違いだけでは知らせを出さず、中身が変わったら知らせる", () => {
     const live = { revealed: true, bridgeReady: true, settled: true };
-    const button: ShotElement = {
+    // 375 の商品一覧。商品ごとに見出しと「カートに入れる」が並ぶ
+    const cartButton = (y: number, heading: string): ShotElement => ({
       tag: "button",
       x: 24,
-      y: 346,
-      width: 89,
+      y,
+      width: 120,
       height: 34,
-      text: "注文する",
-    };
-    const point = { x: 68, y: 363 };
-    const captured = (text: string): CapturedElement => ({
+      text: "カートに入れる",
+      heading,
+    });
+    const elements = [
+      cartButton(180, "木のマグカップ"),
+      cartButton(330, "麻のトートバッグ"),
+      cartButton(480, "真鍮のしおり"),
+    ];
+    const point = { x: 60, y: 195 };
+    const captured = (
+      heading: string | null,
+      text = "カートに入れる",
+    ): CapturedElement => ({
       tag: "button",
       role: "button",
       text,
-      box: { x: 24, y: 349, width: 92, height: 36 },
+      heading,
+      box: { x: 24, y: 183, width: 124, height: 36 },
     });
-    const shot = { height: 1275, contentHeight: 1275 };
-
-    test("[正常系]高さが 6px 違っても、押した点の主な要素が同じなら置ける", () => {
-      const mainElementAtPoint = hasMainElementAt([button], point);
-
-      expect(mainElementAtPoint).toBe(true);
-      expect(
-        pendingPlaceStep(
-          situation({ ...live, shot, liveHeight: 1281, mainElementAtPoint }),
-        ),
-      ).toBe("capture");
-      expect(anchorMatchesShot([button], point, captured("注文する"))).toBe(
-        true,
+    /** 待ったあとの決め方と、集めた手がかりの比べ方を通した結果 */
+    const outcome = ({
+      shotElements,
+      contentHeight,
+      liveHeight,
+      anchor,
+    }: {
+      shotElements: ShotElement[] | undefined;
+      contentHeight: number;
+      liveHeight: number;
+      anchor: CapturedElement | null;
+    }): "place" | "ask-again" => {
+      const step = pendingPlaceStep(
+        situation({
+          ...live,
+          shot: { height: Math.max(812, contentHeight), contentHeight },
+          liveHeight,
+          mainElementAtPoint: hasMainElementAt(shotElements, point),
+        }),
       );
+      if (step !== "capture") return "ask-again";
+      return anchorMatchesShot(shotElements, point, anchor)
+        ? "place"
+        : "ask-again";
+    };
+
+    test.each([
+      {
+        name: "フォントの違いで高さが +6px。押した点の要素は同じ",
+        contentHeight: 1275,
+        liveHeight: 1281,
+        anchor: captured("木のマグカップ"),
+        expected: "place",
+      },
+      {
+        name: "高さは近いが、押した点の要素の文字が違う",
+        contentHeight: 1275,
+        liveHeight: 1281,
+        anchor: captured("木のマグカップ", "売り切れ"),
+        expected: "ask-again",
+      },
+      {
+        // 寸法の無い画像が遅れて出る画面。画像が出る前は中身が短く、押した点にまだ要素が無い
+        name: "筋書き 1: 押した点に主な要素があったのに、動く画面では手がかりを集められない（高さは緩い差の内）",
+        contentHeight: 640,
+        liveHeight: 620,
+        anchor: null,
+        expected: "ask-again",
+      },
+      {
+        name: "筋書き 1: 同じく手がかりを集められず、高さも大きく違う",
+        contentHeight: 640,
+        liveHeight: 340,
+        anchor: null,
+        expected: "ask-again",
+      },
+      {
+        // 最初の商品が消え、同じ位置に次の商品の同じ文字のボタンが来る。高さは 1 件分（150px）減る
+        name: "筋書き 2: 最初の商品が消えて、同じ位置に隣の商品のボタンが来た（高さが 150px 減る）",
+        contentHeight: 1275,
+        liveHeight: 1125,
+        anchor: captured("麻のトートバッグ"),
+        expected: "ask-again",
+      },
+      {
+        name: "筋書き 2: 同じ高さのまま並びが入れ替わり、同じ位置に隣の商品のボタンが来た（見出しで見分ける）",
+        contentHeight: 1275,
+        liveHeight: 1275,
+        anchor: captured("麻のトートバッグ"),
+        expected: "ask-again",
+      },
+      {
+        // 実測: IPAGothic では 375 の商品一覧が 39px 短くなり、ボタンが 35px 動く
+        name: "フォントの違いで高さが -39px（短い画面。緩い差 24px を超える）",
+        contentHeight: 640,
+        liveHeight: 601,
+        anchor: captured("木のマグカップ"),
+        expected: "ask-again",
+      },
+      {
+        name: "フォントの違いで高さが -39px（長い画面。5% の内）で、押した点の要素は同じ",
+        contentHeight: 1275,
+        liveHeight: 1236,
+        anchor: captured("木のマグカップ"),
+        expected: "place",
+      },
+    ] as const)("[正常系]$name → $expected", ({ expected, ...rest }) => {
+      expect(outcome({ shotElements: elements, ...rest })).toBe(expected);
     });
 
-    test("[正常系]押した点に主な要素があれば、高さが大きく違っても高さでは決めず、集めた手がかりが違うときに知らせる", () => {
+    test("[正常系]見出しを残す前の版で撮った目録では、見出しは比べない（タグと文字が合えば置ける）", () => {
+      const old = elements.map(({ heading: _heading, ...rest }) => rest);
+
       expect(
-        pendingPlaceStep(
-          situation({
-            ...live,
-            shot,
-            liveHeight: 1425,
-            mainElementAtPoint: hasMainElementAt([button], point),
-          }),
-        ),
-      ).toBe("capture");
-      expect(anchorMatchesShot([button], point, captured("キャンセル"))).toBe(
+        outcome({
+          shotElements: old,
+          contentHeight: 1275,
+          liveHeight: 1275,
+          anchor: captured("麻のトートバッグ"),
+        }),
+      ).toBe("place");
+    });
+
+    test("[正常系]見出しの無い画面どうし（どちらも見出しなし）は同じとみなし、片方だけ見出しが無ければ違う", () => {
+      const bare = [cartButton(180, "")];
+
+      expect(anchorMatchesShot(bare, point, captured(null))).toBe(true);
+      expect(anchorMatchesShot(bare, point, captured("木のマグカップ"))).toBe(
         false,
       );
     });
 
     test.each([
       ["主な要素を残していない画像", undefined],
-      ["押した点に主な要素が無い", [{ ...button, y: 600 }]],
+      ["押した点に主な要素が無い", [cartButton(600, "真鍮のしおり")]],
     ])(
-      "[正常系]%s は高さで決める。6px の違い（1281px）は置け、150px の違いは知らせる",
-      (_, elements) => {
-        const mainElementAtPoint = hasMainElementAt(elements, point);
+      "[正常系]%s は高さを狭く比べる。6px の違い（1281px）は置け、150px の違いは知らせる。手がかりを集められなくても置ける",
+      (_, shotElements) => {
+        const at = (liveHeight: number, anchor: CapturedElement | null) =>
+          outcome({ shotElements, contentHeight: 1275, liveHeight, anchor });
+        // 押した点にあるのは、主な要素でない文章
+        const text: CapturedElement = {
+          ...captured("木のマグカップ", "文章"),
+          tag: "p",
+          role: null,
+        };
 
-        expect(mainElementAtPoint).toBe(false);
-        expect(
-          pendingPlaceStep(
-            situation({ ...live, shot, liveHeight: 1281, mainElementAtPoint }),
-          ),
-        ).toBe("capture");
-        expect(
-          pendingPlaceStep(
-            situation({ ...live, shot, liveHeight: 1425, mainElementAtPoint }),
-          ),
-        ).toBe("ask-again");
+        expect(at(1281, text)).toBe("place");
+        expect(at(1281, null)).toBe("place");
+        expect(at(1425, text)).toBe("ask-again");
+        // 緩い差（5%）の内でも、要素で確かめられないので通さない
+        expect(at(1305, text)).toBe("ask-again");
       },
     );
   });
@@ -207,6 +299,7 @@ describe("anchorMatchesShot", () => {
     tag: "button",
     role: "button",
     text: "注文する",
+    heading: null,
     box: { x: 100, y: 200, width: 120, height: 40 },
     ...overrides,
   });
