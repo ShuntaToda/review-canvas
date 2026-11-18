@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { baseConfig, commonIgnores } from "./eslint.config.base.mjs";
+import {
+  baseConfig,
+  commonIgnores,
+  SRC_FILES_READ_BY_INFRA,
+} from "./eslint.config.base.mjs";
 import { localRules } from "./eslint-rules/index.mjs";
 import checkFile from "eslint-plugin-check-file";
 import jsxA11y from "eslint-plugin-jsx-a11y";
@@ -736,6 +740,24 @@ export default tseslint.config(
       "no-restricted-properties": [
         "error",
         ...processEnvProperties(APP_PROCESS_ENV_MESSAGE),
+      ],
+    },
+  },
+  // infra（置くスクリプト）からも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように）
+  {
+    files: SRC_FILES_READ_BY_INFRA,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: ".",
+              message:
+                "このファイルは infra（置くスクリプト）からも読むので、何も import できません（型だけの import も）。要る値は引数で受けるか、このファイルの中に書いてください。infra から読まなくなったら、eslint.config.base.mjs の SRC_FILES_READ_BY_INFRA から外します。",
+            },
+          ],
+        },
       ],
     },
   },

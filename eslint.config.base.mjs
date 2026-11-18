@@ -33,6 +33,17 @@ export const commonIgnores = [
  *
  * @param {string} tsconfigRootDir 各パッケージの `import.meta.dirname` を渡す（型情報の解決基点）
  */
+/**
+ * infra（置くスクリプト）からも相対パスで読む、画面（src/）のファイル。
+ * infra の tsconfig・Node（esbuild-register）でそのまま読めるよう、何も import しない（eslint.config.mjs）。
+ * infra から読んでよい src のファイルは、これだけ（infra/eslint.config.mjs）
+ */
+export const SRC_FILES_READ_BY_INFRA = [
+  "src/features/review/bridge/inject.ts",
+  "src/features/review/model/story-shots.ts",
+  "src/features/review/model/story-render.ts",
+];
+
 export function baseConfig(tsconfigRootDir) {
   return tseslint.config(
     js.configs.recommended,
