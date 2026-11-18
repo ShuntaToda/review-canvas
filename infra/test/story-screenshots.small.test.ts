@@ -11,6 +11,7 @@ import {
   serveDirectory,
   stageShots,
   toShot,
+  withThumb,
 } from "../scripts/story-screenshots";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "review-canvas-shots-"));
@@ -211,5 +212,44 @@ describe("stageShots", () => {
         JSON.parse(fs.readFileSync(staged[source]?.manifestFile ?? "", "utf8")),
       ).toStrictEqual({ version: 1, shots: [], playFunctions: {} });
     }
+  });
+
+  test("縮小した画像は、本物の PNG があるときだけ行に残す（無ければ縮小を外して元の画像を置く）", () => {
+    const dir = build("thumbs");
+    const outDir = fs.mkdtempSync(path.join(root, "out-"));
+    const row = (width: number) =>
+      withThumb({
+        storyId: "a--b",
+        width,
+        height: 812,
+        path: `review-canvas-shots/a--b-${String(width)}-0123456789abcdef.png`,
+      });
+    const [withFile, withoutFile] = [row(375), row(768)];
+    expect(withFile.thumb).toBe(
+      "review-canvas-shots/a--b-375-0123456789abcdef-thumb.png",
+    );
+    for (const shot of [withFile, withoutFile]) {
+      fs.writeFileSync(path.join(dir, shot.path), pngHead(shot.width, 812));
+    }
+    fs.writeFileSync(path.join(dir, withFile.thumb ?? ""), pngHead(94, 203));
+    fs.writeFileSync(
+      path.join(dir, "review-canvas-shots.json"),
+      JSON.stringify({
+        version: 1,
+        shots: [withFile, withoutFile],
+        playFunctions: {},
+      }),
+    );
+
+    const staged = stageShots({ dirs: { shop: dir }, outDir });
+
+    const { thumb: _dropped, ...withoutThumb } = withoutFile;
+    expect(
+      JSON.parse(fs.readFileSync(staged["shop"]?.manifestFile ?? "", "utf8")),
+    ).toStrictEqual({
+      version: 1,
+      shots: [withFile, withoutThumb],
+      playFunctions: {},
+    });
   });
 });

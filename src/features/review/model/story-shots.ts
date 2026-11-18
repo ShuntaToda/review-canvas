@@ -6,6 +6,7 @@
  * 置き場（Storybook 1 つ分の置き場 sb/<ブランチのキー>/<id>/ の下）:
  *   review-canvas-shots.json                              … 目録
  *   review-canvas-shots/<ストーリー ID>-<幅>-<中身のハッシュ>.png … 画像（名前に中身のハッシュを持つので、長く持たせる）
+ *   review-canvas-shots/<ストーリー ID>-<幅>-<中身のハッシュ>-thumb.png … 縮小した画像（引いて見るときに使う。無いこともある）
  *
  * このファイルは何も import しない。置くスクリプト（infra/scripts/）からも相対パスで読むため、@/ の別名を使わない
  */
@@ -25,7 +26,12 @@ export type StoryShot = {
   height: number;
   /** 画像の場所（Storybook の置き場からの相対。review-canvas-shots/ の直下） */
   path: string;
+  /** 縮小した画像（THUMB_SCALE 倍）の場所。縮小を作る前の版で撮った・作れなかったときは無い */
+  thumb?: string;
 };
+
+/** 縮小した画像の倍率（引いて見るときに、原寸の画像を全部は読まないため） */
+export const THUMB_SCALE = 0.25;
 
 export type ShotsManifest = {
   version: 1;
@@ -75,12 +81,22 @@ const isPositiveInteger = (value: unknown, max: number): value is number =>
 
 const parseShot = (raw: unknown): StoryShot | null => {
   if (typeof raw !== "object" || raw === null) return null;
-  const { storyId, width, height, path } = raw as Record<string, unknown>;
+  const { storyId, width, height, path, thumb } = raw as Record<
+    string,
+    unknown
+  >;
   if (typeof storyId !== "string" || storyId === "") return null;
   if (!isPositiveInteger(width, MAX_SHOT_WIDTH)) return null;
   if (!isPositiveInteger(height, MAX_SHOT_HEIGHT)) return null;
   if (!isShotPath(path)) return null;
-  return { storyId, width, height, path };
+  // 縮小した画像の場所だけが違っていても、元の画像は使う
+  return {
+    storyId,
+    width,
+    height,
+    path,
+    ...(isShotPath(thumb) ? { thumb } : {}),
+  };
 };
 
 /**
@@ -108,8 +124,21 @@ export const parseShotsManifest = (raw: unknown): ShotsManifest | null => {
   };
 };
 
-/** キャンバスが 1 枚を出すのに要る分（画像の URL と高さ） */
-export type ShotView = { url: string; height: number };
+/** キャンバスが 1 枚を出すのに要る分（画像の URL と高さ。thumbUrl は縮小した画像） */
+export type ShotView = { url: string; height: number; thumbUrl?: string };
+
+/**
+ * いまの倍率で出す画像の URL。画面上の 1px に縮小した画像の 1px 以上が当たる（粗く見えない）倍率なら、縮小した画像にする。
+ * pixelRatio は端末の 1 CSS px あたりの画素数
+ */
+export const shotUrlAt = (
+  shot: ShotView,
+  zoom: number,
+  pixelRatio: number,
+): string =>
+  shot.thumbUrl !== undefined && zoom * pixelRatio <= THUMB_SCALE
+    ? shot.thumbUrl
+    : shot.url;
 
 /** Storybook 1 つ分の画像を、ストーリーと幅から引く口 */
 export type ShotCatalog = {
@@ -132,7 +161,13 @@ export const buildShotCatalog = (
   const byKey = new Map(
     (manifest?.shots ?? []).map((shot) => [
       shotKey(shot.storyId, shot.width),
-      { url: `${storybookUrl}${shot.path}`, height: shot.height },
+      {
+        url: `${storybookUrl}${shot.path}`,
+        height: shot.height,
+        ...(shot.thumb === undefined
+          ? {}
+          : { thumbUrl: `${storybookUrl}${shot.thumb}` }),
+      },
     ]),
   );
   const playFunctions = manifest?.playFunctions ?? {};

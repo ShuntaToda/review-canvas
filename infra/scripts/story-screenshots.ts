@@ -12,6 +12,7 @@ import {
   SHOTS_DIR,
   SHOTS_MANIFEST_FILE,
   shotPath,
+  THUMB_SCALE,
   type ShotsManifest,
   type StoryShot,
 } from "../../src/features/review/model/story-shots";
@@ -209,6 +210,12 @@ export const toShot = (
   };
 };
 
+/** 縮小した画像を足した目録の行（縮小の名前は、元の画像の名前から決める） */
+export const withThumb = (shot: StoryShot): StoryShot => ({
+  ...shot,
+  thumb: shot.path.replace(/\.png$/, "-thumb.png"),
+});
+
 /** プレビューの中で読む、Storybook の描画の様子（story-render.ts の StorybookWindow と同じ所を読む） */
 type PreviewWindow = {
   __STORYBOOK_PREVIEW__?: {
@@ -267,6 +274,32 @@ export const captureStorybook = async ({
         context.newPage(),
       ),
     );
+    // 縮小した画像は、撮った PNG を空のページの canvas で描き直して作る（ストーリーを描き直さない）
+    const thumbPages = await Promise.all(pages.map(() => context.newPage()));
+    const shrink = async (slot: number, png: Buffer): Promise<Buffer> => {
+      const page = thumbPages[slot];
+      if (page === undefined) throw new Error("縮小するページがありません");
+      const dataUrl = await page.evaluate(
+        async ({ source, scale }) => {
+          const image = new Image();
+          image.src = source;
+          await image.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context2d = canvas.getContext("2d");
+          if (context2d === null) throw new Error("canvas が使えません");
+          context2d.imageSmoothingQuality = "high";
+          context2d.drawImage(image, 0, 0, canvas.width, canvas.height);
+          return canvas.toDataURL("image/png");
+        },
+        {
+          source: `data:image/png;base64,${png.toString("base64")}`,
+          scale: THUMB_SCALE,
+        },
+      );
+      return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+    };
     const settled = await runPool(
       plan,
       concurrency,
@@ -311,8 +344,18 @@ export const captureStorybook = async ({
             ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } }
             : {}),
         });
-        const shot = toShot(storyId, width, png);
+        let shot = toShot(storyId, width, png);
         fs.writeFileSync(path.join(dir, shot.path), png);
+        try {
+          const withSmall = withThumb(shot);
+          const small = await shrink(slot, png);
+          if (withSmall.thumb !== undefined && readPngSize(small) !== null) {
+            fs.writeFileSync(path.join(dir, withSmall.thumb), small);
+            shot = withSmall;
+          }
+        } catch {
+          // 縮小が作れなくても、元の画像は置く（キャンバスは引いたときも元の画像を出す）
+        }
         if (state.phase === "errored" || state.phase === "aborted") {
           log(
             `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
@@ -370,10 +413,17 @@ export const stageShots = ({
       const found = readManifest(path.join(dir, SHOTS_MANIFEST_FILE));
       const manifest: ShotsManifest = {
         version: 1,
-        shots: (found?.shots ?? []).filter(
-          (shot) =>
-            isShotPath(shot.path) && isPngFile(path.join(dir, shot.path)),
-        ),
+        shots: (found?.shots ?? [])
+          .filter(
+            (shot) =>
+              isShotPath(shot.path) && isPngFile(path.join(dir, shot.path)),
+          )
+          // 縮小した画像だけが無い・違うときは、縮小を外して元の画像を置く
+          .map(({ thumb, ...shot }) =>
+            thumb !== undefined && isPngFile(path.join(dir, thumb))
+              ? { ...shot, thumb }
+              : shot,
+          ),
         playFunctions: found?.playFunctions ?? {},
       };
       const manifestFile = path.join(outDir, source, SHOTS_MANIFEST_FILE);
