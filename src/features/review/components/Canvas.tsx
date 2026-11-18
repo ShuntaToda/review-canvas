@@ -6,8 +6,10 @@ import {
   visibleWorldRect,
   zoomAt,
 } from "../model/camera";
+import { isCloseUp, wantsIframe } from "../model/frame-mode";
 import {
   FRAME_LABEL_HEIGHT,
+  frameAt,
   FRAME_LABEL_SCREEN_HEIGHT,
   intersects,
   ROW_LABEL_HEIGHT,
@@ -19,11 +21,15 @@ import {
 import { nextLiveFrames, sameFrames } from "../model/live-frames";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
+import type { ShotCatalog } from "../model/story-shots";
 import type { CommentAnchor } from "../model/threads";
 import { Frame, type PinView } from "./Frame";
 import { resetScroll, trackParentFocus } from "./canvas-dom";
 
-/** これより縮小しているときは、新しく iframe を読み込まない（全体を見渡すときに全部を読み込まない） */
+/**
+ * これより縮小しているときは、新しく iframe を読み込まない（全体を見渡すときに全部を読み込まない）。
+ * 発行のときの画像は、倍率によらず並べる
+ */
 const LOAD_MIN_ZOOM = 0.12;
 /**
  * これより縮小しているときは、フレームの見出し（状態の名前）を出さない。
@@ -45,6 +51,10 @@ const KEEP_MARGIN = 0.5;
 
 type CanvasProps = {
   source: StorySource;
+  /** 発行のときに撮った画像（いまのページの分。いまの幅の画像がある画面は、ふだん画像で出す） */
+  shots: ShotCatalog;
+  /** いまの画面の幅（画像を引く） */
+  width: number;
   rows: ReadonlyArray<RowPlacement>;
   camera: Camera;
   viewport: Size;
@@ -86,6 +96,8 @@ type Point = { x: number; y: number };
  */
 export const Canvas = ({
   source,
+  shots,
+  width,
   rows,
   camera,
   viewport,
@@ -111,6 +123,19 @@ export const Canvas = ({
     onBackground: boolean;
   } | null>(null);
   const pinchRef = useRef<{ distance: number; center: Point } | null>(null);
+
+  // 指している画面（コメント・操作の道具で上に乗った・クリックした）。ページを切り替えたら持ち越さない
+  const [pointed, setPointed] = useState<{
+    source: StorySource;
+    storyId: string;
+  } | null>(null);
+  const pointedStoryId = pointed?.source === source ? pointed.storyId : null;
+  const activate = (storyId: string) =>
+    setPointed((current) =>
+      current?.source === source && current.storyId === storyId
+        ? current
+        : { source, storyId },
+    );
 
   // ストーリーにフォーカスを取られたとき、元いた所へ返せるよう覚えておく
   useEffect(() => trackParentFocus(), []);
@@ -245,9 +270,22 @@ export const Canvas = ({
     }
     const pan = panRef.current;
     panRef.current = null;
-    // 動かさずに何も無いところを押した → 開いているスレッドを閉じる
-    if (pan !== null && !pan.moved && pan.onBackground) {
+    if (pan === null || pan.moved) return;
+    // 動かさずに何も無いところを押した → 開いているスレッドを閉じ、指していた画面を外す
+    if (pan.onBackground) {
+      setPointed(null);
       onBackgroundClick();
+      return;
+    }
+    // 動かさずに画面を押した → その画面を指す（画像の画面を iframe に切り替える）
+    const point = localPoint(event);
+    const world = {
+      x: (point.x - camera.x) / camera.zoom,
+      y: (point.y - camera.y) / camera.zoom,
+    };
+    const hit = frameAt(rows, world);
+    if (hit !== undefined && intersects(hit, { ...world, w: 0, h: 0 })) {
+      setPointed({ source, storyId: hit.story.id });
     }
   };
 
@@ -256,8 +294,41 @@ export const Canvas = ({
   const canLoad = camera.zoom >= LOAD_MIN_ZOOM;
   // 付けておく iframe（最近見えていた順。見えていない画面は上限まで）。描画の中で決め、変わったときだけ覚え直す
   const placements = rows.flatMap((row) => row.frames);
+  // 開いているスレッド・書きかけのコメントのある画面
+  const engaged = new Set(draft === null ? [] : [draft.storyId]);
+  if (activeThreadId !== null) {
+    for (const [storyId, pins] of pinsByStory) {
+      if (pins.some((pin) => pin.id === activeThreadId)) engaged.add(storyId);
+    }
+  }
+  // 表示の真ん中にある画面（十分に寄っていれば、画像から iframe に切り替える）
+  const onScreen = visibleWorldRect(camera, viewport, 0);
+  const centerFrame =
+    viewport.width === 0
+      ? undefined
+      : frameAt(rows, {
+          x: onScreen.x + onScreen.w / 2,
+          y: onScreen.y + onScreen.h / 2,
+        });
+  const centeredCloseUpId =
+    centerFrame !== undefined &&
+    intersects(centerFrame, onScreen) &&
+    isCloseUp({
+      frameWidth: centerFrame.w,
+      zoom: camera.zoom,
+      viewportWidth: viewport.width,
+    })
+      ? centerFrame.story.id
+      : null;
   const isWanted = (placement: (typeof placements)[number]) =>
-    placement.story.id === focusStoryId || intersects(placement, visible);
+    wantsIframe({
+      hasShot: shots.find(placement.story.id, width) !== undefined,
+      focused: placement.story.id === focusStoryId,
+      engaged: engaged.has(placement.story.id),
+      pointed: placement.story.id === pointedStoryId,
+      centeredCloseUp: placement.story.id === centeredCloseUpId,
+      inLoadRange: intersects(placement, visible),
+    });
   const [previousLive, setPreviousLive] = useState<string[]>([]);
   const live = canLoad
     ? nextLiveFrames({
@@ -373,6 +444,9 @@ export const Canvas = ({
                   // 見えていない画面は、付けておく数の上限を超えたら古い順に外す
                   keepLoaded={liveSet.has(placement.story.id)}
                   showLabel={showLabel}
+                  shot={shots.find(placement.story.id, width) ?? null}
+                  playHint={shots.hasPlayFunction(placement.story.id)}
+                  onActivate={activate}
                   pins={pinsByStory.get(placement.story.id) ?? []}
                   activeThreadId={activeThreadId}
                   draftPin={

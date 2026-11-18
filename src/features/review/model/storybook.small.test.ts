@@ -2,6 +2,8 @@ import {
   isComponentStory,
   parseStorybookIndex,
   storybookIndexPath,
+  storybookShotsManifestPath,
+  storybookSourceBase,
   storybookUrl,
   storyIframeUrl,
 } from "./storybook";
@@ -84,5 +86,9 @@ describe("Storybook の URL", () => {
     expect(storyIframeUrl("/sb/main/", "shop", "a")).toBe(
       "/sb/main/shop/iframe.html?id=a&viewMode=story",
     );
+    expect(storybookShotsManifestPath("/sb/main/", "shop")).toBe(
+      "/sb/main/shop/review-canvas-shots.json",
+    );
+    expect(storybookSourceBase("/sb/main/", "shop")).toBe("/sb/main/shop/");
   });
 });

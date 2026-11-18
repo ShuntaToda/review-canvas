@@ -1,4 +1,5 @@
 import type { StorySource } from "./sources";
+import { SHOTS_MANIFEST_FILE } from "./story-shots";
 
 /** キャンバスに並べる1つの状態（Storybook のストーリー） */
 export type Story = {
@@ -74,9 +75,21 @@ export const isComponentStory = (
  */
 export const DEFAULT_STORYBOOK_BASE = "/sb/";
 
+/** Storybook 1 つ分の置き場（末尾が /） */
+export const storybookSourceBase = (
+  base: string,
+  source: StorySource,
+): string => `${base}${source}/`;
+
 /** Storybook の index.json の場所 */
 export const storybookIndexPath = (base: string, source: StorySource): string =>
-  `${base}${source}/index.json`;
+  `${storybookSourceBase(base, source)}index.json`;
+
+/** 発行のときに撮ったスクリーンショットの目録の場所 */
+export const storybookShotsManifestPath = (
+  base: string,
+  source: StorySource,
+): string => `${storybookSourceBase(base, source)}${SHOTS_MANIFEST_FILE}`;
 
 /** Storybook の画面でストーリーを開く URL（別のタブで開く用） */
 export const storybookUrl = (

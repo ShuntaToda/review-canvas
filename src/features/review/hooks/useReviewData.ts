@@ -9,9 +9,17 @@ import {
 import { type CommentSnapshot, syncComments } from "../model/comment-sync";
 import type { StorySource } from "../model/sources";
 import {
+  buildShotCatalog,
+  EMPTY_SHOT_CATALOG,
+  parseShotsManifest,
+  type ShotCatalog,
+} from "../model/story-shots";
+import {
   parseStorybookIndex,
   type Story,
   storybookIndexPath,
+  storybookShotsManifestPath,
+  storybookSourceBase,
 } from "../model/storybook";
 import { messages } from "@/constants/messages";
 import { apiClient } from "@/support/api/api-client";
@@ -26,6 +34,7 @@ export const metaKey = "GET /api/meta";
 export const branchesKey = "GET /api/branches";
 export const commentsKey = "GET /api/comments";
 export const storybookIndexKey = "GET {base}{source}/index.json";
+export const storybookShotsKey = "GET {base}{source}/review-canvas-shots.json";
 
 /**
  * ウィンドウに戻るたびには読み直さないもの（置いてあるブランチ・ブランチの一覧・ストーリーの一覧）。
@@ -80,6 +89,46 @@ export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
           result.status === "fulfilled"
             ? { kind: "ok", stories: result.value }
             : { kind: "error", message: String(result.reason) },
+        ]),
+      );
+    },
+    STATIC_OPTIONS,
+  );
+
+/**
+ * 発行のときに撮ったスクリーンショットの目録を読む。無い（撮る前の版で置いた・撮れなかった）・読めない・形が違うときは、
+ * 画像なしとして扱う（キャンバスは iframe で出す。失敗にしない）
+ */
+const fetchShots = async (
+  base: string,
+  source: StorySource,
+): Promise<ShotCatalog> => {
+  try {
+    const response = await fetchWithoutCredentials(
+      storybookShotsManifestPath(base, source),
+    );
+    if (!response.ok) return EMPTY_SHOT_CATALOG;
+    return buildShotCatalog(
+      parseShotsManifest(await response.json()),
+      storybookSourceBase(base, source),
+    );
+  } catch {
+    return EMPTY_SHOT_CATALOG;
+  }
+};
+
+/** 置いてあるページ（sources）のスクリーンショットの目録を、まとめて読む（base は選んでいるブランチの置き場） */
+export const useShots = (base: string, sources: ReadonlyArray<StorySource>) =>
+  useSWR(
+    [storybookShotsKey, base, sources.join(",")],
+    async (): Promise<Record<StorySource, ShotCatalog>> => {
+      const catalogs = await Promise.all(
+        sources.map((source) => fetchShots(base, source)),
+      );
+      return Object.fromEntries(
+        sources.map((source, index): [StorySource, ShotCatalog] => [
+          source,
+          catalogs[index] ?? EMPTY_SHOT_CATALOG,
         ]),
       );
     },

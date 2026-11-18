@@ -1,4 +1,4 @@
-import { LoadQueue } from "./load-queue";
+import { frameLoadQueue, LoadQueue } from "./load-queue";
 
 describe("LoadQueue", () => {
   test("[正常系]上限まではすぐ始め、超えた分は枠が返るのを待って順に始める", () => {
@@ -105,5 +105,39 @@ describe("LoadQueue の断り・一時停止", () => {
     queue.setPaused(false);
     expect(started).toStrictEqual(["no-play", "play"]);
     expect(queue.paused).toBe(false);
+  });
+
+  test("[正常系]play 関数を持つ（かもしれない）ストーリーは決めた数までにし、持たないと分かっている分は残りの枠で同時に始める", () => {
+    const queue = new LoadQueue(3, { maxPlaying: 1 });
+    const started: string[] = [];
+    const playA = queue.request(() => started.push("play-a"));
+    queue.request(() => started.push("play-b"));
+    queue.request(() => started.push("plain-a"), { mayPlay: false });
+    queue.request(() => started.push("plain-b"), { mayPlay: false });
+    queue.request(() => started.push("plain-c"), { mayPlay: false });
+
+    // play 関数は 1 つだけ。残りの 2 枠は、持たないと分かっている分が先に使う
+    expect(started).toStrictEqual(["play-a", "plain-a", "plain-b"]);
+    expect(queue.running).toBe(3);
+
+    playA.release();
+    expect(started).toStrictEqual(["play-a", "plain-a", "plain-b", "play-b"]);
+  });
+
+  test("[正常系]共有の順番待ちは同時に 3 つまで読み込み、play 関数は 1 つずつ動かす", () => {
+    frameLoadQueue.reset();
+    const started: string[] = [];
+    const tickets = [
+      frameLoadQueue.request(() => started.push("play-a")),
+      frameLoadQueue.request(() => started.push("play-b")),
+      ...["a", "b", "c"].map((name) =>
+        frameLoadQueue.request(() => started.push(name), { mayPlay: false }),
+      ),
+    ];
+
+    expect(started).toStrictEqual(["play-a", "a", "b"]);
+
+    tickets.forEach((ticket) => ticket.release());
+    frameLoadQueue.reset();
   });
 });

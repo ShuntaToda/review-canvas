@@ -23,14 +23,20 @@ type Entry = {
 export class LoadQueue {
   readonly #max: number;
 
+  readonly #maxPlaying: number;
+
   #running = new Set<Entry>();
 
   #waiting: Entry[] = [];
 
   #paused = false;
 
-  constructor(max: number) {
+  /**
+   * max は同時に読み込む数。maxPlaying は、そのうち play 関数を持つ（かもしれない）ストーリーの数（省くと max と同じ）
+   */
+  constructor(max: number, { maxPlaying = max }: { maxPlaying?: number } = {}) {
     this.#max = max;
+    this.#maxPlaying = maxPlaying;
   }
 
   /**
@@ -73,8 +79,10 @@ export class LoadQueue {
 
   #fill() {
     while (this.#running.size < this.#max) {
+      const playing = [...this.#running].filter((e) => e.mayPlay).length;
+      const canPlay = !this.#paused && playing < this.#maxPlaying;
       const index = this.#waiting.findIndex(
-        (entry) => !this.#paused || !entry.mayPlay,
+        (entry) => canPlay || !entry.mayPlay,
       );
       if (index === -1) return;
       const [entry] = this.#waiting.splice(index, 1);
@@ -114,9 +122,11 @@ export class LoadQueue {
 }
 
 /**
- * キャンバス全体で共有する順番待ち（1つずつ）。
- * 同じページの中ではフォーカスが1つしかなく、play 関数を同時に動かすと互いのフォーカスを取り合って
- * Storybook で直に開いたときと違う状態になるため、play 関数を持つストーリーは描画が終わるまで枠を握る。
- * play 関数の無いストーリーは、持たないと分かった時点で枠を返す（Frame）
+ * キャンバス全体で共有する順番待ち（同時に 3 つまで）。
+ * キャンバスはふだん発行のときの画像を並べ、iframe は触る画面だけなので、待たせすぎないよう同時に読み込む。
+ * ただし play 関数を持つ（かもしれない）ストーリーは 1 つずつにする。同じページの中ではフォーカスが1つしかなく、
+ * play 関数を同時に動かすと互いのフォーカスを取り合って Storybook で直に開いたときと違う状態になるため、描画が終わるまで枠を握る。
+ * play 関数を持たないと分かっているストーリー（発行のときの目録・前に読み込んだときに分かる）は、残りの枠で同時に読み込む。
+ * 読み込んでから持たないと分かったストーリーは、その時点で枠を返す（Frame）
  */
-export const frameLoadQueue = new LoadQueue(1);
+export const frameLoadQueue = new LoadQueue(3, { maxPlaying: 1 });

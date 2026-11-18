@@ -118,7 +118,7 @@ export const buildExportData = ({
       status: root.status,
       story: {
         source: root.source,
-        label: sources.get(root.source).label,
+        label: sources.label(root.source),
         storyId: root.storyId,
         title: story?.title ?? root.anchor?.story.title ?? null,
         name: story?.name ?? root.anchor?.story.name ?? null,

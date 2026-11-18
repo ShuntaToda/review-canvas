@@ -234,5 +234,5 @@ export const CommentSidebar = ({
 /** ページの名前（設定ファイルの label） */
 const PageLabel = ({ source }: { source: StorySource }) => {
   const sources = useSources();
-  return <>{sources.get(source).label}</>;
+  return <>{sources.label(source)}</>;
 };

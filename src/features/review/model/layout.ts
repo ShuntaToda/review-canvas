@@ -1,3 +1,4 @@
+import { MAX_SHOT_HEIGHT } from "./story-shots";
 import { isComponentStory, type Story } from "./storybook";
 
 /** 行の見出し（画面の名前）の高さ */
@@ -21,8 +22,8 @@ export const SIDE_TITLE_SCREEN_GAP = 12;
 
 /** 1つの画面の状態を折り返して並べるときの、折り返した行どうしの縦の間（フレームの見出しが入る分を含む） */
 export const LINE_GAP_Y = FRAME_LABEL_HEIGHT + 48;
-/** 測った高さの上限（無限に伸びる画面でキャンバスが壊れないように） */
-export const MAX_FRAME_HEIGHT = 6000;
+/** 測った高さの上限（無限に伸びる画面でキャンバスが壊れないように。発行のときの画像の上限と同じ） */
+export const MAX_FRAME_HEIGHT = MAX_SHOT_HEIGHT;
 /** 1行に並べる状態の数の選択肢と既定（状態の多い画面で横に長くなりすぎ、「全体を表示」で小さくなりすぎないように折り返す） */
 export const FRAMES_PER_ROW_OPTIONS: ReadonlyArray<number> = [4, 6, 8, 12, 16];
 export const DEFAULT_FRAMES_PER_ROW = 8;

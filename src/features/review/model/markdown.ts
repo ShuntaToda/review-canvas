@@ -71,7 +71,7 @@ export const buildMarkdown = ({
   for (const source of order) {
     const inSource = threads.filter((t) => t.root.source === source);
     if (inSource.length === 0) continue;
-    lines.push(`### ${inline(sources.get(source).label)}`, "");
+    lines.push(`### ${inline(sources.label(source))}`, "");
 
     const byTitle = new Map<string, Thread[]>();
     for (const thread of inSource) {
@@ -272,7 +272,7 @@ const aiThreadLines = ({
     comment: root.id,
   })}`;
   return [
-    `## #${number} ${STATUS_LABELS[root.status]}: ${inline(sources.get(root.source).label)} / ${inline(title)} / ${inline(name)}`,
+    `## #${number} ${STATUS_LABELS[root.status]}: ${inline(sources.label(root.source))} / ${inline(title)} / ${inline(name)}`,
     "",
     `- ストーリー: ${code(root.storyId)}${importPath === null ? "" : `（ファイル ${code(importPath)}）`}`,
     ...(storybookBase === null

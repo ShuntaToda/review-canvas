@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { isReviewerNotAllowed, isUnauthorized } from "../api/review-api";
-import { useComments, useReviewMeta, useStories } from "../hooks/useReviewData";
+import {
+  useComments,
+  useReviewMeta,
+  useShots,
+  useStories,
+} from "../hooks/useReviewData";
 import { SourcesContext } from "../hooks/useSources";
 import { StorybookBaseContext } from "../hooks/useStorybookBase";
 import {
@@ -9,6 +14,7 @@ import {
   mapSources,
   type StorySource,
 } from "../model/sources";
+import { EMPTY_SHOT_CATALOG } from "../model/story-shots";
 import { DEFAULT_STORYBOOK_BASE } from "../model/storybook";
 import {
   buildSearch,
@@ -64,6 +70,8 @@ export const ReviewPage = ({
   }
   const availableIds = catalog.ids.filter(available);
   const stories = useStories(base, availableIds);
+  // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
+  const shots = useShots(base, availableIds);
   const comments = useComments(branch);
 
   if (meta.error !== undefined) {
@@ -138,6 +146,8 @@ export const ReviewPage = ({
     meta.data === undefined ||
     branch === undefined ||
     !settled(stories, true) ||
+    // 画像の有無が分かってから並べる（先に iframe で読み込み始めてから、画像に切り替えない）
+    !settled(shots, true) ||
     !settled(comments, true)
   ) {
     return <FullScreenMessage>読み込み中…</FullScreenMessage>;
@@ -165,6 +175,10 @@ export const ReviewPage = ({
               ? undefined
               : String(stories.error);
           })}
+          shots={mapSources(
+            catalog.ids,
+            (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+          )}
           initialUrl={urlState}
           initialComments={comments.data?.comments ?? []}
           me={user}

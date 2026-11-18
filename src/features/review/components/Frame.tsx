@@ -30,6 +30,7 @@ import {
   type RenderState,
   STORY_SETTLE_TIMEOUT_MS,
 } from "../model/story-render";
+import type { ShotView } from "../model/story-shots";
 import { storybookUrl, storyIframeUrl } from "../model/storybook";
 import type { CommentAnchor, ThreadStatus } from "../model/threads";
 import { Pin } from "./Pin";
@@ -64,12 +65,20 @@ type FrameProps = {
   placement: FramePlacement;
   zoom: number;
   tool: Tool;
-  /** 読み込み始めてよい（見えていて、倍率が小さすぎない） */
+  /**
+   * iframe を読み込み始めてよい（倍率が小さすぎず、画像のある画面は「触る画面」、無い画面は見えている。model/frame-mode.ts）
+   */
   shouldLoad: boolean;
   /** 読み込んだ iframe を残しておく（見えている範囲の近く） */
   keepLoaded: boolean;
   /** 見出しを出すか（縮小しすぎたら出さない） */
   showLabel: boolean;
+  /** 発行のときに撮った画像（いまの幅のもの。無ければ null で、いままでどおり iframe だけで出す） */
+  shot: ShotView | null;
+  /** 発行のときに分かった、play 関数を持つか（分からなければ undefined） */
+  playHint: boolean | undefined;
+  /** この画面を指した（コメント・操作の道具で上に乗った、コメントを置こうとした）。画像の画面を iframe に切り替えるきっかけ */
+  onActivate: (storyId: string) => void;
   pins: ReadonlyArray<PinView>;
   activeThreadId: string | null;
   /** 書きかけのピン（box は指している要素の矩形。取れなければ null） */
@@ -108,9 +117,16 @@ const MEASURE_DELAYS_MS = [0, 300, 1000, 2500];
 const LOCATE_DELAYS_MS = [300, 1000, 2500, 5000];
 /** 画面の中身の大きさが変わってから探し直すまでの待ち(ms) */
 const LOCATE_DEBOUNCE_MS = 150;
+/**
+ * 画像の画面にコメントを置こうとしてから、iframe に切り替わって要素の手がかりを集められるまで待つ上限(ms)。
+ * 超えたら、手がかりなしで置く（待たせ続けない）
+ */
+const PLACE_WAIT_MS = 8_000;
 
 /**
- * キャンバスの1枚（Storybook のストーリー1つ）。iframe は見えている範囲で、順番待ちを通して読み込む。
+ * キャンバスの1枚（Storybook のストーリー1つ）。発行のときに撮った画像があればふだんは画像で出し、
+ * 触る画面だけ iframe に切り替える（描画・play 関数が終わるまでは画像の下で読み込み、終わったら入れ替える）。
+ * 画像が無ければ、見えている範囲で iframe を読み込む。iframe はどちらも順番待ちを通す。
  * Storybook はキャンバスと別のオリジンで配るため、中の様子（高さ・描画の段階・フォーカス・キー入力・要素）は
  * iframe.html に差し込んだ橋渡しと postMessage でやり取りする（bridge/）
  */
@@ -122,6 +138,8 @@ export const Frame = ({
   shouldLoad,
   keepLoaded,
   showLabel,
+  shot,
+  playHint,
   pins,
   activeThreadId,
   draftPin,
@@ -129,6 +147,7 @@ export const Frame = ({
   onPlace,
   onLocate,
   onOpenThread,
+  onActivate,
 }: FrameProps) => {
   const storybookBase = useStorybookBase();
   const sources = useSources();
@@ -156,6 +175,16 @@ export const Frame = ({
   // 中の橋渡しとつながった・橋渡しが無かった（橋渡しを差し込まずに置いた Storybook）
   const [bridgeReady, setBridgeReady] = useState(false);
   const [bridgeMissing, setBridgeMissing] = useState(false);
+  // 描画・play 関数が終わった iframe の回（画像の上に出してよい）。外して付け直したら、また画像に戻す
+  const [revealedGeneration, setRevealedGeneration] = useState<number | null>(
+    null,
+  );
+  const revealed = mounted && !retiring && revealedGeneration === generation;
+  // 画像の画面に置こうとしているコメントの位置（iframe に切り替わるのを待っている）
+  const [pendingPlace, setPendingPlace] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [previousMounted, setPreviousMounted] = useState(mounted);
   if (previousMounted !== mounted) {
     setPreviousMounted(mounted);
@@ -242,7 +271,7 @@ export const Frame = ({
         setGranted(true);
         return true;
       },
-      { mayPlay: knownPlayFunctions.get(story.id) !== false },
+      { mayPlay: (knownPlayFunctions.get(story.id) ?? playHint) !== false },
     );
     ticketRef.current = ticket;
     return () => {
@@ -251,7 +280,7 @@ export const Frame = ({
       ticket.release();
       if (ticketRef.current === ticket) ticketRef.current = null;
     };
-  }, [shouldLoad, granted, story.id]);
+  }, [shouldLoad, granted, story.id, playHint]);
 
   // 読み込みが終わらないまま外した・時間切れのときも、同時に読み込む枠を返す
   useEffect(() => {
@@ -424,19 +453,7 @@ export const Frame = ({
    * ピンを置く。クリックした位置の要素の手がかりを橋渡しに集めてもらってから渡す
    * （読み込んだ画面だけ。キーボードで置いた・つながっていない・返事が無いときは手がかりなし）
    */
-  const place = (point: { x: number; y: number }, byKeyboard: boolean) => {
-    const bridge = bridgeRef.current;
-    if (
-      byKeyboard ||
-      !mounted ||
-      !loaded ||
-      retiring ||
-      bridge === null ||
-      !bridge.ready
-    ) {
-      onPlace(story.id, point, null);
-      return;
-    }
+  const capturePlace = (bridge: FrameBridge, point: { x: number; y: number }) =>
     void bridge
       .capture(point, {
         id: story.id,
@@ -445,7 +462,66 @@ export const Frame = ({
         importPath: story.importPath,
       })
       .then((anchor) => onPlace(story.id, point, anchor));
+
+  const place = (point: { x: number; y: number }, byKeyboard: boolean) => {
+    const bridge = bridgeRef.current;
+    const ready =
+      mounted && loaded && !retiring && bridge !== null && bridge.ready;
+    if (!byKeyboard && !ready && shot !== null) {
+      // 画像の画面では、iframe に切り替えてから置く（クリックした要素の手がかりを集めるため）
+      onActivate(story.id);
+      setPendingPlace(point);
+      return;
+    }
+    if (byKeyboard || !ready) {
+      onPlace(story.id, point, null);
+      return;
+    }
+    capturePlace(bridge, point);
   };
+
+  // 待っていたコメントを置く。iframe に切り替わって描画が終わったら手がかりを集め、
+  // 切り替わらない（倍率が小さすぎる）・橋渡しが無い・待ちきったときは、手がかりなしで置く
+  const onPlaceRef = useRef(onPlace);
+  const capturePlaceRef = useRef(capturePlace);
+  useLayoutEffect(() => {
+    onPlaceRef.current = onPlace;
+    capturePlaceRef.current = capturePlace;
+  });
+  useEffect(() => {
+    if (pendingPlace === null) return;
+    const bridge = bridgeRef.current;
+    const settle = (run: () => void) => {
+      const timer = window.setTimeout(() => {
+        setPendingPlace(null);
+        run();
+      }, 0);
+      return () => window.clearTimeout(timer);
+    };
+    const withoutAnchor = () =>
+      onPlaceRef.current(story.id, pendingPlace, null);
+    if (revealed && bridgeReady && bridge !== null) {
+      return settle(() => capturePlaceRef.current(bridge, pendingPlace));
+    }
+    if ((revealed && bridgeMissing) || (!shouldLoad && !granted)) {
+      return settle(withoutAnchor);
+    }
+    const timer = window.setTimeout(() => {
+      setPendingPlace(null);
+      withoutAnchor();
+    }, PLACE_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    pendingPlace,
+    revealed,
+    bridgeReady,
+    bridgeMissing,
+    shouldLoad,
+    granted,
+    story.id,
+  ]);
+  // 道具を変えたら、待っていたコメントは置かない
+  if (pendingPlace !== null && tool !== "comment") setPendingPlace(null);
 
   const highlightPin = pins.find(
     (pin) =>
@@ -478,6 +554,7 @@ export const Frame = ({
     // 返してもらうのは、描画が終わったとき・道具を切り替えたとき・iframe を外すとき。
     // 親の入力欄（返信・絞り込みなど）で書いている途中に取られたときだけは、play 関数の途中でもすぐ取り返す（打った文字を失わないため）
     const loadedAt = Date.now();
+    const loadedGeneration = generation;
     const bridgeKey = `${storybookBase}${source}`;
     let current: FrameBridge | null = null;
     const busy = () =>
@@ -485,6 +562,8 @@ export const Frame = ({
       isRenderBusy(current?.render ?? null);
     const settle = () => {
       if (busy()) return;
+      // 描画・play 関数が終わったので、画像の上に出す
+      setRevealedGeneration(loadedGeneration);
       // play 関数どうしは同じページの1つのフォーカスを取り合うため、描画が終わるまで枠を握る
       releaseSlot();
       if (toolRef.current === "interact") return;
@@ -534,6 +613,7 @@ export const Frame = ({
           // 橋渡しの無い Storybook。中の様子が分からないので、枠を返して次へ進める
           storybooksWithoutBridge.add(bridgeKey);
           setBridgeMissing(true);
+          setRevealedGeneration(loadedGeneration);
           releaseSlot();
         },
         onRender: (render) => {
@@ -584,6 +664,7 @@ export const Frame = ({
     // 同じ置き場で橋渡しが無いと分かっていれば、返事を待たずに枠を返す（あとから返事が来れば、つながったことにする）
     if (storybooksWithoutBridge.has(bridgeKey)) {
       setBridgeMissing(true);
+      setRevealedGeneration(loadedGeneration);
       releaseSlot();
     }
     // 描画の終わりの知らせが来ないストーリーでも、待ちきったら返してもらう
@@ -618,6 +699,14 @@ export const Frame = ({
               再読み込み
             </button>
           )}
+          {shot !== null && !revealed && (
+            <span
+              className="shrink-0 rounded bg-panel-sub px-1 text-muted"
+              title="発行のときに撮った画像です。クリックする・寄る・コメントや操作の道具で指すと、Storybook の画面そのものに切り替わります"
+            >
+              {mounted ? "読み込み中…" : "画像"}
+            </span>
+          )}
           {bridgeMissing && (
             <span
               className="shrink-0 rounded px-1 text-warn"
@@ -642,22 +731,45 @@ export const Frame = ({
         </div>
       )}
       {/* ピンは画面の端からはみ出せるよう、切り取る枠（iframe）の外に重ねる */}
-      <div className="relative" style={{ height: h }}>
+      <div
+        className="relative"
+        style={{ height: h }}
+        data-story-frame={story.id}
+        data-frame-mode={shot === null ? "iframe" : revealed ? "live" : "image"}
+        // コメント・操作の道具で上に乗った画面は、触る前に iframe へ切り替え始める
+        onPointerEnter={() => {
+          if (tool !== "move") onActivate(story.id);
+        }}
+      >
         {/* overflow-hidden だとフォーカスや Tab で中がスクロールしてずれるため、スクロールしない clip で切る */}
         <div
           className="absolute inset-0 overflow-clip bg-panel shadow-sm ring-1 ring-line"
           onScroll={resetScroll}
         >
-          {(!mounted || retiring) && (
+          {shot === null && (!mounted || retiring) && (
             <div className="flex size-full items-start justify-center bg-panel-sub pt-24 text-2xl text-muted">
               {story.name}
             </div>
+          )}
+          {shot !== null && !revealed && (
+            <img
+              src={shot.url}
+              alt={`${story.title} / ${story.name}`}
+              width={w}
+              height={shot.height}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              className="pointer-events-none absolute top-0 left-0 block max-w-none select-none"
+              style={{ width: w, height: shot.height }}
+            />
           )}
           {(mounted || retiring) && (
             <StoryIframe
               key={generation}
               iframeRef={iframeRef}
               hidden={retiring}
+              covered={shot !== null && !revealed}
               title={`${story.title} / ${story.name}`}
               src={storyIframeUrl(storybookBase, source, story.id)}
               interactive={tool === "interact"}
@@ -731,6 +843,17 @@ export const Frame = ({
             label="書きかけのコメント"
           />
         )}
+        {draftPin === null && pendingPlace !== null && (
+          <Pin
+            number={null}
+            x={pendingPlace.x}
+            y={pendingPlace.y}
+            zoom={zoom}
+            status="open"
+            active
+            label="画面を読み込んでいます（読み込んだらコメントを書けます）"
+          />
+        )}
       </div>
     </div>
   );
@@ -753,6 +876,8 @@ type StoryIframeProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   /** 外す手順の途中（見せずに残す） */
   hidden: boolean;
+  /** 発行のときの画像の下で読み込んでいる途中（描画・play 関数が終わるまで見せない。中は動かす） */
+  covered?: boolean;
   title: string;
   src: string;
   interactive: boolean;
@@ -769,6 +894,7 @@ type StoryIframeProps = {
 export const StoryIframe = ({
   iframeRef,
   hidden,
+  covered = false,
   title,
   src,
   interactive,
@@ -789,7 +915,11 @@ export const StoryIframe = ({
       title={title}
       src={src}
       className={
-        hidden ? "invisible absolute inset-0 border-0" : "block border-0"
+        hidden
+          ? "invisible absolute inset-0 border-0"
+          : covered
+            ? "absolute top-0 left-0 border-0 opacity-0"
+            : "block border-0"
       }
       // ストーリーのコードに、親のタブ（キャンバス）を別のページへ移させない（allow-top-navigation を付けない）。
       // allow-same-origin は Storybook の配信のオリジンのまま動かすため（サービスワーカー・保存領域・橋渡しの postMessage の宛先）
@@ -799,7 +929,8 @@ export const StoryIframe = ({
       style={{
         width,
         height,
-        pointerEvents: interactive ? "auto" : "none",
+        // 画像の下で読み込んでいるあいだは、見えていない画面に触らせない
+        pointerEvents: interactive && !covered ? "auto" : "none",
       }}
       onLoad={onLoad}
     />

@@ -46,6 +46,13 @@ import {
   zoomAt,
 } from "../model/camera";
 import { type CameraState, resolveCamera } from "../model/camera-state";
+import {
+  addCustomWidth,
+  type CustomWidths,
+  parseCustomWidths,
+  removeCustomWidth,
+  widthOptions,
+} from "../model/custom-widths";
 import { buildExportJson, exportFileName } from "../model/export-json";
 import {
   boundsOfRows,
@@ -71,6 +78,7 @@ import {
   type SourceCatalog,
   type StorySource,
 } from "../model/sources";
+import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
 import {
   buildThreads,
@@ -107,16 +115,17 @@ const parsePerRow = (raw: string): number | undefined => {
 const defaultWidthsOf = (sources: SourceCatalog): Record<StorySource, number> =>
   mapSources(sources.ids, (id) => sources.get(id).defaultWidth);
 
-/** フレームの幅（ページごと）をブラウザに覚える形。知らない幅は既定に戻す */
+/** フレームの幅（ページごと）をブラウザに覚える形。知らない幅（設定にも、自分で足した幅にも無い）は既定に戻す */
 const parseWidths =
-  (sources: SourceCatalog) =>
+  (sources: SourceCatalog, custom: CustomWidths) =>
   (raw: string): Record<StorySource, number> | undefined => {
     try {
       const parsed = JSON.parse(raw) as Partial<Record<StorySource, unknown>>;
       return mapSources(sources.ids, (id) => {
         const value = parsed[id];
         const config = sources.get(id);
-        return typeof value === "number" && config.widths.includes(value)
+        return typeof value === "number" &&
+          (config.widths.includes(value) || (custom[id] ?? []).includes(value))
           ? value
           : config.defaultWidth;
       });
@@ -143,6 +152,8 @@ type ReviewWorkspaceProps = {
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
+  /** ページごとの、発行のときに撮った画像（無いページは空） */
+  shots: Readonly<Record<StorySource, ShotCatalog>>;
   initialUrl: UrlState;
   initialComments: Comment[];
   /** ログインしている人（書いた人として残り、自分のコメントだけを編集・削除できる） */
@@ -161,6 +172,7 @@ export const ReviewWorkspace = ({
   onBranchChange,
   stories,
   storyErrors,
+  shots,
   initialUrl,
   initialComments,
   me,
@@ -227,11 +239,20 @@ export const ReviewWorkspace = ({
   const [tool, setTool] = useState<Tool>("move");
   const [query, setQuery] = useState("");
   const [showComponents, setShowComponents] = useState(initial.showComponents);
+  // 見る人が自分で足した幅（ページごと。設定の幅に続けて選べる）
+  const [customWidths, setCustomWidths] = useLocalSetting<CustomWidths>(
+    "review-canvas.customWidths",
+    {},
+    {
+      parse: parseCustomWidths,
+      serialize: (value) => JSON.stringify(value),
+    },
+  );
   const [widths, setWidths] = useLocalSetting(
     "review-canvas.widths",
     defaultWidthsOf(sources),
     {
-      parse: parseWidths(sources),
+      parse: parseWidths(sources, customWidths),
       serialize: (value) => JSON.stringify(value),
     },
   );
@@ -315,6 +336,12 @@ export const ReviewWorkspace = ({
 
   // いまのページの並べ方と見え方
   const width = widthOf(page);
+  const shotsOf = (source: StorySource): ShotCatalog =>
+    shots[source] ?? EMPTY_SHOT_CATALOG;
+  const pageWidthOptions = widthOptions(
+    sources.get(page).widths,
+    customWidths[page],
+  );
   const rowsFor = (
     source: StorySource,
     filters: { showComponents: boolean; query: string },
@@ -323,9 +350,12 @@ export const ReviewWorkspace = ({
       ...filters,
       excludeTitlePrefixes: sources.excludeTitlePrefixes,
     });
+    // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
-      const height = heights[`${source}:${widthOf(source)}:${story.id}`];
+      const height =
+        heights[`${source}:${widthOf(source)}:${story.id}`] ??
+        shotsOf(source).find(story.id, widthOf(source))?.height;
       if (height !== undefined) measured[story.id] = height;
     }
     return layoutRows(visible, {
@@ -811,7 +841,20 @@ export const ReviewWorkspace = ({
         showComponents={showComponents}
         onShowComponentsChange={setShowComponents}
         width={width}
+        widthOptions={pageWidthOptions}
         onWidthChange={(next) => setWidths({ ...widths, [page]: next })}
+        onWidthAdd={(next) => {
+          setCustomWidths(
+            addCustomWidth(customWidths, page, next, sources.get(page).widths),
+          );
+          setWidths({ ...widths, [page]: next });
+        }}
+        onWidthRemove={(target) => {
+          setCustomWidths(removeCustomWidth(customWidths, page, target));
+          if (width === target) {
+            setWidths({ ...widths, [page]: sources.get(page).defaultWidth });
+          }
+        }}
         perRow={perRow}
         onPerRowChange={setPerRow}
         branch={branch}
@@ -845,6 +888,8 @@ export const ReviewWorkspace = ({
                 <Canvas
                   focusStoryId={focusStoryId}
                   source={page}
+                  shots={shotsOf(page)}
+                  width={width}
                   rows={rows}
                   camera={camera}
                   viewport={viewport}
@@ -913,9 +958,9 @@ export const ReviewWorkspace = ({
                   onDraftChange={setDraftBody}
                   onSwitchWidth={
                     activeThread.root.frameWidth !== null &&
-                    sources
-                      .get(page)
-                      .widths.includes(activeThread.root.frameWidth)
+                    pageWidthOptions.some(
+                      (option) => option.width === activeThread.root.frameWidth,
+                    )
                       ? (next) => setWidths({ ...widths, [page]: next })
                       : undefined
                   }

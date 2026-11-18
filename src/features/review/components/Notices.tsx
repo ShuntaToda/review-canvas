@@ -12,7 +12,7 @@ export const StorybookMissingNotice = ({ source }: { source: StorySource }) => {
     <div className="flex size-full items-center justify-center p-8">
       <div className="max-w-lg rounded-xl border border-line bg-panel p-6 text-sm shadow-sm">
         <h2 className="mb-2 text-base font-bold">
-          {sources.get(source).label}の Storybook がビルドされていません
+          {sources.label(source)}の Storybook がビルドされていません
         </h2>
         <p className="mb-3 text-ink-sub">
           設定ファイル（review-canvas.config.json）の build

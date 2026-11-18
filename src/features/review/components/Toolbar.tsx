@@ -8,9 +8,14 @@ import {
   Search,
   UserRound,
 } from "lucide-react";
-import type { Ref } from "react";
+import { type Ref, useState } from "react";
 import { useSources } from "../hooks/useSources";
 import { type BranchOption, branchOptionLabel } from "../model/branch-options";
+import {
+  MAX_CUSTOM_WIDTH,
+  parseWidthInput,
+  type WidthOption,
+} from "../model/custom-widths";
 import { FRAMES_PER_ROW_OPTIONS } from "../model/layout";
 import type { Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
@@ -40,7 +45,13 @@ type ToolbarProps = {
   showComponents: boolean;
   onShowComponentsChange: (show: boolean) => void;
   width: number;
+  /** 切り替えられる幅（設定の幅と、見る人が自分で足した幅） */
+  widthOptions: ReadonlyArray<WidthOption>;
   onWidthChange: (width: number) => void;
+  /** 自分用の幅を足す（足した幅に切り替える） */
+  onWidthAdd: (width: number) => void;
+  /** 自分で足した幅を外す */
+  onWidthRemove: (width: number) => void;
   perRow: number;
   onPerRowChange: (perRow: number) => void;
   branch: string;
@@ -72,7 +83,10 @@ export const Toolbar = ({
   showComponents,
   onShowComponentsChange,
   width,
+  widthOptions,
   onWidthChange,
+  onWidthAdd,
+  onWidthRemove,
   perRow,
   onPerRowChange,
   branch,
@@ -86,6 +100,11 @@ export const Toolbar = ({
   onToggleSidebar,
 }: ToolbarProps) => {
   const sources = useSources();
+  // 足す幅の入力（px）。足せない値のまま足そうとしたら、欄に印を付ける
+  const [widthInput, setWidthInput] = useState("");
+  const [widthInvalid, setWidthInvalid] = useState(false);
+  const selectedCustom =
+    widthOptions.find((option) => option.width === width)?.custom ?? false;
   return (
     <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3 py-1.5">
       <h1 className="hidden text-sm font-bold whitespace-nowrap text-ink min-[1400px]:block">
@@ -106,7 +125,7 @@ export const Toolbar = ({
             ].join(" ")}
             onClick={() => onPageChange(source)}
           >
-            {sources.get(source).label}
+            {sources.label(source)}
             {(openCounts[source] ?? 0) > 0 && (
               <span
                 className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white"
@@ -168,13 +187,71 @@ export const Toolbar = ({
           className="rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
           onChange={(event) => onWidthChange(Number(event.target.value))}
         >
-          {sources.get(page).widths.map((w) => (
-            <option key={w} value={w}>
-              {w}px
+          {widthOptions.map((option) => (
+            <option key={option.width} value={option.width}>
+              {option.width}px{option.custom ? "（自分用）" : ""}
             </option>
           ))}
         </select>
       </label>
+
+      {/* 設定に無い幅を、見る人が自分用に足す（ブラウザに覚える。足した幅は iframe で並べる） */}
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const next = parseWidthInput(widthInput);
+          if (next === undefined) {
+            setWidthInvalid(true);
+            return;
+          }
+          setWidthInput("");
+          setWidthInvalid(false);
+          if (widthOptions.some((option) => option.width === next)) {
+            onWidthChange(next);
+          } else {
+            onWidthAdd(next);
+          }
+        }}
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label="足す幅（px）"
+          aria-invalid={widthInvalid}
+          title={`好きな幅（px。1〜${MAX_CUSTOM_WIDTH} の整数）を自分用に足します。このブラウザに覚え、ほかの人には出ません`}
+          placeholder="幅を足す"
+          value={widthInput}
+          className={[
+            "w-20 rounded-md border bg-transparent px-1.5 py-1 text-sm outline-none focus:border-accent",
+            widthInvalid ? "border-warn" : "border-line",
+          ].join(" ")}
+          onChange={(event) => {
+            setWidthInput(event.target.value);
+            setWidthInvalid(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") focusCanvas();
+          }}
+        />
+        <button
+          type="submit"
+          className="rounded-md border border-line px-1.5 py-1 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
+        >
+          追加
+        </button>
+        {selectedCustom && (
+          <button
+            type="button"
+            className="rounded-md border border-line px-1.5 py-1 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
+            aria-label={`${String(width)}px を外す`}
+            title={`自分用に足した幅 ${String(width)}px を外します`}
+            onClick={() => onWidthRemove(width)}
+          >
+            外す
+          </button>
+        )}
+      </form>
 
       <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
         横に

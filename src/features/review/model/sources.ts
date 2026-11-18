@@ -14,10 +14,6 @@ export const isStorySourceId = (value: string | null): value is StorySource =>
 /** ページ 1 つ分の並べ方（/api/meta の sources.storybooks[]） */
 export type SourceConfig = components["schemas"]["ReviewSource"];
 
-/** 設定に無い ID（設定から外した Storybook のコメント）を出すときの並べ方 */
-const FALLBACK_WIDTH = 1280;
-const FALLBACK_BASE_HEIGHT = 800;
-
 /** 並べるページの一覧と、ID から並べ方を引く口 */
 export type SourceCatalog = {
   /** 設定の順 */
@@ -25,7 +21,12 @@ export type SourceCatalog = {
   ids: ReadonlyArray<StorySource>;
   /** 設定にあるか */
   has: (id: string) => boolean;
-  /** 並べ方。設定に無い ID は、ID を名前にした既定の並べ方 */
+  /** 画面に出す名前。設定に無い ID（設定から外した Storybook のコメント）は、ID をそのまま名前にする */
+  label: (id: StorySource) => string;
+  /**
+   * 並べ方（幅・高さ）。このリポジトリは幅・高さの既定の値を持たないので、設定に無い ID は、
+   * 設定の 1 つ目の Storybook の並べ方を借りる（名前は ID）。設定を読む前（1 つも無い）に引いたら例外
+   */
   get: (id: StorySource) => SourceConfig;
   /** 既定では並べないストーリーのタイトルの頭（「部品も表示」で並べる） */
   excludeTitlePrefixes: ReadonlyArray<string>;
@@ -36,18 +37,22 @@ export const buildSourceCatalog = (sources: {
   excludeTitlePrefixes: ReadonlyArray<string>;
 }): SourceCatalog => {
   const byId = new Map(sources.storybooks.map((s) => [s.id, s]));
+  const [first] = sources.storybooks;
   return {
     list: sources.storybooks,
     ids: sources.storybooks.map((s) => s.id),
     has: (id) => byId.has(id),
-    get: (id) =>
-      byId.get(id) ?? {
-        id,
-        label: id,
-        widths: [FALLBACK_WIDTH],
-        defaultWidth: FALLBACK_WIDTH,
-        baseHeight: FALLBACK_BASE_HEIGHT,
-      },
+    label: (id) => byId.get(id)?.label ?? id,
+    get: (id) => {
+      const found = byId.get(id);
+      if (found !== undefined) return found;
+      if (first === undefined) {
+        throw new Error(
+          `並べる Storybook の設定がまだありません（${id} の並べ方を決められません）`,
+        );
+      }
+      return { ...first, id, label: id };
+    },
     excludeTitlePrefixes: sources.excludeTitlePrefixes,
   };
 };
