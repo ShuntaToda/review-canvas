@@ -203,6 +203,37 @@ export const isStaleCommit = (
   comment.commit !== "unknown" &&
   comment.commit !== currentCommit;
 
+/**
+ * 吹き出しに注記する、コメントを書いたときの幅（いまの幅と違い、ピンの位置がずれているかもしれないとき。注記しなければ null）。
+ * 要素の手がかりを持ち、いまの画面でその要素を見失っていないコメントは、幅が違ってもピンが要素に付くので注記しない
+ */
+export const widthMismatch = (
+  root: Pick<Comment, "frameWidth" | "anchor">,
+  currentWidth: number,
+  targetMissing: boolean,
+): number | null =>
+  root.frameWidth !== null &&
+  root.frameWidth !== currentWidth &&
+  (root.anchor === undefined || targetMissing)
+    ? root.frameWidth
+    : null;
+
+/**
+ * 開いたときの、一覧の状態のタブ。URL の ?status=（無ければ「未解決」）にする。
+ * リンクのスレッドがそのタブに出ない（状態が合わない）ときは、「すべて」にして開く
+ */
+export const initialStatusFilter = (
+  wanted: StatusFilter | undefined,
+  linkedStatus: ThreadStatus | undefined,
+): StatusFilter => {
+  const filter = wanted ?? "open";
+  return linkedStatus === undefined ||
+    filter === "all" ||
+    linkedStatus === filter
+    ? filter
+    : "all";
+};
+
 /** スレッドの中で一番新しい書き込みの日時（一覧の並べ替え・表示用） */
 export const lastActivityAt = (thread: Thread): string =>
   [thread.root, ...thread.replies]

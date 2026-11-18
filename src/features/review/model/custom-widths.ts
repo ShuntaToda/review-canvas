@@ -1,3 +1,5 @@
+import { mapSources, type SourceCatalog, type StorySource } from "./sources";
+
 /**
  * 見る人が自分で足した画面の幅（ページごと）。設定ファイルの widths（みんなに出す幅）とは別に、ブラウザに覚える。
  * 足した幅には発行のときの画像が無いので、その幅では iframe で並べる
@@ -49,16 +51,50 @@ export const parseCustomWidths = (raw: string): CustomWidths | undefined => {
 const sortUnique = (widths: ReadonlyArray<number>): number[] =>
   [...new Set(widths)].sort((a, b) => a - b);
 
-/** ページに幅を足す（設定にある幅・もう足してある幅はそのまま） */
+/**
+ * ページに幅を足す。足すか、足さずに切り替えるだけかは、ここで決める（設定にある幅・もう足してある幅は足さず、そのまま返す）。
+ * 幅を選ぶ所（上の欄の「幅を足す」・吹き出しの「◯px で見る」）は、どれもこれを通してから切り替える
+ */
 export const addCustomWidth = (
   custom: CustomWidths,
   source: string,
   width: number,
   configured: ReadonlyArray<number>,
 ): CustomWidths =>
-  configured.includes(width)
+  configured.includes(width) || (custom[source] ?? []).includes(width)
     ? custom
     : { ...custom, [source]: sortUnique([...(custom[source] ?? []), width]) };
+
+/** ページごとの既定の幅 */
+export const defaultWidths = (
+  sources: SourceCatalog,
+): Record<StorySource, number> =>
+  mapSources(sources.ids, (id) => sources.get(id).defaultWidth);
+
+/**
+ * ブラウザに覚えた、ページごとのいまの幅を読む。
+ * 知らない幅（設定にも、自分で足した幅にも無い）・覚えていないページは、そのページの既定の幅に戻す。全体が読めなければ undefined
+ */
+export const restoreWidths =
+  (sources: SourceCatalog, custom: CustomWidths) =>
+  (raw: string): Record<StorySource, number> | undefined => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const remembered: Readonly<Record<string, unknown>> = { ...parsed };
+    return mapSources(sources.ids, (id) => {
+      const value = remembered[id];
+      const config = sources.get(id);
+      return typeof value === "number" &&
+        (config.widths.includes(value) || (custom[id] ?? []).includes(value))
+        ? value
+        : config.defaultWidth;
+    });
+  };
 
 /** ページから、足した幅を外す */
 export const removeCustomWidth = (

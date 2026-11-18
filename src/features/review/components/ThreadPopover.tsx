@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Link2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useRestoreFocus } from "../hooks/useRestoreFocus";
 import { describeAnchor, describeTarget } from "../model/anchor-describe";
-import { POPOVER_WIDTH } from "../model/popover";
+import { type PopoverPosition, popoverStyle } from "../model/popover";
 import type { Story } from "../model/storybook";
 import {
   type Comment,
@@ -10,6 +10,7 @@ import {
   isStaleCommit,
   STATUS_LABELS,
   type Thread,
+  widthMismatch,
 } from "../model/threads";
 import { CommentForm } from "./CommentForm";
 import { IconButton } from "./IconButton";
@@ -19,7 +20,7 @@ import { formatDateTime } from "@/utils/time";
 type ThreadPopoverProps = {
   thread: Thread;
   story: Story | undefined;
-  position: { left: number; top: number; maxHeight: number };
+  position: PopoverPosition;
   currentCommit: string | undefined;
   currentWidth: number;
   /** 読み込んだ画面で、指していた要素が見つからなかった */
@@ -152,13 +153,7 @@ export const ThreadPopover = ({
   );
   const revertAiFixed = changeStatus(onRevertAiFixed);
   // 位置がずれているかもしれない理由（幅・コミットの違い）。色の帯や印にせず、1 行の注記にする
-  // 要素を見つけて追従できているときは、幅が違ってもずれないので幅は書かない
-  const widthNote =
-    root.frameWidth !== null &&
-    root.frameWidth !== currentWidth &&
-    (root.anchor === undefined || targetMissing)
-      ? root.frameWidth
-      : null;
+  const widthNote = widthMismatch(root, currentWidth, targetMissing);
   const staleCommit = isStaleCommit(root, currentCommit) ? root.commit : null;
   return (
     <section
@@ -168,12 +163,7 @@ export const ThreadPopover = ({
       tabIndex={-1}
       aria-labelledby={titleId}
       className="absolute z-40 flex flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xl outline-none"
-      style={{
-        left: position.left,
-        top: position.top,
-        width: POPOVER_WIDTH,
-        maxHeight: position.maxHeight,
-      }}
+      style={popoverStyle(position)}
     >
       <header className="border-b border-line px-3 pt-1.5 pb-2">
         <div className="flex items-center gap-0.5">

@@ -2,6 +2,7 @@ import { ReviewApiError } from "../api/review-api";
 import {
   COMMENTS_REFRESH_INTERVAL,
   commentsErrorMessage,
+  fetchShots,
   retryCommentsOnError,
 } from "./useReviewData";
 
@@ -90,4 +91,66 @@ describe("commentsErrorMessage", () => {
       commentsErrorMessage(errorOf(403, "ReviewerNotAllowedError")),
     ).toContain("このアカウントでは使えません");
   });
+});
+
+describe("fetchShots（useShots が読む、スクリーンショットの目録）", () => {
+  const base = "https://storybook.example.com/sb/main/";
+  const shot = {
+    storyId: "pages-list--default",
+    width: 375,
+    height: 812,
+    path: "review-canvas-shots/pages-list--default-375-0123456789abcdef.png",
+  };
+  const respond = (response: Response | Error) => {
+    const fetchMock = vi.fn(() =>
+      response instanceof Error
+        ? Promise.reject(response)
+        : Promise.resolve(response),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("[正常系]目録を、資格情報を付けずに読み、画像の場所を置き場からの URL にする", async () => {
+    const fetchMock = respond(
+      Response.json({
+        version: 1,
+        shots: [shot],
+        playFunctions: { "pages-list--default": true },
+      }),
+    );
+
+    const catalog = await fetchShots(base, "shop");
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      `${base}shop/review-canvas-shots.json`,
+      { credentials: "omit" },
+    );
+    expect(catalog.find("pages-list--default", 375)).toMatchObject({
+      url: `${base}shop/${shot.path}`,
+      height: 812,
+    });
+    expect(catalog.hasPlayFunction("pages-list--default")).toBe(true);
+  });
+
+  test.each([
+    [
+      "目録が無い（404。撮る前の版で置いた）",
+      new Response("", { status: 404 }),
+    ],
+    ["JSON として読めない", new Response("<html>", { status: 200 })],
+    ["目録の形が違う", Response.json({ version: 2, shots: [shot] })],
+    ["通信に失敗した", new TypeError("Failed to fetch")],
+  ])(
+    "[異常系]%s ときは、失敗にせず画像なしとして扱う（キャンバスは iframe で出す）",
+    async (_, response) => {
+      respond(response);
+
+      const catalog = await fetchShots(base, "shop");
+
+      expect(catalog.find("pages-list--default", 375)).toBeUndefined();
+      expect(catalog.hasPlayFunction("pages-list--default")).toBeUndefined();
+    },
+  );
 });

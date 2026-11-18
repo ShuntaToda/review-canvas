@@ -1,11 +1,34 @@
 import {
   addCustomWidth,
+  defaultWidths,
   MAX_CUSTOM_WIDTH,
   parseCustomWidths,
   parseWidthInput,
   removeCustomWidth,
+  restoreWidths,
   widthOptions,
 } from "./custom-widths";
+import { buildSourceCatalog } from "./sources";
+
+const sources = buildSourceCatalog({
+  storybooks: [
+    {
+      id: "shop",
+      label: "サンプルショップ",
+      widths: [375, 1000],
+      defaultWidth: 1000,
+      baseHeight: 812,
+    },
+    {
+      id: "console",
+      label: "コンソール",
+      widths: [1440],
+      defaultWidth: 1440,
+      baseHeight: 800,
+    },
+  ],
+  excludeTitlePrefixes: [],
+});
 
 describe("parseWidthInput", () => {
   test.each([
@@ -73,5 +96,48 @@ describe("widthOptions", () => {
       { width: 1440, custom: true },
     ]);
     expect(widthOptions([375])).toStrictEqual([{ width: 375, custom: false }]);
+  });
+});
+
+describe("addCustomWidth（足すか、切り替えるだけか）", () => {
+  test("[正常系]設定にある幅・もう足してある幅は足さず、同じものを返す（切り替えるだけ）", () => {
+    const custom = { shop: [1440] };
+
+    expect(addCustomWidth(custom, "shop", 375, [375, 1000])).toBe(custom);
+    expect(addCustomWidth(custom, "shop", 1440, [375, 1000])).toBe(custom);
+  });
+
+  test("[正常系]設定にも自分用にも無い幅は、自分用に足す", () => {
+    expect(
+      addCustomWidth({ shop: [1440] }, "shop", 820, [375, 1000]),
+    ).toStrictEqual({ shop: [820, 1440] });
+  });
+});
+
+describe("defaultWidths・restoreWidths", () => {
+  test("[正常系]覚えていなければ、ページごとの既定の幅", () => {
+    expect(defaultWidths(sources)).toStrictEqual({ shop: 1000, console: 1440 });
+  });
+
+  test("[正常系]覚えた幅を読む（設定の幅と、自分で足した幅）", () => {
+    expect(
+      restoreWidths(sources, { shop: [820] })('{"shop":820,"console":1440}'),
+    ).toStrictEqual({ shop: 820, console: 1440 });
+    expect(restoreWidths(sources, {})('{"shop":375}')).toStrictEqual({
+      shop: 375,
+      console: 1440,
+    });
+  });
+
+  test("[正常系]知らない幅（設定にも自分用にも無い）・数でない値・覚えていないページは、既定の幅に戻す", () => {
+    expect(
+      restoreWidths(sources, {})('{"shop":820,"console":"1440","old":1}'),
+    ).toStrictEqual({ shop: 1000, console: 1440 });
+  });
+
+  test("[異常系]全体が読めなければ undefined（既定を使う）", () => {
+    expect(restoreWidths(sources, {})("{")).toBeUndefined();
+    expect(restoreWidths(sources, {})("null")).toBeUndefined();
+    expect(restoreWidths(sources, {})("3")).toBeUndefined();
   });
 });

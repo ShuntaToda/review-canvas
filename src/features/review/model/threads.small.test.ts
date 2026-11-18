@@ -1,15 +1,18 @@
 import {
   buildThreads,
   type Comment,
+  type CommentAnchor,
   countByStatus,
   countPendingByStory,
   emptyListMessage,
   filterThreads,
+  initialStatusFilter,
   isStaleCommit,
   isStatusFilter,
   lastActivityAt,
   navigationOrder,
   threadNeighbors,
+  widthMismatch,
 } from "./threads";
 
 const comment = (props: Partial<Comment> & Pick<Comment, "id">): Comment => ({
@@ -143,6 +146,49 @@ describe("isStaleCommit", () => {
     "[正常系]$commit を $current で見ると $expected",
     ({ commit, current, expected }) => {
       expect(isStaleCommit({ commit }, current)).toBe(expected);
+    },
+  );
+});
+
+describe("widthMismatch", () => {
+  // 中身は見ない（記録があるかどうかだけ）
+  const ANCHOR = {} as CommentAnchor;
+
+  test("[正常系]要素の記録が無いコメントは、書いたときの幅といまの幅が違えば、書いたときの幅を注記する", () => {
+    expect(widthMismatch({ frameWidth: 375 }, 1280, false)).toBe(375);
+    expect(widthMismatch({ frameWidth: 1280 }, 1280, false)).toBeNull();
+    expect(widthMismatch({ frameWidth: null }, 1280, false)).toBeNull();
+  });
+
+  test("[正常系]要素の記録があり、いまの画面で要素を見つけている（見失っていない）ときは、幅が違っても注記しない", () => {
+    expect(
+      widthMismatch({ frameWidth: 375, anchor: ANCHOR }, 1280, false),
+    ).toBeNull();
+  });
+
+  test("[正常系]要素の記録があっても、いまの画面で要素が見つからないときは、書いたときの幅を注記する", () => {
+    expect(widthMismatch({ frameWidth: 375, anchor: ANCHOR }, 1280, true)).toBe(
+      375,
+    );
+    expect(
+      widthMismatch({ frameWidth: 1280, anchor: ANCHOR }, 1280, true),
+    ).toBeNull();
+  });
+});
+
+describe("initialStatusFilter", () => {
+  test.each([
+    { wanted: undefined, linked: undefined, expected: "open" },
+    { wanted: "resolved", linked: undefined, expected: "resolved" },
+    { wanted: undefined, linked: "open", expected: "open" },
+    { wanted: undefined, linked: "resolved", expected: "all" },
+    { wanted: "ai-fixed", linked: "ai-fixed", expected: "ai-fixed" },
+    { wanted: "ai-fixed", linked: "open", expected: "all" },
+    { wanted: "all", linked: "resolved", expected: "all" },
+  ] as const)(
+    "[正常系]?status=$wanted でリンクのスレッドが $linked なら $expected のタブで開く",
+    ({ wanted, linked, expected }) => {
+      expect(initialStatusFilter(wanted, linked)).toBe(expected);
     },
   );
 });

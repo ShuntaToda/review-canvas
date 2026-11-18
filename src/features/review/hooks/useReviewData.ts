@@ -99,7 +99,7 @@ export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
  * 発行のときに撮ったスクリーンショットの目録を読む。無い（撮る前の版で置いた・撮れなかった）・読めない・形が違うときは、
  * 画像なしとして扱う（キャンバスは iframe で出す。失敗にしない）
  */
-const fetchShots = async (
+export const fetchShots = async (
   base: string,
   source: StorySource,
 ): Promise<ShotCatalog> => {

@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useRestoreFocus } from "../hooks/useRestoreFocus";
-import { POPOVER_WIDTH } from "../model/popover";
+import { type PopoverPosition, popoverStyle } from "../model/popover";
 import type { Story } from "../model/storybook";
 import { CommentForm } from "./CommentForm";
 import { focusCanvas } from "./canvas-dom";
@@ -18,7 +18,7 @@ export const DraftPopover = ({
   onCancel,
 }: {
   story: Story | undefined;
-  position: { left: number; top: number; maxHeight: number };
+  position: PopoverPosition;
   author: string;
   /** 前に閉じた書きかけ（あれば戻す） */
   initialBody: string;
@@ -35,8 +35,8 @@ export const DraftPopover = ({
       // Esc で入力欄から抜けたときのフォーカスの置き場（Tab では止まらない）
       tabIndex={-1}
       aria-label="新しいコメント"
-      className="absolute z-40 flex flex-col gap-2 rounded-lg border border-line bg-panel p-3 shadow-xl outline-none"
-      style={{ left: position.left, top: position.top, width: POPOVER_WIDTH }}
+      className="absolute z-40 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-panel p-3 shadow-xl outline-none"
+      style={popoverStyle(position)}
     >
       <p className="text-xs text-ink-sub">
         {story === undefined ? "" : `${story.title} / ${story.name}`}

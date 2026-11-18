@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
 import {
   type Camera,
+  screenToWorld,
   type Size,
   visibleWorldRect,
   zoomAt,
 } from "../model/camera";
-import { isCloseUp, wantsIframe } from "../model/frame-mode";
+import { centeredCloseUpFrame, wantsIframe } from "../model/frame-mode";
 import {
   FRAME_LABEL_HEIGHT,
   frameAt,
@@ -90,6 +91,8 @@ type CanvasProps = {
   onBackgroundClick: () => void;
   /** 移動の道具のまま、画面を（動かさずに）クリックした（コメントの置き方を知らせる） */
   onFrameClick: () => void;
+  /** 画像の画面に置こうとしたコメントを、動く画面と中身がずれていたので置かなかった（クリックし直してもらう） */
+  onScreenChanged: () => void;
   /**
    * 見えている範囲の外でも読み込む画面（共有リンク・一覧から移ったピンの画面）。
    * 読み込んで高さを測らないと、長い画面の下の方のピンへ移れないため
@@ -124,6 +127,7 @@ export const Canvas = ({
   onOpenThread,
   onBackgroundClick,
   onFrameClick,
+  onScreenChanged,
   focusStoryId = null,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
@@ -146,6 +150,39 @@ export const Canvas = ({
         ? current
         : { source, storyId },
     );
+
+  // 画像の画面に置こうとしているコメント（iframe に切り替わるのを待っている）。待ちは 1 つだけで、
+  // 別の所をクリックしたら前の待ちは取り消す。道具・ページを変えたら置かない
+  const [waiting, setWaiting] = useState<{
+    source: StorySource;
+    storyId: string;
+    point: Point;
+  } | null>(null);
+  const effectiveTool = spaceHeld ? "move" : tool;
+  if (
+    waiting !== null &&
+    (waiting.source !== source || effectiveTool !== "comment")
+  ) {
+    setWaiting(null);
+  }
+  const setPendingPlace = (storyId: string, point: Point | null) =>
+    setWaiting((current) =>
+      point === null
+        ? current?.storyId === storyId
+          ? null
+          : current
+        : { source, storyId, point },
+    );
+  const place: CanvasProps["onPlace"] = (storyId, point, anchor) => {
+    // 置いたら、ほかの画面の待ちは取り消す（いまの下書きに手がかりを足し直すだけのときは、そのまま）
+    const refreshesDraft =
+      draft !== null &&
+      draft.storyId === storyId &&
+      draft.x === point.x &&
+      draft.y === point.y;
+    if (!refreshesDraft) setWaiting(null);
+    onPlace(storyId, point, anchor);
+  };
 
   // ストーリーにフォーカスを取られたとき、元いた所へ返せるよう覚えておく
   useEffect(() => trackParentFocus(), []);
@@ -284,15 +321,13 @@ export const Canvas = ({
     // 動かさずに何も無いところを押した → 開いているスレッドを閉じ、指していた画面を外す
     if (pan.onBackground) {
       setPointed(null);
+      setWaiting(null);
       onBackgroundClick();
       return;
     }
     // 動かさずに画面を押した → その画面を指す（画像の画面を iframe に切り替える）
     const point = localPoint(event);
-    const world = {
-      x: (point.x - camera.x) / camera.zoom,
-      y: (point.y - camera.y) / camera.zoom,
-    };
+    const world = screenToWorld(camera, point);
     const hit = frameAt(rows, world);
     if (hit !== undefined && intersects(hit, { ...world, w: 0, h: 0 })) {
       setPointed({ source, storyId: hit.story.id });
@@ -314,24 +349,11 @@ export const Canvas = ({
     }
   }
   // 表示の真ん中にある画面（十分に寄っていれば、画像から iframe に切り替える）
+  const centeredCloseUpId = centeredCloseUpFrame({ rows, camera, viewport });
+  // 見えている画面のうち、要素の手がかりを持つピンの位置を、いまの幅でまだ合わせていないもの
   const onScreen = visibleWorldRect(camera, viewport, 0);
-  const centerFrame =
-    viewport.width === 0
-      ? undefined
-      : frameAt(rows, {
-          x: onScreen.x + onScreen.w / 2,
-          y: onScreen.y + onScreen.h / 2,
-        });
-  const centeredCloseUpId =
-    centerFrame !== undefined &&
-    intersects(centerFrame, onScreen) &&
-    isCloseUp({
-      frameWidth: centerFrame.w,
-      zoom: camera.zoom,
-      viewportWidth: viewport.width,
-    })
-      ? centerFrame.story.id
-      : null;
+  const hasUnlocatedPin = (storyId: string): boolean =>
+    (pinsByStory.get(storyId) ?? []).some((pin) => pin.unlocated);
   const isWanted = (placement: (typeof placements)[number]) =>
     wantsIframe({
       hasShot: shots.find(placement.story.id, width) !== undefined,
@@ -339,6 +361,8 @@ export const Canvas = ({
       engaged: engaged.has(placement.story.id),
       pointed: placement.story.id === pointedStoryId,
       centeredCloseUp: placement.story.id === centeredCloseUpId,
+      unlocatedPin:
+        intersects(placement, onScreen) && hasUnlocatedPin(placement.story.id),
       inLoadRange: intersects(placement, visible),
     });
   const [previousLive, setPreviousLive] = useState<string[]>([]);
@@ -473,7 +497,7 @@ export const Canvas = ({
                   source={source}
                   placement={placement}
                   zoom={camera.zoom}
-                  tool={spaceHeld ? "move" : tool}
+                  tool={effectiveTool}
                   shouldLoad={canLoad && isWanted(placement)}
                   // 小さく表示している間は、読み込み済みの画面も外す（全体を表示したときに一斉に読み込み直さないように）
                   // 見えていない画面は、付けておく数の上限を超えたら古い順に外す
@@ -482,6 +506,13 @@ export const Canvas = ({
                   shot={shots.find(placement.story.id, width) ?? null}
                   playHint={shots.hasPlayFunction(placement.story.id)}
                   onActivate={activate}
+                  pendingPlace={
+                    waiting !== null && waiting.storyId === placement.story.id
+                      ? waiting.point
+                      : null
+                  }
+                  onPendingPlace={setPendingPlace}
+                  onScreenChanged={onScreenChanged}
                   pins={pinsByStory.get(placement.story.id) ?? []}
                   activeThreadId={activeThreadId}
                   draftPin={
@@ -490,7 +521,7 @@ export const Canvas = ({
                       : null
                   }
                   onMeasure={onMeasure}
-                  onPlace={onPlace}
+                  onPlace={place}
                   onLocate={onLocate}
                   onOpenThread={onOpenThread}
                 />

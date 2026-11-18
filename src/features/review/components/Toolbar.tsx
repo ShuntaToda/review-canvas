@@ -47,9 +47,8 @@ type ToolbarProps = {
   width: number;
   /** 切り替えられる幅（設定の幅と、見る人が自分で足した幅） */
   widthOptions: ReadonlyArray<WidthOption>;
+  /** 幅を選ぶ（欄から選んだ・「幅を足す」で入れた。設定にも自分用にも無い幅は、受け取る側が自分用に足す） */
   onWidthChange: (width: number) => void;
-  /** 自分用の幅を足す（足した幅に切り替える） */
-  onWidthAdd: (width: number) => void;
   /** 自分で足した幅を外す */
   onWidthRemove: (width: number) => void;
   perRow: number;
@@ -85,7 +84,6 @@ export const Toolbar = ({
   width,
   widthOptions,
   onWidthChange,
-  onWidthAdd,
   onWidthRemove,
   perRow,
   onPerRowChange,
@@ -106,7 +104,7 @@ export const Toolbar = ({
   const selectedCustom =
     widthOptions.find((option) => option.width === width)?.custom ?? false;
   return (
-    // 狭い幅（768px 未満）では、ページ・道具・絞り込み・ブランチと、右端の「?」・一覧の開閉だけを出す
+    // 狭い幅（Tailwind の md 未満。model/viewport.ts）では、ページ・道具・絞り込み・ブランチと、右端の「?」・一覧の開閉だけを出す
     // （閲覧・返信・解決ができれば足りる。幅や並べ方を変える欄は出さない）。「?」と一覧の開閉は、1 段目の右端に固定する
     <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3 py-1.5">
       <h1 className="hidden text-sm font-bold whitespace-nowrap text-ink min-[1400px]:block">
@@ -229,11 +227,7 @@ export const Toolbar = ({
           }
           setWidthInput("");
           setWidthInvalid(false);
-          if (widthOptions.some((option) => option.width === next)) {
-            onWidthChange(next);
-          } else {
-            onWidthAdd(next);
-          }
+          onWidthChange(next);
         }}
       >
         <input

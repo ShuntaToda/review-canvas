@@ -20,6 +20,7 @@ import {
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
+import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
 import {
@@ -30,6 +31,7 @@ import {
 } from "../hooks/useReviewData";
 import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
+import { useThreadNavigation } from "../hooks/useThreadNavigation";
 import {
   type AnchorBox,
   type LocatedPin,
@@ -42,17 +44,11 @@ import {
   centerOn,
   nextZoomStep,
   previousZoomStep,
+  screenToWorld,
   worldToScreen,
   zoomAt,
 } from "../model/camera";
 import { type CameraState, resolveCamera } from "../model/camera-state";
-import {
-  addCustomWidth,
-  type CustomWidths,
-  parseCustomWidths,
-  removeCustomWidth,
-  widthOptions,
-} from "../model/custom-widths";
 import { buildExportJson, exportFileName } from "../model/export-json";
 import {
   boundsOfRows,
@@ -73,11 +69,7 @@ import {
   resolveShortcut,
   type Tool,
 } from "../model/shortcuts";
-import {
-  mapSources,
-  type SourceCatalog,
-  type StorySource,
-} from "../model/sources";
+import { mapSources, type StorySource } from "../model/sources";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
 import {
@@ -87,12 +79,12 @@ import {
   countByStatus,
   countPendingByStory,
   filterThreads,
-  navigationOrder,
+  initialStatusFilter,
   type StatusFilter,
   type Thread,
-  threadNeighbors,
 } from "../model/threads";
 import { buildSearch, type UrlState } from "../model/url-state";
+import { isNarrowViewport } from "../model/viewport";
 import type { AuthUser } from "@/support/auth";
 
 type Draft = {
@@ -113,35 +105,6 @@ const parsePerRow = (raw: string): number | undefined => {
   const value = Number(raw);
   return FRAMES_PER_ROW_OPTIONS.includes(value) ? value : undefined;
 };
-
-/** ページごとの既定の幅 */
-const defaultWidthsOf = (sources: SourceCatalog): Record<StorySource, number> =>
-  mapSources(sources.ids, (id) => sources.get(id).defaultWidth);
-
-/** フレームの幅（ページごと）をブラウザに覚える形。知らない幅（設定にも、自分で足した幅にも無い）は既定に戻す */
-const parseWidths =
-  (sources: SourceCatalog, custom: CustomWidths) =>
-  (raw: string): Record<StorySource, number> | undefined => {
-    try {
-      const parsed = JSON.parse(raw) as Partial<Record<StorySource, unknown>>;
-      return mapSources(sources.ids, (id) => {
-        const value = parsed[id];
-        const config = sources.get(id);
-        return typeof value === "number" &&
-          (config.widths.includes(value) || (custom[id] ?? []).includes(value))
-          ? value
-          : config.defaultWidth;
-      });
-    } catch {
-      return undefined;
-    }
-  };
-
-/** これより狭い表示では、コメント一覧をはじめ閉じておく（キャンバスに重ねて出すため。Tailwind の md と同じ） */
-const NARROW_VIEWPORT_WIDTH = 768;
-
-const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean =>
-  a.length === b.length && a.every((id, index) => id === b[index]);
 
 /** スレッドへ移るときの倍率（今の倍率を保ちつつ、読める大きさにする） */
 const focusZoom = (current: number): number =>
@@ -241,14 +204,7 @@ export const ReviewWorkspace = ({
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
-      status: ((): StatusFilter => {
-        const wanted = initialUrl.status ?? "open";
-        return thread === undefined ||
-          wanted === "all" ||
-          thread.root.status === wanted
-          ? wanted
-          : "all";
-      })(),
+      status: initialStatusFilter(initialUrl.status, thread?.root.status),
       showComponents:
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
@@ -259,33 +215,16 @@ export const ReviewWorkspace = ({
   const [tool, setTool] = useState<Tool>("move");
   const [query, setQuery] = useState("");
   const [showComponents, setShowComponents] = useState(initial.showComponents);
-  // 見る人が自分で足した幅（ページごと。設定の幅に続けて選べる）
-  const [customWidths, setCustomWidths] = useLocalSetting<CustomWidths>(
-    "review-canvas.customWidths",
-    {},
-    {
-      parse: parseCustomWidths,
-      serialize: (value) => JSON.stringify(value),
-    },
-  );
-  const [widths, setWidths] = useLocalSetting(
-    "review-canvas.widths",
-    defaultWidthsOf(sources),
-    {
-      parse: parseWidths(sources, customWidths),
-      serialize: (value) => JSON.stringify(value),
-    },
-  );
+  // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
+  const pageWidths = useCustomWidths(sources);
+  const widthOf = pageWidths.widthOf;
   const [perRow, setPerRow] = useLocalSetting(
     "review-canvas.perRow",
     DEFAULT_FRAMES_PER_ROW,
     { parse: parsePerRow, serialize: String },
   );
-  /** ページの幅（覚えていなければ既定） */
-  const widthOf = (source: StorySource): number =>
-    widths[source] ?? sources.get(source).defaultWidth;
   const [sidebarOpen, setSidebarOpen] = useState(
-    () => window.innerWidth >= NARROW_VIEWPORT_WIDTH,
+    () => !isNarrowViewport(window.innerWidth),
   );
   const [cameraStates, setCameraStates] = useState(initial.cameras);
   const [heights, setHeights] = useState<Record<string, number>>({});
@@ -311,8 +250,6 @@ export const ReviewWorkspace = ({
       return previous[key] === body ? previous : { ...previous, [key]: body };
     });
   const [status, setStatus] = useState<StatusFilter>(initial.status);
-  // 前へ・次へで巡る並び（開いているスレッドが一覧から外れる前の並びを覚えておく）
-  const [navigationIds, setNavigationIds] = useState<ReadonlyArray<string>>([]);
   const [titleFilter, setTitleFilter] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
@@ -360,10 +297,7 @@ export const ReviewWorkspace = ({
   const width = widthOf(page);
   const shotsOf = (source: StorySource): ShotCatalog =>
     shots[source] ?? EMPTY_SHOT_CATALOG;
-  const pageWidthOptions = widthOptions(
-    sources.get(page).widths,
-    customWidths[page],
-  );
+  const pageWidthOptions = pageWidths.optionsOf(page);
   const rowsFor = (
     source: StorySource,
     filters: { showComponents: boolean; query: string },
@@ -432,10 +366,7 @@ export const ReviewWorkspace = ({
   const centerStoryId =
     viewport.width === 0
       ? undefined
-      : frameAt(rows, {
-          x: (viewportCenter.x - camera.x) / camera.zoom,
-          y: (viewportCenter.y - camera.y) / camera.zoom,
-        })?.story.id;
+      : frameAt(rows, screenToWorld(camera, viewportCenter))?.story.id;
 
   // URL に載せるスレッド（削除されたスレッドは載せない。知らせを出したあと、読み直しや共有で同じ知らせを繰り返さない）
   const urlCommentId =
@@ -644,6 +575,7 @@ export const ReviewWorkspace = ({
     const result = located[locatedKey(page, width, thread.root.id)];
     const missing = result?.kind === "missing";
     pins.push({
+      unlocated: thread.root.anchor !== undefined && result === undefined,
       id: thread.root.id,
       number: thread.number,
       ...pinPointOf(thread),
@@ -678,14 +610,10 @@ export const ReviewWorkspace = ({
   const counts = countByStatus(titleThreads);
   const listed = filterThreads(titleThreads, { status, stories: storiesByKey });
   // 前へ・次へ（一覧の並び。解決にして一覧から外れた直後は、外れる前の並びで次を決める）
-  const listedIds = listed.map((t) => t.root.id);
-  const navigation = navigationOrder({
-    listed: listedIds,
-    previous: navigationIds,
+  const { navigation, neighbors } = useThreadNavigation({
+    listed: listed.map((t) => t.root.id),
     activeId: activeThread?.root.source === page ? activeThread.root.id : null,
   });
-  if (!sameIds(navigation, navigationIds)) setNavigationIds(navigation);
-  const neighbors = threadNeighbors(navigation, activeThreadId);
   const goToThread = (threadId: string | undefined) => {
     const target = threads.find((t) => t.root.id === threadId);
     if (target !== undefined) focusThread(target);
@@ -895,19 +823,8 @@ export const ReviewWorkspace = ({
         onShowComponentsChange={setShowComponents}
         width={width}
         widthOptions={pageWidthOptions}
-        onWidthChange={(next) => setWidths({ ...widths, [page]: next })}
-        onWidthAdd={(next) => {
-          setCustomWidths(
-            addCustomWidth(customWidths, page, next, sources.get(page).widths),
-          );
-          setWidths({ ...widths, [page]: next });
-        }}
-        onWidthRemove={(target) => {
-          setCustomWidths(removeCustomWidth(customWidths, page, target));
-          if (width === target) {
-            setWidths({ ...widths, [page]: sources.get(page).defaultWidth });
-          }
-        }}
+        onWidthChange={(next) => pageWidths.select(page, next)}
+        onWidthRemove={(target) => pageWidths.remove(page, target)}
         perRow={perRow}
         onPerRowChange={setPerRow}
         branch={branch}
@@ -993,6 +910,11 @@ export const ReviewWorkspace = ({
                       "コメントするには上の「コメント」を選んで、画面をクリックします",
                     )
                   }
+                  onScreenChanged={() =>
+                    showToast(
+                      "画面が変わりました。もう一度クリックしてください",
+                    )
+                  }
                 />
               </ErrorBoundary>
               {activeThread !== undefined && threadPosition !== undefined && (
@@ -1028,20 +950,7 @@ export const ReviewWorkspace = ({
                         ? undefined
                         : () => goToThread(neighbors.next),
                   }}
-                  onSwitchWidth={(next) => {
-                    // 設定にも自分用にも無い幅は、自分用に足してから切り替える
-                    if (!pageWidthOptions.some((o) => o.width === next)) {
-                      setCustomWidths(
-                        addCustomWidth(
-                          customWidths,
-                          page,
-                          next,
-                          sources.get(page).widths,
-                        ),
-                      );
-                    }
-                    setWidths({ ...widths, [page]: next });
-                  }}
+                  onSwitchWidth={(next) => pageWidths.select(page, next)}
                   onClose={() => setActiveThreadId(null)}
                   onReply={reply(activeThread)}
                   onEdit={editComment}
@@ -1156,7 +1065,7 @@ export const ReviewWorkspace = ({
             onSelect={(thread) => {
               focusThread(thread);
               // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
-              if (window.innerWidth < NARROW_VIEWPORT_WIDTH) {
+              if (isNarrowViewport(window.innerWidth)) {
                 setSidebarOpen(false);
               }
             }}

@@ -28,7 +28,6 @@ const sources = buildSourceCatalog({
 });
 
 const onWidthChange = vi.fn();
-const onWidthAdd = vi.fn();
 const onWidthRemove = vi.fn();
 
 afterEach(() => vi.clearAllMocks());
@@ -56,7 +55,6 @@ const renderToolbar = (
           { width: 1000, custom: true },
         ]}
         onWidthChange={onWidthChange}
-        onWidthAdd={onWidthAdd}
         onWidthRemove={onWidthRemove}
         perRow={4}
         onPerRowChange={() => undefined}
@@ -94,18 +92,18 @@ describe("Toolbar", () => {
     ).toEqual(expect.arrayContaining(["1280px", "1000px（自分用）"]));
   });
 
-  test("[正常系]好きな px を入れて追加すると、その幅を足す（欄は空に戻す）", () => {
+  test("[正常系]好きな px を入れて追加すると、その幅を選ぶ（足すかどうかは受け取る側が決める。欄は空に戻す）", () => {
     renderToolbar({});
     const input = screen.getByLabelText<HTMLInputElement>("足す幅（px）");
 
     fireEvent.change(input, { target: { value: "1440px" } });
     fireEvent.click(screen.getByRole("button", { name: "追加" }));
 
-    expect(onWidthAdd).toHaveBeenCalledExactlyOnceWith(1440);
+    expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(1440);
     expect(input.value).toBe("");
   });
 
-  test("[正常系]もう一覧にある幅を入れたら、足さずにその幅へ切り替える", () => {
+  test("[正常系]もう一覧にある幅を入れても、同じようにその幅を選ぶ", () => {
     renderToolbar({});
 
     fireEvent.change(screen.getByLabelText("足す幅（px）"), {
@@ -113,7 +111,6 @@ describe("Toolbar", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "追加" }));
 
-    expect(onWidthAdd).not.toHaveBeenCalled();
     expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(1000);
   });
 
@@ -124,7 +121,7 @@ describe("Toolbar", () => {
     fireEvent.change(input, { target: { value: "広め" } });
     fireEvent.click(screen.getByRole("button", { name: "追加" }));
 
-    expect(onWidthAdd).not.toHaveBeenCalled();
+    expect(onWidthChange).not.toHaveBeenCalled();
     expect(input.getAttribute("aria-invalid")).toBe("true");
   });
 
