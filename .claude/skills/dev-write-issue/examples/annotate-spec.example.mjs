@@ -1,6 +1,8 @@
 // pnpm --dir infra run annotate-screen points に渡す、論点ごとの指定の見本（架空のサンプルのショップ）。
 // 開く画面は examples/sample-order-form.html。自分の論点では、開く画面を手元で動かした review-canvas の画面
 // （http://localhost:4100 など）や Storybook のストーリーに替え、sel に要素の CSS セレクタを書く
+// キャンバス（4100）を撮るときは、中の Storybook の iframe のオリジンも通す: allow: ["http://localhost:4102"]
+//（コマンドの --allow http://localhost:4102 でも同じ。ブラウザは、開く画面と allow のオリジンの外へは通信しない）
 const SUB =
   "サンプルのショップの注文フォーム（見本の画面）を撮り、赤枠と番号を足したもの";
 

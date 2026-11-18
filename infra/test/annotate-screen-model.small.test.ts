@@ -7,6 +7,9 @@ import {
   missingImageMessage,
   parseFlow,
   pointHtml,
+  pointsAllowedOrigins,
+  redirectDecision,
+  splitAllowArgs,
   toPageUrl,
 } from "../scripts/annotate-screen-model";
 
@@ -160,5 +163,105 @@ describe("parseFlow", () => {
 describe("escapeHtml", () => {
   test('[正常系]& < > " を文字にする', () => {
     expect(escapeHtml('a & <b> "c"')).toBe("a &amp; &lt;b&gt; &quot;c&quot;");
+  });
+});
+
+describe("pointsAllowedOrigins", () => {
+  test("[正常系]キャンバス（4100）を撮るとき、許した Storybook（4102）のオリジンも通し、ほかのポートは止める", () => {
+    const origins = pointsAllowedOrigins(
+      "http://localhost:4100/?branch=main",
+      [
+        { allow: ["http://localhost:4102"] },
+        { url: "http://localhost:4100/x" },
+      ],
+      [],
+    );
+
+    expect(
+      isAllowedUrl("http://localhost:4102/sb/main/iframe.html", origins),
+    ).toBe(true);
+    expect(isAllowedUrl("http://localhost:4100/api/threads", origins)).toBe(
+      true,
+    );
+    expect(isAllowedUrl("http://localhost:4101/api/threads", origins)).toBe(
+      false,
+    );
+  });
+
+  test("[正常系]CLI の --allow のオリジンも通す", () => {
+    expect([
+      ...pointsAllowedOrigins(
+        "file:///work/a.html",
+        [],
+        ["http://localhost:4102"],
+      ),
+    ]).toStrictEqual(["http://localhost:4102"]);
+  });
+
+  test("[異常系]読めないオリジンは、直し方つきで止める", () => {
+    expect(() =>
+      pointsAllowedOrigins("http://localhost:4100/", [{ allow: ["4102"] }], []),
+    ).toThrow(
+      /通すオリジンが読めません: 4102。http:\/\/localhost:4102 のように/,
+    );
+  });
+});
+
+describe("splitAllowArgs", () => {
+  test("[正常系]--allow <オリジン> と --allow=<オリジン> を抜き出し、残りの引数の順を保つ", () => {
+    expect(
+      splitAllowArgs([
+        "points",
+        "--allow",
+        "http://localhost:4102",
+        "http://localhost:4100/",
+        "/out",
+        "--allow=http://127.0.0.1:4102",
+        "/spec.mjs",
+      ]),
+    ).toStrictEqual({
+      allow: ["http://localhost:4102", "http://127.0.0.1:4102"],
+      rest: ["points", "http://localhost:4100/", "/out", "/spec.mjs"],
+    });
+  });
+
+  test("[異常系]--allow の後ろが無ければ、直し方つきで止める", () => {
+    expect(() => splitAllowArgs(["points", "--allow"])).toThrow(
+      /--allow の後ろに/,
+    );
+  });
+});
+
+describe("redirectDecision", () => {
+  const origins = new Set(["http://localhost:4100", "http://localhost:4102"]);
+  const from = "http://localhost:4100/login";
+
+  test.each([
+    ["3xx でない応答", { status: 200, location: undefined }],
+    ["Location の無い 304", { status: 304, location: undefined }],
+    ["同じオリジンへの相対の転送", { status: 302, location: "/home" }],
+    [
+      "許した Storybook のオリジンへの転送",
+      { status: 301, location: "http://localhost:4102/sb/main/" },
+    ],
+  ])("[正常系]%s は返す", (_, response) => {
+    expect(redirectDecision(response, from, origins)).toBe("fulfill");
+  });
+
+  test.each([
+    [
+      "外のオリジンへの 302",
+      { status: 302, location: "https://attacker.example.com/collect" },
+    ],
+    [
+      "スキームを省いた外への 307",
+      { status: 307, location: "//attacker.example.com/" },
+    ],
+    [
+      "許していないポートへの 308",
+      { status: 308, location: "http://localhost:4101/" },
+    ],
+  ])("[異常系]%s は止める", (_, response) => {
+    expect(redirectDecision(response, from, origins)).toBe("abort");
   });
 });

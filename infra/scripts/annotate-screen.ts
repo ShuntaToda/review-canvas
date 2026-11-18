@@ -3,14 +3,16 @@ import * as path from "path";
 import { pathToFileURL } from "url";
 import type { BrowserContext } from "playwright";
 import {
-  allowedOriginsOf,
   flowHtml,
   isAllowedUrl,
   type Mark,
   missingImageMessage,
   parseFlow,
   pointHtml,
+  pointsAllowedOrigins,
   type PointSpec,
+  redirectDecision,
+  splitAllowArgs,
   toPageUrl,
 } from "./annotate-screen-model";
 import { browserEnv } from "./story-screenshots";
@@ -23,23 +25,40 @@ import { browserEnv } from "./story-screenshots";
  *   （説明も選択肢も書かなければ、赤枠を付けた画面だけ）
  * - flow: 撮った画面を「見出し → 画面 → 操作の矢印 → 次の画面」と縦につないだ 1 枚にする（PR の「画面の流れ」）
  *
- * ブラウザは、手元のファイルと開く画面のオリジンの外へは通信しない（WebSocket も閉じる）。
+ * ブラウザは、手元のファイルと開く画面のオリジン・許したオリジンの外へは通信しない（転送で外へ出る応答も止め、WebSocket も閉じる）。
  * pnpm --dir infra は infra に移ってから動くので、パスは絶対パスで渡す。
  *
- *   pnpm --dir infra run annotate-screen points <開く URL か HTML のパス> <出力フォルダ> <spec.mjs> [論点の記号]
+ *   pnpm --dir infra run annotate-screen points <開く URL か HTML のパス> <出力フォルダ> <spec.mjs> [論点の記号] [--allow <通すオリジン> …]
+ *   （キャンバスを撮るときは、中の Storybook の iframe のオリジンを --allow http://localhost:4102 のように足す）
  *   pnpm --dir infra run annotate-screen flow <flow.json> <出力の .png>
  */
 
-/** 開く画面のオリジンの外への通信を止める（ページを作る前に張る） */
+/**
+ * 開く画面のオリジン（と、許したオリジン）の外への通信を止める（ページを作る前に張る）。
+ * http(s) の要求は転送を追わずに取り、許した範囲の外へ転送する応答は止める（redirectDecision）
+ */
 const guardNetwork = async (
   context: BrowserContext,
   allowedOrigins: ReadonlySet<string>,
 ): Promise<void> => {
-  await context.route("**/*", (route) =>
-    isAllowedUrl(route.request().url(), allowedOrigins)
-      ? route.continue()
-      : route.abort(),
-  );
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (!isAllowedUrl(url, allowedOrigins)) {
+      await route.abort();
+      return;
+    }
+    if (!/^https?:/.test(url)) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch({ maxRedirects: 0 });
+    const decision = redirectDecision(
+      { status: response.status(), location: response.headers()["location"] },
+      url,
+      allowedOrigins,
+    );
+    await (decision === "abort" ? route.abort() : route.fulfill({ response }));
+  });
   await context.routeWebSocket(/.*/, (socket) => {
     void socket.close();
   });
@@ -47,7 +66,7 @@ const guardNetwork = async (
 
 const USAGE = [
   "使い方:",
-  "  annotate-screen points <開く URL か HTML のパス> <出力フォルダ> <spec.mjs> [論点の記号]",
+  "  annotate-screen points <開く URL か HTML のパス> <出力フォルダ> <spec.mjs> [論点の記号] [--allow <通すオリジン> …]",
   "  annotate-screen flow <flow.json> <出力の .png>",
 ].join("\n");
 
@@ -72,15 +91,13 @@ const runPoints = async (
   outDir: string,
   specPath: string,
   only: string | undefined,
+  allow: ReadonlyArray<string>,
 ): Promise<void> => {
   const specs = await loadSpec(specPath);
   const url = toPageUrl(target, process.cwd());
   fs.mkdirSync(outDir, { recursive: true });
   const { chromium } = await import("playwright");
-  const allowedOrigins = allowedOriginsOf([
-    url,
-    ...specs.flatMap((spec) => (spec.url === undefined ? [] : [spec.url])),
-  ]);
+  const allowedOrigins = pointsAllowedOrigins(url, specs, allow);
   const browser = await chromium.launch({ env: browserEnv(process.env) });
   try {
     for (const spec of specs) {
@@ -247,10 +264,11 @@ const runFlow = async (flowPath: string, outFile: string): Promise<void> => {
 };
 
 const main = async (argv: ReadonlyArray<string>): Promise<void> => {
-  const [command, ...rest] = argv;
-  if (command === "points" && rest.length >= 3) {
+  const { allow, rest: args } = splitAllowArgs(argv);
+  const [command, ...rest] = args;
+  if (command === "points" && rest.length >= 3 && rest.length <= 4) {
     const [target = "", outDir = "", specPath = "", only] = rest;
-    await runPoints(target, outDir, specPath, only);
+    await runPoints(target, outDir, specPath, only, allow);
     return;
   }
   if (command === "flow" && rest.length === 2) {

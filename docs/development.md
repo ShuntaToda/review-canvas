@@ -102,7 +102,7 @@ flowchart LR
 
 - レビュー役は領域ごとに分けてあります（`api-reviewer`・`ui-reviewer`・`infra-reviewer`・`cli-mcp-reviewer`。どれも読むだけ）。コードの変更があるときは、名前・コメント・黙らせ方・文書・公開リポジトリの決まりを、領域をまたぐ `architecture-reviewer` が毎回見ます。文章だけ（Issue・PR 本文の下書き）のときは、文章のレビュー役の「正しさと出典」が公開リポジトリの決まりも見ます。頼み方（読む順番・確かめ方・返し方）は、スキル `dev-multi-perspective-review` の「3. レビュー役への頼み方」が正本です
 - Issue・PR・コメントの下書きは、投稿の前に `node scripts/check-issue-text.mjs <下書き>` を通します（リンクを含む 150 バイト超の塊・@メンション・★が 1 つでない選択肢の行を見つける）。画像は、AI が `【画像を貼る: <絶対パス>】` の印を残して人に渡し、人が GitHub の画面で貼り、AI が `--posted` を付けて貼り残しを確かめます
-- 注記つきの画面と画面の流れの 1 枚は `pnpm --dir infra run annotate-screen`（`points`・`flow`。Playwright は infra の依存。パスは絶対パスで渡す）で作ります。ブラウザは、開く画面のオリジンと手元のファイルの外へ通信しません。見本は `.claude/skills/dev-write-issue/examples/`
+- 注記つきの画面と画面の流れの 1 枚は `pnpm --dir infra run annotate-screen`（`points`・`flow`。Playwright は infra の依存。パスは絶対パスで渡す）で作ります。ブラウザは、開く画面のオリジン・`allow`（`--allow`）で足したオリジン・手元のファイルの外へ通信せず、リダイレクトで外へ出るのも止めます（キャンバスを撮るときは `--allow http://localhost:4102`）。見本は `.claude/skills/dev-write-issue/examples/`
 - 下書き・レビューの記録・画像・レビュー役の worktree は、リポジトリの外の作業フォルダ（既定は `../review-canvas-work/<テーマ>/`）に置き、コミットしません
 - push・PR の作成・Issue への投稿は、人が頼んだときだけ。マージと AWS へ出すのは人がします
 

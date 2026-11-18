@@ -91,11 +91,12 @@ gh issue create --title "[機能] <名前>" --body-file <下書きの .md>
 - 1 枚に入れるもの: 上に「論点 a　論点名」と何を撮ったか、左に画面（論点に関わる要素に赤枠と番号。囲むのは 1〜3 か所）、右に番号ごとの説明（「ここで決めたいのは〜」を太字で。画面に出ないことは番号を付けず「（画面に無い）」）と選択肢（推奨は青い枠の ★）。選ぶと無くなる要素には斜線
 - 表と画像で同じ番号・記号を使う。文章は表にも書き、画像だけに書かない（検索・引用・読み上げができない）
 - 撮るもの: 今の画面があれば最新の main を手元で動かして撮る（`pnpm run build:storybook && pnpm dev`）。部品 1 つならサンプルの Storybook のストーリー。まだ無い画面はモック。状態は撮るときに作る（入力して送る、API の応答をブラウザ側で差し替える）
-- 作り方: `pnpm --dir infra run annotate-screen points`（`infra/scripts/annotate-screen.ts`。Playwright は infra の依存）。論点ごとの指定を書いた `.mjs` を渡す。見本は `examples/annotate-spec.example.mjs`（開く画面は同じフォルダの `sample-order-form.html`。架空のサンプルのショップ）。説明も選択肢も書かなければ、赤枠を付けた画面だけになる（不具合の「今の画面」に使う）。ブラウザは、開く画面のオリジンと手元のファイルの外へは通信しない
+- 作り方: `pnpm --dir infra run annotate-screen points`（`infra/scripts/annotate-screen.ts`。Playwright は infra の依存）。論点ごとの指定を書いた `.mjs` を渡す。見本は `examples/annotate-spec.example.mjs`（開く画面は同じフォルダの `sample-order-form.html`。架空のサンプルのショップ）。説明も選択肢も書かなければ、赤枠を付けた画面だけになる（不具合の「今の画面」に使う）。ブラウザは、開く画面のオリジンと手元のファイルの外へは通信しない（通すオリジンのリダイレクトで外へ出るのも止める）
+- キャンバス（4100）を撮るときは、中の Storybook の iframe のオリジンも通す: コマンドの後ろに `--allow http://localhost:4102`（指定の `.mjs` に `allow: ["http://localhost:4102"]` と書いてもよい）
 
   ```bash
   # pnpm --dir infra は infra に移ってから動くので、パスはすべて絶対パスで渡す
-  pnpm --dir infra run annotate-screen points <開く URL か HTML の絶対パス> <出力フォルダの絶対パス> <指定の .mjs の絶対パス> [論点の記号]
+  pnpm --dir infra run annotate-screen points <開く URL か HTML の絶対パス> <出力フォルダの絶対パス> <指定の .mjs の絶対パス> [論点の記号] [--allow <通すオリジン> …]
   # → <出力フォルダ>/point-<記号>.png
   ```
 

@@ -29,6 +29,11 @@ export type PointSpec = {
   sub?: string;
   /** 開く画面を、この論点だけ変える */
   url?: string;
+  /**
+   * 開く画面のほかに、通信を通すオリジン（例: キャンバスの中の Storybook の iframe は "http://localhost:4102"）。
+   * CLI の --allow <オリジン> と合わせて、全部の論点で通す
+   */
+  allow?: string[];
   /** 状態を作る（入力を消して送る、など） */
   setup?: (page: Page) => Promise<void>;
   /** 切り取る範囲の CSS セレクタ（既定は body） */
@@ -197,3 +202,73 @@ export const missingImageMessage = (
   resolved: string,
 ): string =>
   `flow.json の steps[${index}].image（${image}）が見つかりません: ${resolved}。image は flow.json の置き場からの相対パスか絶対パスで書きます。flow.json を画像と同じフォルダに置き、コマンドには絶対パスで渡してください（pnpm --dir infra は infra に移ってから動く）`;
+
+/**
+ * 許したオリジンへの要求の応答が、そのまま返してよいものか。3xx で Location が許した範囲の外を指すなら止める
+ * （ブラウザに任せて転送を追わせると、許したオリジンを踏み台に外へ出られる）。Location は要求の URL を基に読む
+ */
+export const redirectDecision = (
+  response: { status: number; location: string | undefined },
+  requestUrl: string,
+  allowedOrigins: ReadonlySet<string>,
+): "fulfill" | "abort" => {
+  if (response.status < 300 || response.status > 399) return "fulfill";
+  if (response.location === undefined) return "fulfill";
+  try {
+    const target = new URL(response.location, requestUrl).href;
+    return isAllowedUrl(target, allowedOrigins) ? "fulfill" : "abort";
+  } catch {
+    return "abort";
+  }
+};
+
+/** CLI の引数から --allow <オリジン>（何度でも書ける）を抜き出し、残りの引数と分ける */
+export const splitAllowArgs = (
+  argv: ReadonlyArray<string>,
+): { allow: string[]; rest: string[] } => {
+  const allow: string[] = [];
+  const rest: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index] ?? "";
+    if (arg === "--allow") {
+      const origin = argv[index + 1];
+      if (origin === undefined) {
+        throw new Error(
+          "--allow の後ろに、通すオリジンを書いてください（例: --allow http://localhost:4102）",
+        );
+      }
+      allow.push(origin);
+      index += 1;
+    } else if (arg.startsWith("--allow=")) {
+      allow.push(arg.slice("--allow=".length));
+    } else {
+      rest.push(arg);
+    }
+  }
+  return { allow, rest };
+};
+
+/**
+ * points で通信を通すオリジン: 開く画面（引数と論点ごとの url）と、許したオリジン（論点の allow と CLI の --allow）。
+ * 許したオリジンが http(s) のオリジンとして読めなければ、直し方つきで止める（黙って落とすと、撮った画面が欠ける）
+ */
+export const pointsAllowedOrigins = (
+  pageUrl: string,
+  specs: ReadonlyArray<Pick<PointSpec, "url" | "allow">>,
+  cliAllow: ReadonlyArray<string>,
+): Set<string> => {
+  const allow = [...cliAllow, ...specs.flatMap((spec) => spec.allow ?? [])];
+  const invalid = allow.filter(
+    (origin) => allowedOriginsOf([origin]).size === 0,
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `通すオリジンが読めません: ${invalid.join(" ")}。http://localhost:4102 のように、http(s) のオリジンで書いてください`,
+    );
+  }
+  return allowedOriginsOf([
+    pageUrl,
+    ...specs.flatMap((spec) => (spec.url === undefined ? [] : [spec.url])),
+    ...allow,
+  ]);
+};
