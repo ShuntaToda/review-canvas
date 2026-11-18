@@ -24,6 +24,12 @@ const BUTTON = {
   height: 40,
   text: "注文する",
 };
+const SHOT_WITHOUT_ELEMENT_AT_POINT = {
+  url: "https://sb.example.com/a.png",
+  height: 812,
+  contentHeight: 420,
+  elements: [{ ...BUTTON, y: 600 }],
+};
 const anchorOf = (text: string) =>
   ({
     tag: "button",
@@ -111,8 +117,22 @@ describe("usePendingPlace", () => {
     expect(hook.onScreenChanged).not.toHaveBeenCalled();
   });
 
-  test("[正常系]高さが違えば集めず、高さが同じでも別の要素が手がかりになったら置かずに知らせる", async () => {
-    const taller = setUp();
+  test("[正常系]押した点に主な要素があれば、高さが違っても集め、同じ要素なら置く（フォントの違いで高さだけ変わる）", async () => {
+    const hook = setUp();
+    hook.rerender({ revealed: true, bridgeReady: true });
+    hook.liveHeightRef.current = 640;
+    await advance(LIVE_HEIGHT_WAIT_MS);
+
+    expect(hook.onScreenChanged).not.toHaveBeenCalled();
+    expect(hook.onPlace).toHaveBeenCalledWith(
+      STORY.id,
+      POINT,
+      anchorOf("注文する"),
+    );
+  });
+
+  test("[正常系]押した点に主な要素が無く高さが大きく違えば集めず、主な要素があって別の要素が手がかりになったら置かずに知らせる", async () => {
+    const taller = setUp({ shot: SHOT_WITHOUT_ELEMENT_AT_POINT });
     taller.rerender({ revealed: true, bridgeReady: true });
     taller.liveHeightRef.current = 640;
     await advance(LIVE_HEIGHT_WAIT_MS);
@@ -154,8 +174,8 @@ describe("usePendingPlace", () => {
     );
   });
 
-  test("[正常系]集め直しのとき、待ったあとに届いた高さが違えば、集めずに「画面が変わりました」を知らせる", async () => {
-    const hook = setUp();
+  test("[正常系]集め直しのとき、押した点に主な要素が無く、待ったあとに届いた高さが大きく違えば、集めずに「画面が変わりました」を知らせる", async () => {
+    const hook = setUp({ shot: SHOT_WITHOUT_ELEMENT_AT_POINT });
     await advance(PLACE_WAIT_MS);
     hook.rerender({
       pendingPlace: null,

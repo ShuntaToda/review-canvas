@@ -1,6 +1,7 @@
 import {
   anchorMatchesShot,
   type CapturedElement,
+  hasMainElementAt,
   isWaitingStale,
   nextWaiting,
   refreshesDraft,
@@ -21,24 +22,32 @@ const situation = (
   shot: { height: 812 },
   liveHeight: null,
   baseHeight: 812,
+  mainElementAtPoint: false,
   ...overrides,
 });
 
 describe("sameScreenHeight", () => {
-  test("[正常系]撮ったときの中身の高さがあれば、切り上げる前の高さどうしを比べる（端数 2px までは同じ）", () => {
+  test("[正常系]撮ったときの中身の高さがあれば、切り上げる前の高さどうしを比べる（フォントの違いの分、8px までは同じ）", () => {
     const shot = { height: 812, contentHeight: 420 };
     expect(sameScreenHeight(shot, 420, 812)).toBe(true);
-    expect(sameScreenHeight(shot, 422, 812)).toBe(true);
-    expect(sameScreenHeight(shot, 418, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 428, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 412, 812)).toBe(true);
     // 画面の最低の高さより短い画面どうしでも、違いが分かる
-    expect(sameScreenHeight(shot, 423, 812)).toBe(false);
+    expect(sameScreenHeight(shot, 429, 812)).toBe(false);
     expect(sameScreenHeight(shot, 640, 812)).toBe(false);
+  });
+
+  test("[正常系]長い画面は、高さの 1% までを同じとみなす", () => {
+    const shot = { height: 3000, contentHeight: 3000 };
+    expect(sameScreenHeight(shot, 3030, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 2970, 812)).toBe(true);
+    expect(sameScreenHeight(shot, 3031, 812)).toBe(false);
   });
 
   test("[正常系]撮ったときの中身の高さが無い（前の版で撮った）ときは、画面の最低の高さまで切り上げた高さで比べる", () => {
     expect(sameScreenHeight({ height: 812 }, 420, 812)).toBe(true);
     expect(sameScreenHeight({ height: 812 }, 640, 812)).toBe(true);
-    expect(sameScreenHeight({ height: 812 }, 815, 812)).toBe(false);
+    expect(sameScreenHeight({ height: 812 }, 821, 812)).toBe(false);
     expect(sameScreenHeight({ height: 1200 }, 1201, 812)).toBe(true);
   });
 });
@@ -90,6 +99,78 @@ describe("pendingPlaceStep", () => {
         }),
       ),
     ).toBe("ask-again");
+  });
+
+  describe("フォントの違いだけでは知らせを出さない", () => {
+    const live = { revealed: true, bridgeReady: true, settled: true };
+    const button: ShotElement = {
+      tag: "button",
+      x: 24,
+      y: 346,
+      width: 89,
+      height: 34,
+      text: "注文する",
+    };
+    const point = { x: 68, y: 363 };
+    const captured = (text: string): CapturedElement => ({
+      tag: "button",
+      role: "button",
+      text,
+      box: { x: 24, y: 349, width: 92, height: 36 },
+    });
+    const shot = { height: 1275, contentHeight: 1275 };
+
+    test("[正常系]高さが 6px 違っても、押した点の主な要素が同じなら置ける", () => {
+      const mainElementAtPoint = hasMainElementAt([button], point);
+
+      expect(mainElementAtPoint).toBe(true);
+      expect(
+        pendingPlaceStep(
+          situation({ ...live, shot, liveHeight: 1281, mainElementAtPoint }),
+        ),
+      ).toBe("capture");
+      expect(anchorMatchesShot([button], point, captured("注文する"))).toBe(
+        true,
+      );
+    });
+
+    test("[正常系]押した点に主な要素があれば、高さが大きく違っても高さでは決めず、集めた手がかりが違うときに知らせる", () => {
+      expect(
+        pendingPlaceStep(
+          situation({
+            ...live,
+            shot,
+            liveHeight: 1425,
+            mainElementAtPoint: hasMainElementAt([button], point),
+          }),
+        ),
+      ).toBe("capture");
+      expect(anchorMatchesShot([button], point, captured("キャンセル"))).toBe(
+        false,
+      );
+    });
+
+    test.each([
+      ["主な要素を残していない画像", undefined],
+      ["押した点に主な要素が無い", [{ ...button, y: 600 }]],
+    ])(
+      "[正常系]%s は高さで決める。6px の違い（1281px）は置け、150px の違いは知らせる",
+      (_, elements) => {
+        const mainElementAtPoint = hasMainElementAt(elements, point);
+
+        expect(mainElementAtPoint).toBe(false);
+        expect(
+          pendingPlaceStep(
+            situation({ ...live, shot, liveHeight: 1281, mainElementAtPoint }),
+          ),
+        ).toBe("capture");
+        expect(
+          pendingPlaceStep(
+            situation({ ...live, shot, liveHeight: 1425, mainElementAtPoint }),
+          ),
+        ).toBe("ask-again");
+      },
+    );
   });
 
   test("[正常系]待っても高さが届かない・画像が無くなったときは、比べずに手がかりを集める", () => {

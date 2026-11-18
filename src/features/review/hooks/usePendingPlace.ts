@@ -6,7 +6,11 @@ import {
   useState,
 } from "react";
 import type { FrameBridge } from "../bridge/frame-bridge";
-import { anchorMatchesShot, pendingPlaceStep } from "../model/pending-place";
+import {
+  anchorMatchesShot,
+  hasMainElementAt,
+  pendingPlaceStep,
+} from "../model/pending-place";
 import type { ShotView } from "../model/story-shots";
 import type { CommentAnchor } from "../model/threads";
 
@@ -118,6 +122,10 @@ export const usePendingPlace = ({
               },
         liveHeight: liveHeightRef.current,
         baseHeight,
+        mainElementAtPoint: hasMainElementAt(
+          latest.current.shot?.elements,
+          point,
+        ),
       });
     /** 動く画面で手がかりを集め、画像でクリックした位置の要素と同じなら置く（違えば置かずに知らせる） */
     const capture = (bridge: Pick<FrameBridge, "capture">) =>

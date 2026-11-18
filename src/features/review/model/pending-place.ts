@@ -8,8 +8,11 @@ import type { ShotElement } from "./story-shots";
  * ずれていると、クリックした所と別の要素が手がかりになるので、そのときは置かずに、動く画面でクリックし直してもらう
  */
 
-/** 高さの測り方の端数（px） */
-const HEIGHT_TOLERANCE = 2;
+/**
+ * 同じ中身とみなす高さの差。画像を撮った環境（CI の Linux）と見ている端末とでは、フォントの違いで行の高さが少し変わり、
+ * 長い画面ほど差が積もる。そのため差は高さに比例させ（1%）、短い画面でも 8px までは同じとみなす
+ */
+const heightTolerance = (height: number): number => Math.max(8, height * 0.01);
 
 /** 位置の測り方の端数（px） */
 const POSITION_TOLERANCE = 2;
@@ -18,7 +21,7 @@ const POSITION_TOLERANCE = 2;
 export type ShotHeights = { height: number; contentHeight?: number };
 
 /**
- * 画像と動く画面で、中身の高さが同じか（違えば、中身がずれているとみなす）。
+ * 画像と動く画面で、中身の高さがほぼ同じか（大きく違えば、中身がずれているとみなす）。
  * 撮ったときの中身の高さがあれば、それと動く画面で測った高さを比べる。
  * 無ければ、画像の高さと、動く画面の高さを画面の最低の高さ（baseHeight）まで切り上げたものを比べる（短い画面どうしの違いは分からない）
  */
@@ -29,8 +32,9 @@ export const sameScreenHeight = (
 ): boolean =>
   shot.contentHeight === undefined
     ? Math.abs(shot.height - clampFrameHeight(liveHeight, baseHeight)) <=
-      HEIGHT_TOLERANCE
-    : Math.abs(shot.contentHeight - liveHeight) <= HEIGHT_TOLERANCE;
+      heightTolerance(shot.height)
+    : Math.abs(shot.contentHeight - liveHeight) <=
+      heightTolerance(shot.contentHeight);
 
 export type PendingPlaceSituation = {
   /** iframe の描画・play 関数が終わり、画像の上に出した */
@@ -49,6 +53,11 @@ export type PendingPlaceSituation = {
   liveHeight: number | null;
   /** 画面の最低の高さ */
   baseHeight: number;
+  /**
+   * 画像を撮ったときの主な要素が、押した点の下にある（hasMainElementAt）。
+   * あるときは、集めた手がかりをその要素と比べて決めるので（anchorMatchesShot）、高さは比べない
+   */
+  mainElementAtPoint: boolean;
 };
 
 export type PendingPlaceStep =
@@ -57,8 +66,10 @@ export type PendingPlaceStep =
 /**
  * 待っているコメント（と、待ちきって手がかりなしで置いたあとの集め直し）をどうするか。
  * - settle: 動く画面は出た。高さの知らせが届くのを少し待ってから、もう一度決める（待つ前に届いていた高さは、描画の途中のものかもしれない）
- * - capture: 動く画面で、クリックした位置の要素の手がかりを集める（待っても高さが届かないときも集める）
- * - ask-again: 中身がずれているので置かず、クリックし直してもらう
+ * - capture: 動く画面で、クリックした位置の要素の手がかりを集める（待っても高さが届かないときも集める）。
+ *   押した点の下に主な要素があった画像では、高さを見ずに集め、集めた手がかりとその要素を比べて決める
+ *   （高さはフォントの違いだけでも変わるので、要素で確かめられるときは要素だけで決める）
+ * - ask-again: 要素で確かめられず（主な要素を残していない画像・押した点に主な要素が無い）、高さが大きく違うので置かず、クリックし直してもらう
  * - place-without-anchor: 手がかりを集められない（橋渡しが無い・読み込めない）ので、手がかりなしで置く
  * - wait: まだ待つ（待ちきったら、呼ぶ側が手がかりなしで置く）
  */
@@ -71,10 +82,12 @@ export const pendingPlaceStep = ({
   shot,
   liveHeight,
   baseHeight,
+  mainElementAtPoint,
 }: PendingPlaceSituation): PendingPlaceStep => {
   if (revealed && bridgeReady) {
     if (!settled) return "settle";
-    return shot === null ||
+    return mainElementAtPoint ||
+      shot === null ||
       liveHeight === null ||
       sameScreenHeight(shot, liveHeight, baseHeight)
       ? "capture"
@@ -130,6 +143,13 @@ const containsPoint = (
   point.y >= y - POSITION_TOLERANCE &&
   point.y <= y + height + POSITION_TOLERANCE;
 
+/** 画像を撮ったときの主な要素が、その位置にあるか（主な要素を残していない画像では false） */
+export const hasMainElementAt = (
+  elements: ReadonlyArray<ShotElement> | undefined,
+  point: { x: number; y: number },
+): boolean =>
+  elements?.some((element) => containsPoint(element, point)) ?? false;
+
 /** 文字を比べる形にする（空白と、切ったときの「…」を除く） */
 const comparable = (text: string | null): string =>
   (text ?? "").replace(/[\s…]+/g, "");
@@ -144,7 +164,7 @@ const sameText = (shotText: string, liveText: string | null): boolean => {
 };
 
 /**
- * 動く画面で集めた手がかりが、画像でクリックした位置の要素と同じか（違えば、高さが同じでも中身がずれている）。
+ * 動く画面で集めた手がかりが、画像でクリックした位置の要素と同じか（違えば、中身がずれている）。
  * 画像を撮った環境と見ている端末とでは、フォントの違いで要素の大きさが少し変わるので、矩形そのものは比べず、
  * 「クリックした位置にある要素が、同じ種類・同じ文字か」を見る。
  * - 手がかりが主な要素（押せる要素・見出し）なら、画像でその位置にあった主な要素のどれかと、タグと文字が合うこと
