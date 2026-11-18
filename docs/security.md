@@ -28,7 +28,8 @@ flowchart LR
 - API の関数 URL は CloudFront（OAC）からだけ呼べます。ログインの確かめは API が Auth0 のアクセストークンで行います。画面・Storybook のファイルそのものはログインなしで読めます（中身はモックのデータだけ。URL を関係者の外に渡さない）
 - 画面の配信（画面と `/api/*`）の応答には、`Content-Security-Policy: frame-ancestors 'none'`・`X-Frame-Options: DENY`（ほかのページの iframe に入れさせない）・`Strict-Transport-Security`（1 年）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin` を付けます。Storybook 用の配信はキャンバスの iframe に入るので付けません
 - 画面は Auth0 の値をビルドに埋め込まず、デプロイのときに置く `/app-config.json` から読みます
-- 名前にハッシュを持つファイル（画面の `/assets/` と、Storybook の配信の `/sb/<ブランチのキー>/<id>/assets/`）は `Cache-Control: public, max-age=31536000, immutable` で長く（1 年）キャッシュさせ、ほか（`index.html`・Storybook の `iframe.html`・`index.json`・`sb-manager/`・`meta.json`・`app-config.json` 等）は `no-cache` で使うたびに確かめ直させます（Storybook を入れ替えた後に、古い `iframe.html` が消えたファイルを読みに行かないように）。Storybook の分は置くスクリプトが付けます
+- 名前にハッシュを持つファイル（画面の `/assets/` と、Storybook の配信の `/sb/<ブランチのキー>/<id>/assets/`・置くときに撮った画像 `/sb/<ブランチのキー>/<id>/review-canvas-shots/`）は `Cache-Control: public, max-age=31536000, immutable` で長く（1 年）キャッシュさせ、ほか（`index.html`・Storybook の `iframe.html`・`index.json`・`sb-manager/`・`meta.json`・`app-config.json` 等）は `no-cache` で使うたびに確かめ直させます（Storybook を入れ替えた後に、古い `iframe.html` が消えたファイルを読みに行かないように）。Storybook の分は置くスクリプトが付けます
+- 置くときに撮るストーリーの画像は、Storybook と同じ置き場に置くので、Storybook と同じくログインなしで読めます（写るのはモックのデータだけ、という前提は Storybook と同じ）。画像の目録（`review-canvas-shots.json`）は置くブランチが書けるので、キャンバスは形を確かめ、画像の場所は置き場の直下の `.png` だけ（`..`・別のオリジンは捨てる）、幅・高さは上限までの整数だけを受け付けます。置くスクリプトも、目録に載っている・リンクでない・中身が PNG のファイルだけを置きます。ワークフローでは、置くブランチのストーリーをブラウザで動かす撮影を、AWS の資格情報を持たないジョブで行います
 - 出してはいけないアカウント（`protectedAccountIds`）へは、アプリから組み立てる経路で出し先のアカウントを確かめて止めます（[deploy.md](deploy.md)）。組み立て済みの `cdk.out` を `cdk deploy --app cdk.out` で渡す経路は確かめないので使わないでください
 - WAF・独自ドメイン・アクセスログ・アラームは持ちません。`cdk destroy` でバケットごと消え、コメントのテーブルだけ残ります（要らなければ手で消す）。消した後に出し直すと新しいテーブルを作るため、残したテーブルのコメントは画面に出ません（出し直しても読めるのは新しいテーブルの分だけ）
 
