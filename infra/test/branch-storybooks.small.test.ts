@@ -7,6 +7,7 @@ import {
   branchesFromPrefixes,
   buildBranchMeta,
   parseArgs,
+  shotDirs,
   parseStorybookConfig,
   planPublish,
   planUnpublish,
@@ -660,6 +661,24 @@ describe("parseArgs", () => {
       skipBuild: true,
       skipScreenshots: true,
     });
+    // --shots-root は、別の根の画像と目録を置く（撮らない）
+    expect(
+      parseArgs(["publish", "--shots-root", "/work/shots"], {}).command,
+    ).toStrictEqual({
+      kind: "publish",
+      branch: undefined,
+      commit: undefined,
+      skipBuild: false,
+      skipScreenshots: true,
+      shotsRoot: "/work/shots",
+    });
+    expect(
+      shotDirs(
+        { shop: "/work/host/apps/shop/storybook-static" },
+        "/work/host",
+        "/work/shots",
+      ),
+    ).toStrictEqual({ shop: "/work/shots/apps/shop/storybook-static" });
     expect(
       parseArgs(["screenshots", "--repo-root", "/work/host"], {}),
     ).toMatchObject({

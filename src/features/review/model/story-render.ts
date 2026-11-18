@@ -22,7 +22,8 @@ export const isStoryRenderSettled = (phase: unknown): boolean =>
  */
 export const STORY_SETTLE_TIMEOUT_MS = 15_000;
 
-type StorybookWindow = {
+/** Storybook のプレビューを持つ window の、描画の様子を読む所（撮影のスクリプトも同じ所を読む） */
+export type StorybookWindow = {
   __STORYBOOK_PREVIEW__?: {
     currentRender?: { phase?: unknown; story?: { playFunction?: unknown } };
   };

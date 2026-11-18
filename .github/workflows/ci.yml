@@ -156,6 +156,21 @@ jobs:
           pnpm run build:storybook
           test -s examples/sample-storybook/storybook-static/index.json
 
+      # 置くときと同じ手順で、サンプルの全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）
+      - name: Screenshots
+        timeout-minutes: 10
+        run: |
+          pnpm --dir infra exec playwright install --with-deps --only-shell chromium
+          pnpm --dir infra run screenshots
+          out=examples/sample-storybook/storybook-static
+          stories="$(jq '[.entries[] | select(.type == "story")] | length' "$out/index.json")"
+          widths="$(jq '.storybooks[0].widths | unique | length' review-canvas.config.json)"
+          shots="$(jq '.shots | length' "$out/review-canvas-shots.json")"
+          if [ "$shots" -ne $((stories * widths)) ]; then
+            echo "::error::スクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
+            exit 1
+          fi
+
       # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない
       - name: Synth
         env:

@@ -4,7 +4,10 @@ import * as http from "http";
 import type { AddressInfo } from "net";
 import * as os from "os";
 import * as path from "path";
-import { SETTLED_STORY_PHASES } from "../../src/features/review/model/story-render";
+import {
+  SETTLED_STORY_PHASES,
+  type StorybookWindow,
+} from "../../src/features/review/model/story-render";
 import {
   isShotPath,
   MAX_SHOT_HEIGHT,
@@ -28,11 +31,21 @@ import {
  * - 画像と目録は、ビルド結果の中（<outDir>/review-canvas-shots/・<outDir>/review-canvas-shots.json）に書く。
  *   Storybook をビルドし直すと outDir ごと作り直されるので、古いビルドの画像は残らない
  *
- * ストーリーのコードをブラウザで動かすので、ワークフローでは AWS の資格情報を持たないジョブ（build）で撮る（docs/security.md）
+ * ストーリーのコードをブラウザで動かすので、ワークフローでは既定のブランチも含めて、AWS の資格情報を持たないジョブ（build）で撮る。
+ * ブラウザには AWS・GitHub Actions の環境変数を渡さず、配っている 127.0.0.1 の外への通信は止める（docs/security.md）
  */
 
 /** ストーリー 1 つの描画・play 関数の終わりを待つ上限(ms)。超えたら、そのストーリーは撮らずに次へ進む */
 const STORY_TIMEOUT_MS = 30_000;
+
+/**
+ * Storybook 1 つ分を撮る時間の上限(ms)。超えたら残りは撮らずに、撮れた分だけの目録を書く。
+ * ワークフローの Screenshots の step の timeout-minutes（.github/workflows/publish.yml）より短くして、step が落ちる前に終える
+ */
+const CAPTURE_TIME_LIMIT_MS = 10 * 60_000;
+
+/** 最初のこの枚数が全部時間切れなら、残りも撮れないとみなして打ち切る（1 枚ずつ 30 秒待ち続けない） */
+const PROBE_SHOTS = 8;
 
 /** 並べて撮る数の上限（ブラウザのページの数。CPU の数までで、多すぎて描画が時間切れにならない程度） */
 const MAX_CONCURRENCY = 4;
@@ -145,7 +158,12 @@ export const resolveServedFile = (
   if (file !== root && !file.startsWith(`${root}${path.sep}`)) return null;
   const target = decoded.endsWith("/") ? path.join(file, "index.html") : file;
   try {
-    return fs.statSync(target).isFile() ? target : null;
+    if (!fs.statSync(target).isFile()) return null;
+    // ビルド結果の中のリンクが、外のファイルを指していたら配らない
+    const realRoot = fs.realpathSync(root);
+    return fs.realpathSync(target).startsWith(`${realRoot}${path.sep}`)
+      ? target
+      : null;
   } catch {
     return null;
   }
@@ -216,12 +234,72 @@ export const withThumb = (shot: StoryShot): StoryShot => ({
   thumb: shot.path.replace(/\.png$/, "-thumb.png"),
 });
 
-/** プレビューの中で読む、Storybook の描画の様子（story-render.ts の StorybookWindow と同じ所を読む） */
-type PreviewWindow = {
-  __STORYBOOK_PREVIEW__?: {
-    currentRender?: { phase?: unknown; story?: { playFunction?: unknown } };
+/** ブラウザに渡す環境変数（ストーリーのコードを動かすので、AWS・GitHub Actions の値は渡さない） */
+export const browserEnv = (
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).flatMap(([name, value]) =>
+      value === undefined || /^(AWS_|ACTIONS_)/.test(name)
+        ? []
+        : [[name, value]],
+    ),
+  );
+
+/** ブラウザからの通信を通すか（配っているオリジンと、通信でないもの（data:・blob: など）だけ） */
+export const isAllowedRequest = (url: string, origin: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:", "ws:", "wss:"].includes(parsed.protocol)) {
+      return true;
+    }
+    return parsed.origin === origin;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * 撮るのを途中でやめるかを決める。
+ * - 全体の時間の上限（limitMs）を超えたら、残りは撮らない
+ * - 最初の probeCount 枚が全部時間切れなら、残りも撮らない（Storybook の描画の終わりを読めていない）
+ */
+export const createCaptureGuard = ({
+  limitMs,
+  probeCount,
+  now,
+}: {
+  limitMs: number;
+  probeCount: number;
+  now: () => number;
+}): {
+  /** 次の 1 枚を撮らない理由（撮ってよければ null） */
+  stopReason: () => string | null;
+  /** 1 枚の結果を知らせる */
+  record: (outcome: "done" | "timeout") => void;
+} => {
+  const startedAt = now();
+  let finished = 0;
+  let timeouts = 0;
+  return {
+    stopReason: () => {
+      if (finished >= probeCount && timeouts === finished) {
+        return `最初の ${String(probeCount)} 枚がすべて時間切れだったので、残りは撮りません`;
+      }
+      if (now() - startedAt >= limitMs) {
+        return `撮影の時間の上限（${String(Math.round(limitMs / 60_000))} 分）を超えたので、残りは撮りません`;
+      }
+      return null;
+    },
+    record: (outcome) => {
+      finished += 1;
+      if (outcome === "timeout") timeouts += 1;
+    },
   };
 };
+
+const isTimeout = (error: unknown): boolean =>
+  error instanceof Error && error.name === "TimeoutError";
 
 export type CaptureResult = {
   manifest: ShotsManifest;
@@ -262,12 +340,23 @@ export const captureStorybook = async ({
   const plan = planShots(storyIds, widths);
   // 置くスクリプトのほかの操作（消す・一覧）では Playwright を読まない
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ env: browserEnv(process.env) });
   const server = await serveDirectory(dir);
+  const guard = createCaptureGuard({
+    limitMs: CAPTURE_TIME_LIMIT_MS,
+    probeCount: PROBE_SHOTS,
+    now: Date.now,
+  });
   const playFunctions: Record<string, boolean> = {};
   try {
     fs.mkdirSync(shotsDir, { recursive: true });
     const context = await browser.newContext({ deviceScaleFactor: 1 });
+    // 外への通信は止める（ストーリーのコードが外へ送らないように。外の画像・フォントの有無で絵も変わらない）
+    await context.route("**/*", (route) =>
+      isAllowedRequest(route.request().url(), server.origin)
+        ? route.continue()
+        : route.abort(),
+    );
     const concurrency = Math.min(MAX_CONCURRENCY, os.availableParallelism());
     const pages = await Promise.all(
       Array.from({ length: Math.min(concurrency, plan.length) }, () =>
@@ -300,70 +389,81 @@ export const captureStorybook = async ({
       );
       return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
     };
-    const settled = await runPool(
-      plan,
-      concurrency,
-      async ({ storyId, width }, slot) => {
-        const page = pages[slot];
-        if (page === undefined) throw new Error("撮るページがありません");
-        await page.setViewportSize({ width, height: baseHeight });
-        await page.goto(
-          `${server.origin}/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`,
-          { waitUntil: "load", timeout: STORY_TIMEOUT_MS },
-        );
-        // 描画と play 関数が終わるまで待つ（ブラウザの中で動く関数。外の値は引数で渡す）
-        await page.waitForFunction(
-          (phases: string[]) => {
-            const render = (window as PreviewWindow).__STORYBOOK_PREVIEW__
-              ?.currentRender;
-            return (
-              typeof render?.phase === "string" && phases.includes(render.phase)
-            );
-          },
-          [...SETTLED_STORY_PHASES],
-          { timeout: STORY_TIMEOUT_MS },
-        );
-        const state = await page.evaluate(async () => {
-          // Web フォントの読み込みを待つ（待たないと、代わりのフォントで撮れる）
-          await document.fonts.ready;
-          const render = (window as PreviewWindow).__STORYBOOK_PREVIEW__
+    const shoot = async (
+      { storyId, width }: { storyId: string; width: number },
+      slot: number,
+    ): Promise<StoryShot> => {
+      const page = pages[slot];
+      if (page === undefined) throw new Error("撮るページがありません");
+      await page.setViewportSize({ width, height: baseHeight });
+      await page.goto(
+        `${server.origin}/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`,
+        { waitUntil: "load", timeout: STORY_TIMEOUT_MS },
+      );
+      // 描画と play 関数が終わるまで待つ（ブラウザの中で動く関数。外の値は引数で渡す）
+      await page.waitForFunction(
+        (phases: string[]) => {
+          const render = (window as StorybookWindow).__STORYBOOK_PREVIEW__
             ?.currentRender;
-          return {
-            phase: typeof render?.phase === "string" ? render.phase : null,
-            hasPlayFunction: typeof render?.story?.playFunction === "function",
-            height: document.documentElement.scrollHeight,
-          };
-        });
-        playFunctions[storyId] = state.hasPlayFunction;
-        const png = await page.screenshot({
-          type: "png",
-          fullPage: true,
-          animations: "disabled",
-          // 長すぎる画面は上限で切る（キャンバスの枠も同じ高さで切る）
-          ...(state.height > MAX_SHOT_HEIGHT
-            ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } }
-            : {}),
-        });
-        let shot = toShot(storyId, width, png);
-        fs.writeFileSync(path.join(dir, shot.path), png);
-        try {
-          const withSmall = withThumb(shot);
-          const small = await shrink(slot, png);
-          if (withSmall.thumb !== undefined && readPngSize(small) !== null) {
-            fs.writeFileSync(path.join(dir, withSmall.thumb), small);
-            shot = withSmall;
-          }
-        } catch {
-          // 縮小が作れなくても、元の画像は置く（キャンバスは引いたときも元の画像を出す）
-        }
-        if (state.phase === "errored" || state.phase === "aborted") {
-          log(
-            `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
+          return (
+            typeof render?.phase === "string" && phases.includes(render.phase)
           );
+        },
+        [...SETTLED_STORY_PHASES],
+        { timeout: STORY_TIMEOUT_MS },
+      );
+      const state = await page.evaluate(async () => {
+        // Web フォントの読み込みを待つ（待たないと、代わりのフォントで撮れる）
+        await document.fonts.ready;
+        const render = (window as StorybookWindow).__STORYBOOK_PREVIEW__
+          ?.currentRender;
+        return {
+          phase: typeof render?.phase === "string" ? render.phase : null,
+          hasPlayFunction: typeof render?.story?.playFunction === "function",
+          height: document.documentElement.scrollHeight,
+        };
+      });
+      playFunctions[storyId] = state.hasPlayFunction;
+      const png = await page.screenshot({
+        type: "png",
+        fullPage: true,
+        animations: "disabled",
+        // 長すぎる画面は上限で切る（キャンバスの枠も同じ高さで切る）
+        ...(state.height > MAX_SHOT_HEIGHT
+          ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } }
+          : {}),
+      });
+      let shot = toShot(storyId, width, png);
+      fs.writeFileSync(path.join(dir, shot.path), png);
+      try {
+        const withSmall = withThumb(shot);
+        const small = await shrink(slot, png);
+        if (withSmall.thumb !== undefined && readPngSize(small) !== null) {
+          fs.writeFileSync(path.join(dir, withSmall.thumb), small);
+          shot = withSmall;
         }
+      } catch {
+        // 縮小が作れなくても、元の画像は置く（キャンバスは引いたときも元の画像を出す）
+      }
+      if (state.phase === "errored" || state.phase === "aborted") {
+        log(
+          `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
+        );
+      }
+      return shot;
+    };
+    const settled = await runPool(plan, concurrency, async (item, slot) => {
+      const stop = guard.stopReason();
+      if (stop !== null) throw new Error(stop);
+      try {
+        const shot = await shoot(item, slot);
+        guard.record("done");
         return shot;
-      },
-    );
+      } catch (error) {
+        guard.record(isTimeout(error) ? "timeout" : "done");
+        throw error;
+      }
+    });
     await context.close();
 
     const shots: StoryShot[] = [];
@@ -393,18 +493,20 @@ export const captureStorybook = async ({
   }
 };
 
-/** 置くための画像（Storybook 1 つ分）。dir は画像のあるディレクトリ（1 枚も無ければ null） */
+/** 置くための画像（Storybook 1 つ分）。dir は置く画像だけを写したディレクトリ（1 枚も無ければ null） */
 export type StagedShots = { manifestFile: string; dir: string | null };
 
 /**
- * ビルド結果の中の目録を確かめ直し、置くための目録を outDir に書く（ビルド結果そのものは書き換えない）。
- * 成果物として受け取ったビルド結果は信頼しないので、形の合う行・review-canvas-shots/ の直下にある本物のファイル（リンクでない PNG）だけを残す。
+ * 目録を確かめ直し、置くための目録と画像を outDir に書く（読む元は書き換えない）。
+ * 成果物として受け取ったものは信頼しないので、形の合う行・review-canvas-shots/ の直下にある本物のファイル（リンクでない PNG）だけを残し、
+ * 残した行の画像（元の画像と縮小）だけを outDir/<id>/review-canvas-shots/ に写す。置くのはここに写したものだけ（目録に無いファイルは置かない）。
  * 目録が無い・読めないときは空の目録を書く（前に置いた古い画像を、キャンバスが読みに行かないように）
  */
 export const stageShots = ({
   dirs,
   outDir,
 }: {
+  /** Storybook ごとの、目録と画像を読む場所（ビルド結果と同じ形） */
   dirs: Record<string, string>;
   outDir: string;
 }): Record<string, StagedShots> =>
@@ -426,14 +528,23 @@ export const stageShots = ({
           ),
         playFunctions: found?.playFunctions ?? {},
       };
-      const manifestFile = path.join(outDir, source, SHOTS_MANIFEST_FILE);
-      fs.mkdirSync(path.dirname(manifestFile), { recursive: true });
+      const stagedDir = path.join(outDir, source);
+      const manifestFile = path.join(stagedDir, SHOTS_MANIFEST_FILE);
+      fs.mkdirSync(path.join(stagedDir, SHOTS_DIR), { recursive: true });
       fs.writeFileSync(manifestFile, `${JSON.stringify(manifest)}\n`);
+      for (const { path: file, thumb } of manifest.shots) {
+        for (const name of thumb === undefined ? [file] : [file, thumb]) {
+          fs.copyFileSync(path.join(dir, name), path.join(stagedDir, name));
+        }
+      }
       return [
         source,
         {
           manifestFile,
-          dir: manifest.shots.length === 0 ? null : path.join(dir, SHOTS_DIR),
+          dir:
+            manifest.shots.length === 0
+              ? null
+              : path.join(stagedDir, SHOTS_DIR),
         },
       ];
     }),

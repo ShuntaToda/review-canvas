@@ -3,6 +3,9 @@ import * as os from "os";
 import * as path from "path";
 import { afterAll, describe, expect, test } from "vitest";
 import {
+  browserEnv,
+  createCaptureGuard,
+  isAllowedRequest,
   planShots,
   readPngSize,
   readStoryIds,
@@ -125,6 +128,22 @@ describe("resolveServedFile・serveDirectory", () => {
     expect(resolveServedFile(dir, "/%E0%A4%A")).toBeNull();
   });
 
+  test("ビルド結果の中のリンクが外のファイルを指していたら返さない（中を指すリンクは返す）", () => {
+    fs.symlinkSync(
+      path.join(root, "secret.txt"),
+      path.join(dir, "assets", "out.txt"),
+    );
+    fs.symlinkSync(
+      path.join(dir, "assets", "a.js"),
+      path.join(dir, "assets", "in.js"),
+    );
+
+    expect(resolveServedFile(dir, "/assets/out.txt")).toBeNull();
+    expect(resolveServedFile(dir, "/assets/in.js")).toBe(
+      path.join(dir, "assets", "in.js"),
+    );
+  });
+
   test("自分の端末の空いているポートで配り、種類を付けて返す", async () => {
     const server = await serveDirectory(dir);
     try {
@@ -139,6 +158,83 @@ describe("resolveServedFile・serveDirectory", () => {
   });
 });
 
+describe("browserEnv・isAllowedRequest", () => {
+  test("ブラウザには AWS・GitHub Actions の環境変数を渡さない（ほかはそのまま）", () => {
+    expect(
+      browserEnv({
+        PATH: "/usr/bin",
+        HOME: "/home/runner",
+        AWS_ACCESS_KEY_ID: "x",
+        AWS_SESSION_TOKEN: "x",
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "x",
+        ACTIONS_RUNTIME_TOKEN: "x",
+        EMPTY: undefined,
+      }),
+    ).toStrictEqual({ PATH: "/usr/bin", HOME: "/home/runner" });
+  });
+
+  test("通すのは、配っているオリジンへの通信と、通信でないもの（data:・blob:）だけ", () => {
+    const origin = "http://127.0.0.1:4000";
+
+    expect(isAllowedRequest(`${origin}/iframe.html?id=a--b`, origin)).toBe(
+      true,
+    );
+    expect(isAllowedRequest("data:image/png;base64,AAAA", origin)).toBe(true);
+    expect(isAllowedRequest(`blob:${origin}/0123`, origin)).toBe(true);
+    expect(isAllowedRequest("http://127.0.0.1:4001/a.js", origin)).toBe(false);
+    expect(isAllowedRequest("https://example.com/font.woff2", origin)).toBe(
+      false,
+    );
+    expect(isAllowedRequest("http://169.254.169.254/latest/", origin)).toBe(
+      false,
+    );
+    expect(isAllowedRequest("wss://example.com/socket", origin)).toBe(false);
+    expect(isAllowedRequest("::", origin)).toBe(false);
+  });
+});
+
+describe("createCaptureGuard", () => {
+  const guardAt = (clock: { now: number }) =>
+    createCaptureGuard({
+      limitMs: 600_000,
+      probeCount: 3,
+      now: () => clock.now,
+    });
+
+  test("最初の N 枚が全部時間切れなら、残りは撮らない", () => {
+    const guard = guardAt({ now: 0 });
+
+    guard.record("timeout");
+    guard.record("timeout");
+    expect(guard.stopReason()).toBeNull();
+    guard.record("timeout");
+
+    expect(guard.stopReason()).toContain("最初の 3 枚がすべて時間切れ");
+  });
+
+  test("最初の N 枚に 1 枚でも撮れたものがあれば、そのあと時間切れが続いても撮り続ける", () => {
+    const guard = guardAt({ now: 0 });
+
+    guard.record("timeout");
+    guard.record("done");
+    for (let i = 0; i < 10; i += 1) guard.record("timeout");
+
+    expect(guard.stopReason()).toBeNull();
+  });
+
+  test("全体の時間の上限を超えたら、残りは撮らない", () => {
+    const clock = { now: 1_000 };
+    const guard = guardAt(clock);
+    guard.record("done");
+
+    clock.now = 600_999;
+    expect(guard.stopReason()).toBeNull();
+    clock.now = 601_000;
+
+    expect(guard.stopReason()).toContain("時間の上限（10 分）");
+  });
+});
+
 describe("stageShots", () => {
   const build = (name: string): string => {
     const dir = path.join(root, name);
@@ -146,7 +242,7 @@ describe("stageShots", () => {
     return dir;
   };
 
-  test("目録を確かめ直し、本物の PNG を指す行だけを置くための目録に残す（ビルド結果は書き換えない）", () => {
+  test("目録を確かめ直し、本物の PNG を指す行だけを目録に残して、その画像だけを置く場所へ写す（目録に無い PNG は上げない。ビルド結果は書き換えない）", () => {
     const dir = build("staged");
     const outDir = fs.mkdtempSync(path.join(root, "out-"));
     const good = "review-canvas-shots/a--b-375-0123456789abcdef.png";
@@ -157,6 +253,12 @@ describe("stageShots", () => {
       path.join(dir, good),
       path.join(dir, "review-canvas-shots/link.png"),
     );
+    // 目録に無いファイルは、本物の PNG でも置かない
+    fs.writeFileSync(
+      path.join(dir, "review-canvas-shots/unlisted-375-0123456789abcdef.png"),
+      pngHead(375, 812),
+    );
+    fs.writeFileSync(path.join(dir, "review-canvas-shots/note.txt"), "memo");
     const shot = (file: string) => ({
       storyId: "a--b",
       width: 375,
@@ -181,8 +283,11 @@ describe("stageShots", () => {
 
     expect(staged["shop"]).toStrictEqual({
       manifestFile: path.join(outDir, "shop", "review-canvas-shots.json"),
-      dir: path.join(dir, "review-canvas-shots"),
+      dir: path.join(outDir, "shop", "review-canvas-shots"),
     });
+    expect(fs.readdirSync(staged["shop"]?.dir ?? "")).toStrictEqual([
+      path.basename(good),
+    ]);
     expect(
       JSON.parse(fs.readFileSync(staged["shop"]?.manifestFile ?? "", "utf8")),
     ).toStrictEqual({

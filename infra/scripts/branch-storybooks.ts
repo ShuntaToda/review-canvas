@@ -40,9 +40,11 @@ import {
  * 古いブランチを置くときも、橋渡しの差し込みはこのスクリプトの版で行う
  *
  * 使い方:
- *   pnpm --dir infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--skip-screenshots] [--repo-root <置くブランチの根>]
+ *   pnpm --dir infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--skip-screenshots] [--shots-root <根>] [--repo-root <置くブランチの根>]
  *     ビルドの後・上げる前に、ストーリーのスクリーンショットを撮る（Playwright の Chromium）。--skip-screenshots は撮らず、
- *     ビルド結果の中にすでにある画像と目録（下の screenshots で撮ったもの）があれば、それを置く
+ *     ビルド結果の中にすでにある画像と目録（下の screenshots で撮ったもの）があれば、それを置く。
+ *     --shots-root は、画像と目録をビルド結果の中ではなく、別の根の同じ場所（置くブランチの根からの相対が同じ所）から読む（撮らない）。
+ *     ワークフローが、資格情報の無いジョブで撮ったものを、既定のブランチのここでのビルドに合わせて置くのに使う
  *   pnpm --dir infra run branch-storybooks screenshots [--repo-root <根>]   … スクリーンショットだけを撮る（AWS にはつながない。ビルド結果の中に書く）
  *   pnpm --dir infra run unpublish-branch <ブランチ>
  *   pnpm --dir infra run branch-storybooks is-published <ブランチ>   … true / false を出す
@@ -454,6 +456,8 @@ export type Command =
       skipBuild: boolean;
       /** スクリーンショットを撮らない（ビルド結果の中にすでにあるものは置く） */
       skipScreenshots: boolean;
+      /** 画像と目録を読む根（無ければビルド結果の中から読む） */
+      shotsRoot?: string;
     }
   | { kind: "screenshots" }
   | { kind: "unpublish"; branch: string }
@@ -485,6 +489,7 @@ const VALUE_OPTIONS = {
   "--region": "region",
   "--config": "config",
   "--repo-root": "repoRoot",
+  "--shots-root": "shotsRoot",
   "--branch": "branch",
   "--commit": "commit",
 } as const;
@@ -568,7 +573,11 @@ export const parseArgs = (
           branch: values.branch,
           commit: values.commit,
           skipBuild: flags.has("--skip-build"),
-          skipScreenshots: flags.has("--skip-screenshots"),
+          skipScreenshots:
+            flags.has("--skip-screenshots") || values.shotsRoot !== undefined,
+          ...(values.shotsRoot === undefined
+            ? {}
+            : { shotsRoot: values.shotsRoot }),
         },
         options,
       };
@@ -978,7 +987,20 @@ const publish = async (
       canvasOrigins: target.canvasOrigins,
       outDir: workDir,
     });
-    const shots = stageShots({ dirs, outDir: workDir });
+    const shots = stageShots({
+      dirs:
+        command.shotsRoot === undefined
+          ? dirs
+          : shotDirs(
+              dirs,
+              repoRoot,
+              path.resolve(
+                process.env["INIT_CWD"] ?? process.cwd(),
+                command.shotsRoot,
+              ),
+            ),
+      outDir: workDir,
+    });
     for (const call of planPublish({
       target,
       branch,
@@ -1001,6 +1023,19 @@ const publish = async (
     `置きました: ${branch} @ ${commit} → /${STORYBOOK_PREFIX}${encodeBranchKey(branch)}/`,
   );
 };
+
+/** 画像と目録を読む場所（ビルド結果の、置くブランチの根からの相対が同じ所を、別の根の下に取る） */
+export const shotDirs = (
+  dirs: Record<string, string>,
+  repoRoot: string,
+  shotsRoot: string,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(dirs).map(([source, dir]) => [
+      source,
+      path.join(shotsRoot, path.relative(repoRoot, dir)),
+    ]),
+  );
 
 /** 設定ファイル。指定が無ければ、置くブランチ（--repo-root）の根の review-canvas.config.json */
 export const resolveConfigFile = (
