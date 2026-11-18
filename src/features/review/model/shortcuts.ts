@@ -10,6 +10,8 @@ export type ShortcutAction =
   | { type: "zoom-reset" }
   | { type: "focus-search" }
   | { type: "toggle-sidebar" }
+  /** 左の画面の一覧を開閉する */
+  | { type: "toggle-story-list" }
   | { type: "help" }
   /** 開いているスレッドの次・前へ（一覧の並び） */
   | { type: "thread-next" }
@@ -77,6 +79,8 @@ export const resolveShortcut = ({
       return { type: "zoom-out" };
     case "/":
       return { type: "focus-search" };
+    case "[":
+      return { type: "toggle-story-list" };
     case "]":
       return { type: "toggle-sidebar" };
     case "?":
@@ -151,6 +155,7 @@ export const SHORTCUT_HELP: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "Shift + 1 ／ Shift + 0", label: "全体を表示 ／ 100% にする" },
   { keys: "/", label: "画面名で絞り込む" },
   { keys: "J ／ K", label: "次 ／ 前のコメントへ（一覧の並び）" },
+  { keys: "[", label: "画面の一覧を開閉" },
   { keys: "]", label: "コメント一覧を開閉" },
   { keys: "Esc", label: "スレッド・入力を閉じる" },
   { keys: "Ctrl / ⌘ + Enter", label: "コメントを送る" },

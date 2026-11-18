@@ -147,7 +147,10 @@ test("ログイン中なら、API へのリクエストに X-Authorization で�
   const request = fetchMock.mock.calls[0]![0];
   expect(new URL(request.url).pathname).toBe("/api/meta");
   expect(request.headers.get("X-Authorization")).toBe("Bearer access-token");
-  expect(await screen.findByText("利用者1")).toBeTruthy();
+  // 名前は右端のアカウントのボタンにまとめている
+  expect(
+    await screen.findByRole("button", { name: "アカウント（利用者1）" }),
+  ).toBeTruthy();
   expect(sdk.loginWithRedirect).not.toHaveBeenCalled();
 });
 

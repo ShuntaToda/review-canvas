@@ -30,6 +30,7 @@ describe("resolveShortcut", () => {
     ["+", { type: "zoom-in" }],
     ["-", { type: "zoom-out" }],
     ["/", { type: "focus-search" }],
+    ["[", { type: "toggle-story-list" }],
     ["]", { type: "toggle-sidebar" }],
     ["?", { type: "help" }],
     ["j", { type: "thread-next" }],

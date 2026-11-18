@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ErrorBoundary } from "react-error-boundary";
 import { isUnauthorized, type ReviewMetaBranch } from "../api/review-api";
 import { Canvas } from "../components/Canvas";
 import { COMMENT_LIST_ID, CommentSidebar } from "../components/CommentSidebar";
+import { DisplaySettings } from "../components/DisplaySettings";
 import { DraftPopover } from "../components/DraftPopover";
 import type { PinView } from "../components/Frame";
 import { HelpDialog } from "../components/HelpDialog";
@@ -17,6 +19,7 @@ import {
   StorybookMissingNotice,
   Toast,
 } from "../components/Notices";
+import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
@@ -106,6 +109,10 @@ const parsePerRow = (raw: string): number | undefined => {
   const value = Number(raw);
   return FRAMES_PER_ROW_OPTIONS.includes(value) ? value : undefined;
 };
+
+/** 画面の一覧の開閉をブラウザに覚える形 */
+const parseOpen = (raw: string): boolean | undefined =>
+  raw === "true" ? true : raw === "false" ? false : undefined;
 
 /** スレッドへ移るときの倍率（今の倍率を保ちつつ、読める大きさにする） */
 const focusZoom = (current: number): number =>
@@ -227,6 +234,20 @@ export const ReviewWorkspace = ({
   const [sidebarOpen, setSidebarOpen] = useState(
     () => !isNarrowViewport(window.innerWidth),
   );
+  // 左の画面の一覧。開閉は広い幅のときだけ覚える（狭い幅ではキャンバスに重なるので、はじめは閉じる）
+  const [storyListRemembered, rememberStoryList] = useLocalSetting(
+    "review-canvas.storyListOpen",
+    true,
+    { parse: parseOpen, serialize: String },
+  );
+  const [storyListOpen, setStoryListOpenState] = useState(
+    () => !isNarrowViewport(window.innerWidth) && storyListRemembered,
+  );
+  const setStoryListOpen = (open: boolean) => {
+    setStoryListOpenState(open);
+    if (!isNarrowViewport(window.innerWidth)) rememberStoryList(open);
+  };
+
   const [cameraStates, setCameraStates] = useState(initial.cameras);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
@@ -426,6 +447,22 @@ export const ReviewWorkspace = ({
     setPage(next);
     setDraft(null);
     setTitleFilter(undefined);
+  };
+
+  /** 画面の一覧で選んだ状態へ移る（並びに出ているものだけを選べるので、絞り込みは変えない） */
+  const focusStory = (story: Story) => {
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: {
+        kind: "focus",
+        storyId: story.id,
+        point: { x: width / 2, y: 300 },
+        zoom: focusZoom(camera.zoom),
+      },
+    }));
+    setDraft(null);
+    // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じて画面を見せる
+    if (isNarrowViewport(window.innerWidth)) setStoryListOpen(false);
   };
 
   const focusThread = (thread: Thread) => {
@@ -675,7 +712,12 @@ export const ReviewWorkspace = ({
           updateCamera((c) => zoomAt(c, 1, viewportCenter));
           break;
         case "focus-search":
+          // 閉じていれば開いてから、絞り込みの欄へ移る（欄は一覧の中にある）
+          if (!storyListOpen) flushSync(() => setStoryListOpen(true));
           searchRef.current?.focus();
+          break;
+        case "toggle-story-list":
+          setStoryListOpen(!storyListOpen);
           break;
         case "toggle-sidebar":
           setSidebarOpen((open) => !open);
@@ -817,17 +859,6 @@ export const ReviewWorkspace = ({
           setTool(next);
           if (next !== "comment") setDraft(null);
         }}
-        query={query}
-        onQueryChange={setQuery}
-        searchRef={searchRef}
-        showComponents={showComponents}
-        onShowComponentsChange={setShowComponents}
-        width={width}
-        widthOptions={pageWidthOptions}
-        onWidthChange={(next) => pageWidths.select(page, next)}
-        onWidthRemove={(target) => pageWidths.remove(page, target)}
-        perRow={perRow}
-        onPerRowChange={setPerRow}
         branch={branch}
         commit={commit}
         branchOptions={branchOptions}
@@ -837,10 +868,33 @@ export const ReviewWorkspace = ({
         userName={me.name}
         onLogout={onLogout}
         onHelp={() => setDialog("help")}
+        storyListOpen={storyListOpen}
+        onToggleStoryList={() => setStoryListOpen(!storyListOpen)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
       <div className="relative flex min-h-0 flex-1">
+        {storyListOpen && (
+          <StorySidebar
+            rows={rows}
+            currentStoryId={centerStoryId}
+            query={query}
+            onQueryChange={setQuery}
+            searchRef={searchRef}
+            onSelectStory={focusStory}
+          >
+            <DisplaySettings
+              showComponents={showComponents}
+              onShowComponentsChange={setShowComponents}
+              width={width}
+              widthOptions={pageWidthOptions}
+              onWidthChange={(next) => pageWidths.select(page, next)}
+              onWidthRemove={(target) => pageWidths.remove(page, target)}
+              perRow={perRow}
+              onPerRowChange={setPerRow}
+            />
+          </StorySidebar>
+        )}
         <main className="relative min-w-0 flex-1" aria-label="キャンバス">
           {published === null ? (
             <BranchNotPublishedNotice branch={branch} />
