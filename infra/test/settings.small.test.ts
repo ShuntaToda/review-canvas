@@ -561,6 +561,20 @@ describe("readSettings", () => {
       },
     );
 
+    test.each([
+      "review.example.com.",
+      ".review.example.com",
+      "Review.Example.com.",
+    ])(
+      "[正常系]クッキーを付ける親ドメインの前後の . と大文字（%s）は、そろえて読む",
+      (cookieDomain) => {
+        expect(
+          read({ context: { ...LOGIN, cookieDomain } }).storybookLogin
+            ?.cookieDomain,
+        ).toBe("review.example.com");
+      },
+    );
+
     test("[正常系]登録できるドメインそのもの（example.com）も、明示で渡されれば通す（広さは使う側が決める。docs/security.md）", () => {
       expect(
         read({

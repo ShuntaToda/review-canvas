@@ -2,8 +2,11 @@ import { Annotations, Stack, Token, aws_wafv2 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { splitIpCidrs } from "./settings";
 
-/** これより短いプレフィックス（広い範囲）は、打ち間違いを疑って知らせる */
-const WIDE_PREFIX_LENGTH = 8;
+/**
+ * これより短いプレフィックス（広い範囲）は、打ち間違いを疑って知らせる。
+ * IPv6 は、事業者 1 つへの割り当てがふつう /32 なので、それより広ければ知らせる
+ */
+const WIDE_PREFIX_LENGTH = { ipv4: 8, ipv6: 32 } as const;
 
 /** CloudFront 用の Web ACL を作れるリージョン（AWS WAF の決まり。CloudFront 用は us-east-1 だけ） */
 export const CLOUDFRONT_WAF_REGION = "us-east-1";
@@ -38,13 +41,16 @@ export class IpAllowList extends Construct {
       throw new Error("allowedIpCidrs に IP アドレスの範囲がありません");
     }
     // 形としては通るが、絞ったことにならない広さ（203.0.113.0/1 のような打ち間違い）に、出す人が気づけるようにする
-    const wide = [...ipv4, ...ipv6].filter(
-      (cidr) => Number(cidr.split("/")[1]) < WIDE_PREFIX_LENGTH,
-    );
+    const widerThan = (length: number) => (cidr: string) =>
+      Number(cidr.split("/")[1]) < length;
+    const wide = [
+      ...ipv4.filter(widerThan(WIDE_PREFIX_LENGTH.ipv4)),
+      ...ipv6.filter(widerThan(WIDE_PREFIX_LENGTH.ipv6)),
+    ];
     if (wide.length > 0) {
       Annotations.of(this).addWarningV2(
         "review-canvas:wideIpRange",
-        `allowedIpCidrs に、/${WIDE_PREFIX_LENGTH} より広い範囲があります（${wide.join("・")}）。インターネットの大きな部分を通します。打ち間違いでないか確かめてください`,
+        `allowedIpCidrs に、広すぎる範囲があります（${wide.join("・")}。IPv4 は /${WIDE_PREFIX_LENGTH.ipv4}、IPv6 は /${WIDE_PREFIX_LENGTH.ipv6} より広いもの）。インターネットの大きな部分を通します。打ち間違いでないか確かめてください`,
       );
     }
     const visibility = (name: string) => ({

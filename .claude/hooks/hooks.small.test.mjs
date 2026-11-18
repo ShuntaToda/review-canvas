@@ -169,7 +169,8 @@ describe("hook のスクリプト", () => {
     } finally {
       fs.rmSync(path.join(root, file));
     }
-  });
+    // eslint と prettier を起こすので、マシンが混んでいると既定の 5 秒では足りない
+  }, 30_000);
 
   test("[正常系]同じ停止で 2 度目（stop_hook_active）は、確かめずに終える", () => {
     expect(

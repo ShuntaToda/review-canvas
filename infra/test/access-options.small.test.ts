@@ -272,7 +272,7 @@ describe("IP 制限（AWS WAF）", () => {
     template.resourceCountIs("AWS::WAFv2::IPSet", 1);
   });
 
-  test("/8 より広い範囲（打ち間違いを疑う広さ）は、組み立てるときに警告を出す。ふつうの範囲では出さない", () => {
+  test("広すぎる範囲（IPv4 は /8、IPv6 は /32 より広い。打ち間違いを疑う広さ）は、組み立てるときに警告を出す。ふつうの範囲では出さない", () => {
     const warningsOf = (cidrs: string[]) => {
       const { stack } = synth(
         { network: { allowedIpCidrs: cidrs, webAclArn: undefined } },
@@ -280,7 +280,7 @@ describe("IP 制限（AWS WAF）", () => {
       );
       return Annotations.fromStack(stack).findWarning(
         "*",
-        Match.stringLikeRegexp("より広い範囲があります"),
+        Match.stringLikeRegexp("広すぎる範囲があります"),
       );
     };
 
@@ -291,6 +291,10 @@ describe("IP 制限（AWS WAF）", () => {
       "198.51.100.0/24",
     );
     expect(warningsOf(["203.0.113.0/8", "2001:db8::/32"])).toHaveLength(0);
+    // IPv6 は /8 では広すぎる（閾値を IPv4 と分ける）
+    const wideV6 = warningsOf(["203.0.113.0/24", "2001:db8::/31"]);
+    expect(wideV6).toHaveLength(1);
+    expect(JSON.stringify(wideV6[0]?.entry.data)).toContain("2001:db8::/31");
   });
 
   test("us-east-1 以外のスタックでは、Web ACL を作れない理由と、作り方を挙げて止める", () => {
@@ -530,4 +534,23 @@ describe("Storybook のログイン連動（独自ドメインと署名付きク
     expect(storybookBoth.WebACLId).toBe(WEB_ACL_ARN);
     expect(storybookBoth.DefaultCacheBehavior.TrustedKeyGroups).toHaveLength(1);
   });
+});
+
+describe("コンストラクトに設定を直に渡したとき（readSettings を通さない）", () => {
+  test.each([
+    [{ cookieDomain: "example.org" }, "共通の親ドメインにしてください"],
+    [{ cookieDomain: "com" }, "ラベルが 2 つ以上のドメイン"],
+    [{ cookieDomain: "Review.example.com" }, "ラベルが 2 つ以上のドメイン"],
+    [
+      { cookieDomain: "sb.review.example.com" },
+      'canvasDomain "canvas.review.example.com" がその下にありません',
+    ],
+  ])(
+    "[異常系]クッキーを付ける親ドメインの誤り（%o）は、組み立てるときに止める",
+    (overrides, message) => {
+      expect(() => synth({ storybookLogin: login(overrides) })).toThrow(
+        message,
+      );
+    },
+  );
 });

@@ -42,7 +42,11 @@ import {
   STORYBOOK_PREFIX,
 } from "./github-publish-role";
 import { IpAllowList } from "./ip-allow-list";
-import { ANY_EMAIL_DOMAIN, type ReviewCanvasSettings } from "./settings";
+import {
+  ANY_EMAIL_DOMAIN,
+  assertCookieDomain,
+  type ReviewCanvasSettings,
+} from "./settings";
 
 /** 画面がデプロイ先の設定を読む場所（src/config/index.ts の DEPLOYED_CONFIG_PATH と同じ） */
 export const APP_CONFIG_KEY = "app-config.json";
@@ -175,6 +179,8 @@ export class ReviewCanvas extends Construct {
     }
 
     const login = settings.storybookLogin ?? null;
+    // 設定を readSettings を通さずに直に渡されても、クッキーの届く範囲（親ドメイン）は確かめる
+    if (login !== null) assertCookieDomain(login);
     const webAclId = this.#webAclArn(settings);
 
     /**

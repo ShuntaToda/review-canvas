@@ -280,6 +280,38 @@ export const splitIpCidrs = (
 
 type SettingKey = keyof typeof SETTING_KEYS;
 
+/**
+ * 署名付きクッキーを付ける親ドメインを確かめる（形・ラベルが 2 つ以上・2 つのドメインがどちらもその下にある）。
+ * 設定から読むとき（readSettings）と、コンストラクトに直に渡されたとき（ReviewCanvas）の両方で呼ぶ
+ */
+export const assertCookieDomain = ({
+  cookieDomain,
+  canvasDomain,
+  storybookDomain,
+}: Pick<
+  StorybookLoginSettings,
+  "cookieDomain" | "canvasDomain" | "storybookDomain"
+>): void => {
+  if (
+    !DOMAIN_PATTERN.test(cookieDomain) ||
+    cookieDomain.split(".").length < 2
+  ) {
+    throw new Error(
+      `cookieDomain は、ラベルが 2 つ以上のドメイン（小文字。前後に . を付けない）にしてください（例: review.example.com）: "${cookieDomain}"`,
+    );
+  }
+  for (const [name, value] of [
+    ["canvasDomain", canvasDomain],
+    ["storybookDomain", storybookDomain],
+  ] as const) {
+    if (!value.endsWith(`.${cookieDomain}`)) {
+      throw new Error(
+        `cookieDomain "${cookieDomain}" は、canvasDomain と storybookDomain に共通の親ドメインにしてください（${name} "${value}" がその下にありません。例: canvas.review.example.com と sb.review.example.com なら review.example.com）`,
+      );
+    }
+  }
+};
+
 /** テナントのドメインの形（`xxx.jp.auth0.com`・独自ドメイン）。https:// や / を付けたものは弾く */
 const DOMAIN_PATTERN =
   /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -543,28 +575,13 @@ export const readSettings = ({
         `canvasDomain と storybookDomain は別のドメインにしてください（Storybook のコードからログインのトークンを守るため、オリジンを分けます）: "${canvasDomain}"`,
       );
     }
-    // クッキーを付ける親ドメインは、2 つのドメインから推さずに、使う側に決めてもらう（広すぎる親を黙って選ばない）
+    // クッキーを付ける親ドメインは、2 つのドメインから推さずに、使う側に決めてもらう（広すぎる親を黙って選ばない）。
+    // 前の .（クッキーの古い書き方）と後ろの .（DNS の書き方）は落とす
     const cookieDomain = requireSetting("cookieDomain")
       .toLowerCase()
-      .replace(/^\./, "");
-    if (
-      !DOMAIN_PATTERN.test(cookieDomain) ||
-      cookieDomain.split(".").length < 2
-    ) {
-      throw new Error(
-        `cookieDomain は、ラベルが 2 つ以上のドメインにしてください（例: review.example.com）: "${cookieDomain}"`,
-      );
-    }
-    for (const [name, value] of [
-      ["canvasDomain", canvasDomain],
-      ["storybookDomain", storybookDomain],
-    ] as const) {
-      if (!value.endsWith(`.${cookieDomain}`)) {
-        throw new Error(
-          `cookieDomain "${cookieDomain}" は、canvasDomain と storybookDomain に共通の親ドメインにしてください（${name} "${value}" がその下にありません。例: canvas.review.example.com と sb.review.example.com なら review.example.com）`,
-        );
-      }
-    }
+      .replace(/^\./, "")
+      .replace(/\.$/, "");
+    assertCookieDomain({ cookieDomain, canvasDomain, storybookDomain });
     const certificateArn = requireSetting("certificateArn");
     if (!CERTIFICATE_ARN_PATTERN.test(certificateArn)) {
       throw new Error(
