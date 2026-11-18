@@ -271,6 +271,7 @@ describe("Frame の高さの知らせ", () => {
     ready(812);
     receive({ type: "size", height: 1281, width: WIDTH });
     receive({ type: "render", render: finished });
+    // 299・300 は Frame.tsx の REVEAL_MEASURE_TIMEOUT_MS と同じ
     act(() => {
       vi.advanceTimersByTime(299);
     });
@@ -334,6 +335,7 @@ describe("Frame の高さの知らせ", () => {
     receive({ type: "render", render: finished });
     // 前の幅で測った答えは捨てる
     receive({ type: "size", height: 1281, width: WIDTH });
+    // 300 は Frame.tsx の REVEAL_MEASURE_TIMEOUT_MS と同じ
     act(() => {
       vi.advanceTimersByTime(300);
     });
@@ -353,5 +355,56 @@ describe("Frame の高さの知らせ", () => {
     receive({ type: "render", render: finished });
     expect(mode()).toBe("live");
     expect(onMeasure).not.toHaveBeenCalled();
+  });
+
+  test("[境界値]測り直しを待っているあいだに load がもう一度来たら、前の待ちのタイマーで切り替えない", () => {
+    const { ready, receive, reload, mode } = renderFrame({
+      sample: story("Shop/ProductList", "Failed", "shop-productlist--failed"),
+      shot: SHOT,
+    });
+
+    ready(812);
+    receive({ type: "render", render: finished });
+    expect(mode()).toBe("image");
+    reload();
+    // 300 は Frame.tsx の REVEAL_MEASURE_TIMEOUT_MS と同じ
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(mode()).toBe("image");
+  });
+
+  test("[境界値]描き終わりの知らせが 2 回来ても、測り直しの頼みは 1 回", () => {
+    const { ready, receive, measureRequests } = renderFrame({
+      sample: story(
+        "Components/Button",
+        "Default",
+        "components-button--default",
+      ),
+      shot: SHOT,
+    });
+
+    ready(812);
+    // つながったあとの測り直し（幅を変えた・付け直したとき用。0ms 後から送る）を数えないよう、タイマーは進めない
+    expect(measureRequests()).toBe(0);
+    receive({ type: "render", render: finished });
+    receive({ type: "render", render: finished });
+    expect(measureRequests()).toBe(1);
+  });
+
+  test("[正常系]画像の無い画面では、描き終わりで測り直しを頼まない", () => {
+    const { ready, receive, measureRequests } = renderFrame({
+      sample: story(
+        "Components/Button",
+        "Disabled",
+        "components-button--disabled",
+      ),
+      shot: null,
+    });
+
+    ready(812);
+    // タイマーは進めない（つながったあとの 0ms 後の測り直しを数えない）
+    receive({ type: "render", render: finished });
+    expect(measureRequests()).toBe(0);
   });
 });

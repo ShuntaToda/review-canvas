@@ -125,7 +125,12 @@ const knownPlayFunctions = new Map<string, boolean>();
  * 2 枚目からは返事を待たずに読み込みの枠を返す（1 枚ごとに 4 秒待って、順番待ちが詰まらないように）
  */
 const storybooksWithoutBridge = new Set<string>();
-/** 画像から動く画面に切り替える前に、測り直しの答えを待つ上限(ms) */
+/**
+ * 画像から動く画面に切り替える前に、測り直しの答えを待つ上限(ms)。
+ * 橋渡しは measure の頼みにその場で答える（bridge-runtime.ts の postSize(true)。measure.ts は force なら変わっていなくても答える）ので、
+ * 待つのは postMessage の往復だけで、ふつうは数 ms で届く。答えない橋渡し（measure を知らない古い版など）でも、
+ * 描き終えた画面を画像の下に長く隠したままにしない長さにした（下の MEASURE_DELAYS_MS の 300 とは別に決めた値）
+ */
 const REVEAL_MEASURE_TIMEOUT_MS = 300;
 /** 幅を変えた・付け直したあとに高さを測り直してもらう時刻(ms)（幅に合わせて描き直すのを待つ） */
 const MEASURE_DELAYS_MS = [0, 300, 1000, 2500];
@@ -250,7 +255,8 @@ export const Frame = ({
     sizeContextRef.current = { generation, width: w };
   }, [generation, w]);
   // 画像を出しているあいだに測った高さ（並びには、動く画面に切り替わってから渡す。iframe はこの高さで付ける。model/frame-height.ts）。
-  // 橋渡しの知らせからは ref で読み書きし、iframe の高さには state を使う
+  // ref と state に分けて持つのは、橋渡しの知らせ（handleLoad の中のクロージャ）から最新の値を読み書きするためと、
+  // 切り替えるとき（reveal）に state を空にしても、切り替わりの effect が ref から最後の高さを読んで並びに渡せるようにするため
   const heldHeightRef = useRef<HeldHeight | null>(null);
   const [heldHeight, setHeldHeight] = useState<HeldHeight | null>(null);
   const holdHeight = (next: HeldHeight | null) => {
@@ -269,7 +275,7 @@ export const Frame = ({
       generation,
       width: w,
     });
-    // state は、出すとき（reveal）・次の知らせ・読み込み直しで空にする（iframe の高さには画像を出しているあいだしか使わない）
+    // state はここでは空にしない（iframe の高さには画像を出しているあいだしか使わないので、残っていても使わない）
     heldHeightRef.current = null;
     if (report !== null) onMeasureRef.current(story.id, report);
   }, [showingShot, retiring, generation, w, story.id]);
@@ -590,13 +596,14 @@ export const Frame = ({
     const reveal = () => {
       revealWaiting = false;
       window.clearTimeout(revealTimerRef.current);
+      // ref はここでは空にしない（切り替わりの effect が、ref から最後の高さを読んで並びに渡す）
       setHeldHeight(null);
       setRevealedGeneration(loadedGeneration);
     };
     const settle = () => {
       if (busy()) return;
       // 描画・play 関数が終わったので、画像の上に出す。画像を出しているあいだは、出す前にいまの高さを測り直してもらう
-      // （橋渡しは大きさの変化を遅らせて知らせるので、描き終わりの知らせが最後の高さより先に届き、切り替わった瞬間に途中の高さを並びに渡してしまう）。
+      // （橋渡しは大きさの変化を遅らせて知らせる（bridge-runtime.ts の SIZE_DEBOUNCE_MS）ので、描き終わりの知らせが最後の高さより先に届き、切り替わった瞬間に途中の高さを並びに渡してしまう）。
       // 答えない橋渡しでも、待ちきったら持っておいた高さで出す
       if (showingShotRef.current && current?.ready === true) {
         if (!revealWaiting) {

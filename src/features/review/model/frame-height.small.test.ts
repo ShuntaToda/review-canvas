@@ -171,13 +171,13 @@ describe("画像を出しているあいだの、キャンバスの枠の高さ"
     const frameHeight = (width: number) =>
       clampFrameHeight(heights.get(width) ?? SHOT_HEIGHT, BASE_HEIGHT);
     const receive = (showingShot: boolean, height: number, width = WIDTH) => {
-      const routed = reportOrHoldHeight({
+      const decided = reportOrHoldHeight({
         showingShot,
         height,
         at: { generation, width },
       });
-      if (routed.report !== null) heights.set(width, routed.report);
-      held = routed.held;
+      if (decided.report !== null) heights.set(width, decided.report);
+      held = decided.held;
     };
     const reveal = (width = WIDTH) => {
       const report = heldHeightToReport(held, { generation, width });
