@@ -12,9 +12,12 @@ import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
 import {
+  type HeldHeight,
+  heldHeightToReport,
   iframeHeightFor,
   matchesWidth,
   type MeasuredAt,
+  routeMeasuredHeight,
 } from "../model/frame-height";
 import {
   FRAME_LABEL_SCREEN_HEIGHT,
@@ -242,12 +245,34 @@ export const Frame = ({
   useLayoutEffect(() => {
     sizeContextRef.current = { generation, width: w };
   }, [generation, w]);
+  // 画像を出しているあいだに測った高さ（並びには、動く画面に切り替わってから渡す。model/frame-height.ts）
+  const heldHeightRef = useRef<HeldHeight | null>(null);
+  // 橋渡しの知らせ（handleLoad の中で作る）から、いま画像を出しているかを読む
+  const showingShot = shot !== null && !revealed;
+  const showingShotRef = useRef(showingShot);
+  useLayoutEffect(() => {
+    showingShotRef.current = showingShot;
+    // 外す手順の途中は切り替わったのではない（外し終えると回が変わり、持っておいた高さは渡さなくなる）
+    if (showingShot || retiring) return;
+    const report = heldHeightToReport(heldHeightRef.current, {
+      generation,
+      width: w,
+    });
+    heldHeightRef.current = null;
+    if (report !== null) onMeasureRef.current(story.id, report);
+  }, [showingShot, retiring, generation, w, story.id]);
   /** 橋渡しの測った高さを受け取る。前の幅で測った（幅を変えた直後の）知らせは、別の幅の高さとして覚えないよう捨てる */
   const acceptSize = (height: number, width: number | undefined): boolean => {
     const current = sizeContextRef.current;
     if (!matchesWidth(width, current.width)) return false;
     liveHeightRef.current = height;
-    onMeasureRef.current(story.id, height);
+    const routed = routeMeasuredHeight({
+      showingShot: showingShotRef.current,
+      height,
+      at: current,
+    });
+    heldHeightRef.current = routed.held;
+    if (routed.report !== null) onMeasureRef.current(story.id, routed.report);
     setMeasuredAt((previous) =>
       previous?.generation === current.generation &&
       previous.width === current.width
@@ -530,6 +555,7 @@ export const Frame = ({
     setBridgeReady(false);
     setBridgeMissing(false);
     liveHeightRef.current = null;
+    heldHeightRef.current = null;
     // ストーリーが自分でフォーカスを取ることがある（autofocus・play 関数の user-event など）。
     // 操作モード以外では画面の中にフォーカスを残さず、キャンバスへ戻す（ショートカットが効かなくなり、外したときに落ちるため）。
     // ただし描画・play 関数の途中は奪わない（toHaveFocus・userEvent.type などが失敗し、Storybook と違う途中の状態になるため）。
