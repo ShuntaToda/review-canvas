@@ -4,14 +4,13 @@ import { pathToFileURL } from "url";
 import type { BrowserContext } from "playwright";
 import {
   flowHtml,
-  isAllowedUrl,
+  guardRoute,
   type Mark,
   missingImageMessage,
   parseFlow,
   pointHtml,
   pointsAllowedOrigins,
   type PointSpec,
-  redirectDecision,
   splitAllowArgs,
   toPageUrl,
 } from "./annotate-screen-model";
@@ -34,34 +33,24 @@ import { browserEnv } from "./story-screenshots";
  */
 
 /**
- * 開く画面のオリジン（と、許したオリジン）の外への通信を止める（ページを作る前に張る）。
- * http(s) の要求は転送を追わずに取り、許した範囲の外へ転送する応答は止める（redirectDecision）
+ * 開く画面のオリジン（と、許したオリジン）の外への通信を止める（ページを作る前に張る）。要求ごとの扱いは guardRoute
  */
 const guardNetwork = async (
   context: BrowserContext,
   allowedOrigins: ReadonlySet<string>,
 ): Promise<void> => {
-  await context.route("**/*", async (route) => {
-    const url = route.request().url();
-    if (!isAllowedUrl(url, allowedOrigins)) {
-      await route.abort();
-      return;
-    }
-    if (!/^https?:/.test(url)) {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch({ maxRedirects: 0 });
-    const decision = redirectDecision(
-      { status: response.status(), location: response.headers()["location"] },
-      url,
-      allowedOrigins,
-    );
-    await (decision === "abort" ? route.abort() : route.fulfill({ response }));
-  });
+  await context.route("**/*", (route) => guardRoute(route, allowedOrigins));
   await context.routeWebSocket(/.*/, (socket) => {
     void socket.close();
   });
+};
+
+/**
+ * 閉じる前に route を外す。通信の途中で閉じると、残った route の処理が閉じた相手に返そうとして失敗するので、待たずに外す
+ */
+const closeGuarded = async (context: BrowserContext): Promise<void> => {
+  await context.unrouteAll({ behavior: "ignoreErrors" });
+  await context.close();
 };
 
 const USAGE = [
@@ -214,7 +203,7 @@ const runPoints = async (
         );
       }
       const shot = await page.screenshot({ clip, fullPage: true });
-      await context.close();
+      await closeGuarded(context);
 
       const width = Math.round(clip.width);
       // 組み立てる 1 枚は data: の画像だけで描く。外へも開いた画面へも通信しない
@@ -227,7 +216,7 @@ const runPoints = async (
       await sheet.setContent(pointHtml(spec, shot.toString("base64"), width));
       const file = path.join(outDir, `point-${spec.key}.png`);
       await sheet.locator(".wrap").screenshot({ path: file });
-      await sheetContext.close();
+      await closeGuarded(sheetContext);
       console.log(`書きました: ${file}`);
     }
   } finally {
@@ -257,6 +246,7 @@ const runFlow = async (flowPath: string, outFile: string): Promise<void> => {
     await page.setContent(flowHtml(withImages));
     fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
     await page.locator(".wrap").screenshot({ path: outFile });
+    await closeGuarded(context);
     console.log(`書きました: ${outFile}`);
   } finally {
     await browser.close();

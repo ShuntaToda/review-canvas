@@ -205,7 +205,9 @@ export const missingImageMessage = (
 
 /**
  * 許したオリジンへの要求の応答が、そのまま返してよいものか。3xx で Location が許した範囲の外を指すなら止める
- * （ブラウザに任せて転送を追わせると、許したオリジンを踏み台に外へ出られる）。Location は要求の URL を基に読む
+ * （ブラウザに任せて転送を追わせると、許したオリジンを踏み台に外へ出られる）。Location は要求の URL を基に読む。
+ * 許した範囲の中への 3xx も route.continue() に戻さない: 転送の先の要求は route を通らず（Playwright で実測）、二段目で外へ出られる。
+ * そのため、許したオリジンのあいだを 3xx で移る fetch は CORS で落ちる（docs/development.md に制約として書く）
  */
 export const redirectDecision = (
   response: { status: number; location: string | undefined },
@@ -271,4 +273,56 @@ export const pointsAllowedOrigins = (
     ...specs.flatMap((spec) => (spec.url === undefined ? [] : [spec.url])),
     ...allow,
   ]);
+};
+
+/** guardRoute が使う、Playwright の Route の一部（モデルを Playwright に依らせず、偽物で確かめられるように） */
+export type GuardedRoute<
+  Response extends {
+    status: () => number;
+    headers: () => Record<string, string>;
+  },
+> = {
+  request: () => { url: () => string };
+  abort: () => Promise<void>;
+  continue: () => Promise<void>;
+  fetch: (options: { maxRedirects: number }) => Promise<Response>;
+  fulfill: (options: { response: Response }) => Promise<void>;
+};
+
+/**
+ * 1 つの要求を、許した範囲の中だけ通す。http(s) は転送を追わずに取り、許した範囲の外へ転送する応答は止める（redirectDecision）。
+ * 取る・返すのに失敗しても投げない: 通信の途中でページを閉じた（TargetClosedError）・許したオリジンのサーバーが止まっている
+ * （ECONNREFUSED）ときに、route の処理の例外はどこにも受けられず、プロセスごと落ちて残りの論点が書けなくなる。
+ * 失敗した要求は止め、止めるのにも失敗したら（閉じた後など）何もしない
+ */
+export const guardRoute = async <
+  Response extends {
+    status: () => number;
+    headers: () => Record<string, string>;
+  },
+>(
+  route: GuardedRoute<Response>,
+  allowedOrigins: ReadonlySet<string>,
+): Promise<void> => {
+  const url = route.request().url();
+  try {
+    if (!isAllowedUrl(url, allowedOrigins)) {
+      await route.abort();
+      return;
+    }
+    if (!/^https?:/.test(url)) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch({ maxRedirects: 0 });
+    const decision = redirectDecision(
+      { status: response.status(), location: response.headers()["location"] },
+      url,
+      allowedOrigins,
+    );
+    if (decision === "abort") await route.abort();
+    else await route.fulfill({ response });
+  } catch {
+    await route.abort().catch(() => undefined);
+  }
 };

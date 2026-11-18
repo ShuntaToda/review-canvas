@@ -3,6 +3,7 @@ import {
   allowedOriginsOf,
   escapeHtml,
   flowHtml,
+  guardRoute,
   isAllowedUrl,
   missingImageMessage,
   parseFlow,
@@ -263,5 +264,100 @@ describe("redirectDecision", () => {
     ],
   ])("[異常系]%s は止める", (_, response) => {
     expect(redirectDecision(response, from, origins)).toBe("abort");
+  });
+});
+
+describe("guardRoute", () => {
+  const ORIGINS = new Set(["http://localhost:4100"]);
+  const closedError = () =>
+    new Error("Target page, context or browser has been closed");
+  type FakeResponse = {
+    status: () => number;
+    headers: () => Record<string, string>;
+  };
+  const fakeRoute = (
+    url: string,
+    fetch: () => Promise<FakeResponse>,
+    { abortFails = false, fulfillFails = false } = {},
+  ) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      route: {
+        request: () => ({ url: () => url }),
+        abort: () => {
+          calls.push("abort");
+          return abortFails ? Promise.reject(closedError()) : Promise.resolve();
+        },
+        continue: () => {
+          calls.push("continue");
+          return Promise.resolve();
+        },
+        fetch: async () => {
+          calls.push("fetch");
+          return fetch();
+        },
+        fulfill: () => {
+          calls.push("fulfill");
+          return fulfillFails
+            ? Promise.reject(closedError())
+            : Promise.resolve();
+        },
+      },
+    };
+  };
+  const ok = (): Promise<FakeResponse> =>
+    Promise.resolve({ status: () => 200, headers: () => ({}) });
+
+  test("[正常系]許したオリジンの応答は返し、外は止め、手元のファイルはそのまま通す", async () => {
+    const allowed = fakeRoute("http://localhost:4100/a", ok);
+    const outside = fakeRoute("https://example.com/", ok);
+    const file = fakeRoute("file:///work/a.html", ok);
+
+    await guardRoute(allowed.route, ORIGINS);
+    await guardRoute(outside.route, ORIGINS);
+    await guardRoute(file.route, ORIGINS);
+
+    expect(allowed.calls).toEqual(["fetch", "fulfill"]);
+    expect(outside.calls).toEqual(["abort"]);
+    expect(file.calls).toEqual(["continue"]);
+  });
+
+  test("[異常系]許した範囲の外へ転送する応答は止める", async () => {
+    const redirect = fakeRoute("http://localhost:4100/r", () =>
+      Promise.resolve({
+        status: () => 302,
+        headers: () => ({ location: "https://example.com/" }),
+      }),
+    );
+
+    await guardRoute(redirect.route, ORIGINS);
+
+    expect(redirect.calls).toEqual(["fetch", "abort"]);
+  });
+
+  test("[異常系]相手のサーバーが止まっている（取るのに失敗した）ときは、投げずにその要求だけ止める", async () => {
+    const refused = fakeRoute("http://localhost:4100/api", () =>
+      Promise.reject(new Error("connect ECONNREFUSED 127.0.0.1:4100")),
+    );
+
+    await expect(guardRoute(refused.route, ORIGINS)).resolves.toBeUndefined();
+    expect(refused.calls).toEqual(["fetch", "abort"]);
+  });
+
+  test("[異常系]通信の途中で閉じた（返すのも止めるのも失敗する）ときも、投げない", async () => {
+    const closed = fakeRoute("http://localhost:4100/a", ok, {
+      abortFails: true,
+      fulfillFails: true,
+    });
+    const closedOutside = fakeRoute("https://example.com/", ok, {
+      abortFails: true,
+    });
+
+    await expect(guardRoute(closed.route, ORIGINS)).resolves.toBeUndefined();
+    await expect(
+      guardRoute(closedOutside.route, ORIGINS),
+    ).resolves.toBeUndefined();
+    expect(closed.calls).toEqual(["fetch", "fulfill", "abort"]);
   });
 });
