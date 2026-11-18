@@ -1,0 +1,112 @@
+import { describe, expect, test } from "vitest";
+import {
+  escapeHtml,
+  flowHtml,
+  parseFlow,
+  pointHtml,
+  toPageUrl,
+} from "../scripts/annotate-screen";
+
+describe("toPageUrl", () => {
+  test("[正常系]URL はそのまま、手元のパスは file: の URL にする", () => {
+    expect(toPageUrl("http://localhost:4100/?branch=main", "/work")).toBe(
+      "http://localhost:4100/?branch=main",
+    );
+    expect(toPageUrl("screens/order.html", "/work")).toBe(
+      "file:///work/screens/order.html",
+    );
+  });
+});
+
+describe("pointHtml", () => {
+  const html = pointHtml(
+    {
+      title: "論点 a　<時間帯>",
+      sub: "見本の画面を撮ったもの",
+      notes: [
+        ["1", "<b>ここで決めたいのは</b>"],
+        ["", "（画面に無い）文言"],
+      ],
+      options: [
+        ["★a1　選べる", "再配達が減る"],
+        ["a2　選べない", "画面が短い"],
+      ],
+    },
+    "AAAA",
+    320,
+  );
+
+  test("[正常系]見出しは文字として出し、説明は HTML のまま並べる", () => {
+    expect(html).toContain("<h1>論点 a　&lt;時間帯&gt;</h1>");
+    expect(html).toContain("<b>ここで決めたいのは</b>");
+  });
+
+  test("[正常系]★ で始まる選択肢だけを推奨の枠にし、番号の無い説明は印を変える", () => {
+    expect(html).toContain('<div class="opt rec"><b>★a1　選べる</b>');
+    expect(html).toContain('<div class="opt"><b>a2　選べない</b>');
+    expect(html).toContain('<span class="n blank">・</span>');
+    expect(html).toContain("data:image/png;base64,AAAA");
+    expect(html).toContain("width:320px");
+  });
+});
+
+describe("flowHtml", () => {
+  test("[正常系]段ごとに見出しと画像を並べ、操作のある段の後ろにだけ矢印を置く", () => {
+    const html = flowHtml([
+      {
+        title: "① 一覧",
+        image: "a.png",
+        action: "「コメント」を押す",
+        base64: "AA",
+      },
+      { title: "② ピン", image: "b.png", base64: "BB" },
+    ]);
+
+    expect(html.match(/class="arrow"/g)).toHaveLength(1);
+    expect(html.indexOf("① 一覧")).toBeLessThan(
+      html.indexOf("「コメント」を押す"),
+    );
+    expect(html.indexOf("「コメント」を押す")).toBeLessThan(
+      html.indexOf("② ピン"),
+    );
+  });
+});
+
+describe("parseFlow", () => {
+  test("[正常系]title・image・action を読む（action は省ける）", () => {
+    expect(
+      parseFlow({
+        steps: [
+          { title: "①", image: "a.png", action: "押す" },
+          { title: "②", image: "b.png" },
+        ],
+      }),
+    ).toStrictEqual([
+      { title: "①", image: "a.png", action: "押す" },
+      { title: "②", image: "b.png" },
+    ]);
+  });
+
+  test.each([
+    ["steps が無い", {}, /steps を 1 つ以上/],
+    ["steps が空", { steps: [] }, /steps を 1 つ以上/],
+    [
+      "image が無い",
+      { steps: [{ title: "①" }] },
+      /steps\[0\] に title と image/,
+    ],
+    [
+      "action が文字列でない",
+      { steps: [{ title: "①", image: "a.png", action: 1 }] },
+      /steps\[0\]\.action/,
+    ],
+  ])("[異常系]%s ときは直し方つきで止める", (_, json, message) => {
+    expect(() => parseFlow(json)).toThrow(message);
+  });
+});
+
+describe("escapeHtml", () => {
+  test('[正常系]& < > " を文字にする', () => {
+    expect(escapeHtml('a & <b> "c"')).toBe("a &amp; &lt;b&gt; &quot;c&quot;");
+  });
+});
