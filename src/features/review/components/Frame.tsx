@@ -128,7 +128,8 @@ const storybooksWithoutBridge = new Set<string>();
 /**
  * 画像から動く画面に切り替える前に、測り直しの答えを待つ上限(ms)。
  * 橋渡しは measure の頼みにその場で答える（bridge-runtime.ts の postSize(true)。measure.ts は force なら変わっていなくても答える）ので、
- * 待つのは postMessage の往復だけで、ふつうは数 ms で届く。答えない橋渡し（measure を知らない古い版など）でも、
+ * 待つのは postMessage の往復だけで、ふつうは数 ms で届く。答えが届かないとき（届く前に iframe が移った・外れたなど）や、
+ * 答えが前の幅で測ったものとして捨てられたとき（幅を変えた直後。acceptSize の matchesWidth）でも、
  * 描き終えた画面を画像の下に長く隠したままにしない長さにした（下の MEASURE_DELAYS_MS の 300 とは別に決めた値）
  */
 const REVEAL_MEASURE_TIMEOUT_MS = 300;
@@ -604,7 +605,7 @@ export const Frame = ({
       if (busy()) return;
       // 描画・play 関数が終わったので、画像の上に出す。画像を出しているあいだは、出す前にいまの高さを測り直してもらう
       // （橋渡しは大きさの変化を遅らせて知らせる（bridge-runtime.ts の SIZE_DEBOUNCE_MS）ので、描き終わりの知らせが最後の高さより先に届き、切り替わった瞬間に途中の高さを並びに渡してしまう）。
-      // 答えない橋渡しでも、待ちきったら持っておいた高さで出す
+      // 答えが届かない・前の幅の答えとして捨てたときも、待ちきったら持っておいた高さで出す
       if (showingShotRef.current && current?.ready === true) {
         if (!revealWaiting) {
           revealWaiting = true;
