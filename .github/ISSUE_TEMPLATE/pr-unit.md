@@ -1,6 +1,6 @@
 ---
 name: PR 単位の Issue
-about: PR 1 本分の仕様を書く（親 Issue の下）。この Issue の内容で PR を作り、PR のマージで閉じる
+about: PR 1 本分の仕様を書く（親 Issue の sub-issue としてつなぐ）。この Issue の内容で PR を作り、PR のマージで閉じる
 title: "[PR] "
 labels: ""
 assignees: ""
@@ -8,7 +8,7 @@ assignees: ""
 
 <!-- 書き方はスキル .claude/skills/dev-write-issue/SKILL.md。親に書いたことは繰り返さず参照する。@メンション・人の名前は書かない -->
 
-親: #xxx。この Issue の内容で PR を作り、PR のマージで閉じます。#xxx の方針を前提にしています。
+親: #xxx（方針はそちら）。PR のマージで閉じます。
 
 ## このPRで終わっている状態
 
