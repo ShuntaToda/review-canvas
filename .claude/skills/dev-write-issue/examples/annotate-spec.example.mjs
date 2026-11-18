@@ -9,7 +9,7 @@ export default [
     key: "a",
     title: "論点 a　お届け日時の指定のしかた",
     sub: SUB,
-    clip: ["#delivery-section"],
+    clip: ["main"],
     marks: [
       { sel: "#delivery-date", n: "1" },
       { sel: "#delivery-time", n: "2", strike: true },
@@ -40,7 +40,7 @@ export default [
     setup: async (page) => {
       await page.click("#submit");
     },
-    clip: ["#delivery-section"],
+    clip: ["main"],
     marks: [{ sel: "#delivery-date", n: "1" }],
     notes: [
       [

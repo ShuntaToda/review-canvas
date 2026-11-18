@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
+  allowedOriginsOf,
   escapeHtml,
   flowHtml,
+  isAllowedUrl,
+  missingImageMessage,
   parseFlow,
   pointHtml,
   toPageUrl,
-} from "../scripts/annotate-screen";
+} from "../scripts/annotate-screen-model";
 
 describe("toPageUrl", () => {
   test("[正常系]URL はそのまま、手元のパスは file: の URL にする", () => {
@@ -47,6 +50,55 @@ describe("pointHtml", () => {
     expect(html).toContain('<span class="n blank">・</span>');
     expect(html).toContain("data:image/png;base64,AAAA");
     expect(html).toContain("width:320px");
+  });
+});
+
+describe("pointHtml（説明も選択肢も無いとき）", () => {
+  test("[正常系]説明の欄を出さず、赤枠を付けた画面だけにする", () => {
+    const html = pointHtml({ title: "今の画面" }, "AAAA", 320);
+
+    expect(html).not.toContain('class="side"');
+    expect(html).toContain("data:image/png;base64,AAAA");
+  });
+});
+
+describe("isAllowedUrl・allowedOriginsOf", () => {
+  const origins = allowedOriginsOf([
+    "http://localhost:4100/?branch=main",
+    "file:///work/screen.html",
+    "壊れた URL",
+  ]);
+
+  test("[正常系]開く画面の http(s) のオリジンだけを集める（file: と読めない URL は入れない）", () => {
+    expect([...origins]).toStrictEqual(["http://localhost:4100"]);
+  });
+
+  test.each([
+    ["開く画面と同じオリジン", "http://localhost:4100/api/threads"],
+    ["手元のファイル", "file:///work/screen.html"],
+    ["ページの中で作る画像", "data:image/png;base64,AAAA"],
+    ["blob", "blob:http://localhost:4100/0a1b"],
+    ["空のページ", "about:blank"],
+  ])("[正常系]%s は通す", (_, url) => {
+    expect(isAllowedUrl(url, origins)).toBe(true);
+  });
+
+  test.each([
+    ["外のオリジン", "https://analytics.example.com/collect"],
+    ["同じホストの別のポート", "http://localhost:4101/api/threads"],
+    ["http と https の違い", "https://localhost:4100/"],
+    ["WebSocket", "ws://localhost:4100/"],
+    ["読めない URL", "::"],
+  ])("[異常系]%s は止める", (_, url) => {
+    expect(isAllowedUrl(url, origins)).toBe(false);
+  });
+});
+
+describe("missingImageMessage", () => {
+  test("[異常系]どの段の画像かと、絶対パスで渡す直し方を書く", () => {
+    expect(missingImageMessage(1, "b.png", "/work/b.png")).toMatch(
+      /steps\[1\]\.image（b\.png）が見つかりません: \/work\/b\.png。.*絶対パスで渡して/,
+    );
   });
 });
 

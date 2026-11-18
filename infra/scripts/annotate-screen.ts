@@ -1,7 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
 import { pathToFileURL } from "url";
-import type { Page } from "playwright";
+import type { BrowserContext } from "playwright";
+import {
+  allowedOriginsOf,
+  flowHtml,
+  isAllowedUrl,
+  type Mark,
+  missingImageMessage,
+  parseFlow,
+  pointHtml,
+  type PointSpec,
+  toPageUrl,
+} from "./annotate-screen-model";
 import { browserEnv } from "./story-screenshots";
 
 /**
@@ -9,152 +20,28 @@ import { browserEnv } from "./story-screenshots";
  * Playwright が infra の依存にあるので、ここに置く（ルートに依存を増やさない）。
  *
  * - points: 論点ごとの指定（spec）を読み、画面を開いて状態を作り、赤枠と番号を重ねて撮り、右に番号ごとの説明と選択肢を並べた 1 枚にする
+ *   （説明も選択肢も書かなければ、赤枠を付けた画面だけ）
  * - flow: 撮った画面を「見出し → 画面 → 操作の矢印 → 次の画面」と縦につないだ 1 枚にする（PR の「画面の流れ」）
+ *
+ * ブラウザは、手元のファイルと開く画面のオリジンの外へは通信しない（WebSocket も閉じる）。
+ * pnpm --dir infra は infra に移ってから動くので、パスは絶対パスで渡す。
  *
  *   pnpm --dir infra run annotate-screen points <開く URL か HTML のパス> <出力フォルダ> <spec.mjs> [論点の記号]
  *   pnpm --dir infra run annotate-screen flow <flow.json> <出力の .png>
  */
 
-/** 赤枠を付ける要素。sel（CSS セレクタ）か、text（その文字と同じ要素）と within（探す範囲）で指す */
-export type Mark = {
-  sel?: string;
-  text?: string;
-  within?: string;
-  /** 枠の右上の外に出す番号。無ければ番号なしの枠 */
-  n?: string;
-  /** 選択肢によって無くなる要素に、斜線を引く */
-  strike?: boolean;
-  /** 同じセレクタに当たる要素のうち、囲む数（既定 1） */
-  max?: number;
-  pad?: number;
-};
-
-/** 論点 1 つ分の指定 */
-export type PointSpec = {
-  /** 論点の記号（a・b…）。出力は point-<記号>.png */
-  key: string;
-  title: string;
-  /** 何を撮ったか（どの画面の、どの状態か）。HTML を書ける */
-  sub?: string;
-  /** 開く画面を、この論点だけ変える */
-  url?: string;
-  /** 状態を作る（入力を消して送る、など） */
-  setup?: (page: Page) => Promise<void>;
-  /** 切り取る範囲の CSS セレクタ（既定は body） */
-  clip?: string[];
-  marks?: Mark[];
-  /** [番号, 説明]。番号を "" にすると「（画面に無い）」補足。説明は HTML を書ける */
-  notes?: [string, string][];
-  /** [見出し, 理由]。★ で始まるものが推奨（青い枠） */
-  options?: [string, string][];
-};
-
-/** 画面の流れの 1 段 */
-export type FlowStep = {
-  /** 「① 一覧 — 確かめられること」の見出し */
-  title: string;
-  /** 撮った画像（flow.json からの相対パスか絶対パス） */
-  image: string;
-  /** 次の段へ移る操作（「「コメント」を押す」）。最後の段では省く */
-  action?: string;
-};
-
-export const escapeHtml = (text: string): string =>
-  text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-
-/** 1 つ目の引数（URL か、手元の HTML のパス）を、ブラウザで開ける URL にする */
-export const toPageUrl = (target: string, cwd: string): string =>
-  /^(https?|file):/.test(target)
-    ? target
-    : pathToFileURL(path.resolve(cwd, target)).href;
-
-const FONT =
-  '"Noto Sans CJK JP","Hiragino Sans","IPAGothic","Yu Gothic",sans-serif';
-
-/** 撮った画面（PNG の base64）の右に、番号ごとの説明と選択肢を並べた HTML */
-export const pointHtml = (
-  spec: Pick<PointSpec, "title" | "sub" | "notes" | "options">,
-  shotBase64: string,
-  shotWidth: number,
-): string => {
-  const notes = (spec.notes ?? [])
-    .map(
-      ([n, text]) =>
-        `<li><span class="n${n === "" ? " blank" : ""}">${n === "" ? "・" : escapeHtml(n)}</span><div>${text}</div></li>`,
-    )
-    .join("");
-  const options = (spec.options ?? [])
-    .map(
-      ([head, reason]) =>
-        `<div class="opt${head.startsWith("★") ? " rec" : ""}"><b>${escapeHtml(head)}</b>${escapeHtml(reason)}</div>`,
-    )
-    .join("");
-  return `<!doctype html><meta charset="utf-8"><style>
-body{margin:0;background:#fff;font-family:${FONT};color:#1f2733}
-.wrap{padding:22px 26px;display:inline-block}h1{font-size:21px;margin:0 0 4px}.sub{font-size:13px;color:#5b6573;margin:0 0 14px}
-.row{display:flex;gap:22px;align-items:flex-start}.shot{border:1px solid #d5dae1;border-radius:8px;width:${shotWidth}px}
-.side{width:430px;font-size:14px;line-height:1.65}ul{list-style:none;padding:0;margin:0 0 14px}li{display:flex;gap:10px;margin-bottom:10px}
-.n{flex:none;width:24px;height:24px;border-radius:12px;background:#e5241b;color:#fff;font-weight:700;text-align:center;line-height:24px;font-size:13px;margin-top:1px}
-.n.blank{background:none;color:#5b6573}.opt{border:1px solid #d5dae1;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#fafbfc}.opt b{display:block}
-.opt.rec{border-color:#1d6fd6;background:#eef5ff}
-</style><div class="wrap"><h1>${escapeHtml(spec.title)}</h1><p class="sub">${spec.sub ?? ""}</p>
-<div class="row"><img class="shot" src="data:image/png;base64,${shotBase64}"><div class="side"><ul>${notes}</ul>${options}</div></div></div>`;
-};
-
-/** 画面の流れ（段ごとの見出し・画像・操作の矢印）を縦につないだ HTML */
-export const flowHtml = (
-  steps: ReadonlyArray<FlowStep & { base64: string }>,
-): string => {
-  const body = steps
-    .map(
-      (step) =>
-        `<section><h2>${escapeHtml(step.title)}</h2><img src="data:image/png;base64,${step.base64}"></section>${
-          step.action === undefined
-            ? ""
-            : `<div class="arrow"><span>↓</span>${escapeHtml(step.action)}</div>`
-        }`,
-    )
-    .join("");
-  return `<!doctype html><meta charset="utf-8"><style>
-body{margin:0;background:#fff;font-family:${FONT};color:#1f2733}
-.wrap{padding:22px 26px;display:inline-block;max-width:1100px}h2{font-size:18px;margin:0 0 8px}
-img{display:block;max-width:1040px;border:1px solid #d5dae1;border-radius:8px}
-.arrow{display:flex;align-items:center;gap:12px;margin:14px 0 18px 24px;font-size:15px;color:#1d6fd6}.arrow span{font-size:28px;line-height:1}
-</style><div class="wrap">${body}</div>`;
-};
-
-/** flow.json（{ "steps": FlowStep[] }）を読み、形が違えば直し方つきで止める */
-export const parseFlow = (json: unknown): FlowStep[] => {
-  const steps =
-    typeof json === "object" && json !== null && "steps" in json
-      ? json.steps
-      : undefined;
-  if (!Array.isArray(steps) || steps.length === 0) {
-    throw new Error(
-      'flow.json は { "steps": [{ "title": "…", "image": "…", "action": "…" }] } の形で、steps を 1 つ以上書いてください',
-    );
-  }
-  return steps.map((step: unknown, index): FlowStep => {
-    const value =
-      typeof step === "object" && step !== null
-        ? (step as Record<string, unknown>)
-        : {};
-    const { title, image, action } = value;
-    if (typeof title !== "string" || typeof image !== "string") {
-      throw new Error(
-        `flow.json の steps[${index}] に title と image（文字列）を書いてください`,
-      );
-    }
-    if (action !== undefined && typeof action !== "string") {
-      throw new Error(
-        `flow.json の steps[${index}].action は文字列にしてください`,
-      );
-    }
-    return action === undefined ? { title, image } : { title, image, action };
+/** 開く画面のオリジンの外への通信を止める（ページを作る前に張る） */
+const guardNetwork = async (
+  context: BrowserContext,
+  allowedOrigins: ReadonlySet<string>,
+): Promise<void> => {
+  await context.route("**/*", (route) =>
+    isAllowedUrl(route.request().url(), allowedOrigins)
+      ? route.continue()
+      : route.abort(),
+  );
+  await context.routeWebSocket(/.*/, (socket) => {
+    void socket.close();
   });
 };
 
@@ -190,16 +77,22 @@ const runPoints = async (
   const url = toPageUrl(target, process.cwd());
   fs.mkdirSync(outDir, { recursive: true });
   const { chromium } = await import("playwright");
+  const allowedOrigins = allowedOriginsOf([
+    url,
+    ...specs.flatMap((spec) => (spec.url === undefined ? [] : [spec.url])),
+  ]);
   const browser = await chromium.launch({ env: browserEnv(process.env) });
   try {
     for (const spec of specs) {
       if (only !== undefined && spec.key !== only) continue;
-      const page = await browser.newPage({
+      const context = await browser.newContext({
         viewport: { width: 1280, height: 900 },
         deviceScaleFactor: 2,
         locale: "ja-JP",
         timezoneId: "Asia/Tokyo",
       });
+      await guardNetwork(context, allowedOrigins);
+      const page = await context.newPage();
       await page.goto(spec.url ?? url);
       await spec.setup?.(page);
       const missing = await page.evaluate((marks: Mark[]) => {
@@ -304,17 +197,20 @@ const runPoints = async (
         );
       }
       const shot = await page.screenshot({ clip, fullPage: true });
-      await page.close();
+      await context.close();
 
       const width = Math.round(clip.width);
-      const sheet = await browser.newPage({
+      // 組み立てる 1 枚は data: の画像だけで描く。外へも開いた画面へも通信しない
+      const sheetContext = await browser.newContext({
         viewport: { width: width + 560, height: 400 },
         deviceScaleFactor: 2,
       });
+      await guardNetwork(sheetContext, new Set());
+      const sheet = await sheetContext.newPage();
       await sheet.setContent(pointHtml(spec, shot.toString("base64"), width));
       const file = path.join(outDir, `point-${spec.key}.png`);
       await sheet.locator(".wrap").screenshot({ path: file });
-      await sheet.close();
+      await sheetContext.close();
       console.log(`書きました: ${file}`);
     }
   } finally {
@@ -325,17 +221,22 @@ const runPoints = async (
 const runFlow = async (flowPath: string, outFile: string): Promise<void> => {
   const steps = parseFlow(JSON.parse(fs.readFileSync(flowPath, "utf8")));
   const base = path.dirname(path.resolve(flowPath));
-  const withImages = steps.map((step) => ({
-    ...step,
-    base64: fs.readFileSync(path.resolve(base, step.image)).toString("base64"),
-  }));
+  const withImages = steps.map((step, index) => {
+    const image = path.resolve(base, step.image);
+    if (!fs.existsSync(image)) {
+      throw new Error(missingImageMessage(index, step.image, image));
+    }
+    return { ...step, base64: fs.readFileSync(image).toString("base64") };
+  });
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ env: browserEnv(process.env) });
   try {
-    const page = await browser.newPage({
+    const context = await browser.newContext({
       viewport: { width: 1200, height: 800 },
       deviceScaleFactor: 2,
     });
+    await guardNetwork(context, new Set());
+    const page = await context.newPage();
     await page.setContent(flowHtml(withImages));
     fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
     await page.locator(".wrap").screenshot({ path: outFile });

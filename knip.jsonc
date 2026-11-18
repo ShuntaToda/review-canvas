@@ -27,12 +27,7 @@
       "github-actions": false,
     },
     "infra": {
-      // scripts/annotate-screen.ts は、Issue・PR に貼る画像を作る開発の道具（pnpm --dir infra run annotate-screen。スキル dev-write-issue）
-      "entry": [
-        "bin/review-canvas.ts",
-        "test/embedded-app.ts",
-        "scripts/annotate-screen.ts",
-      ],
+      "entry": ["bin/review-canvas.ts", "test/embedded-app.ts"],
       "project": ["**/*.ts"],
       // infra は設定の形（api/infrastructure/config/*.ts。zod の定義）を相対パスで読むので、動かすのに zod が要る。
       // infra/ の中のファイルは zod を直に import しないため knip には使っていないと見えるが、依存として書いておく
