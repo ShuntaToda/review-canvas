@@ -220,7 +220,7 @@ const headingsOf = (file) =>
 
 describe("Claude Code のスキルとレビュー役（.claude/）", () => {
   // 説明文の先頭で、Claude Code がこのリポジトリ自身の開発用だと見分け、使う側のリポジトリの作業で選ばないようにする
-  const DEV_PREFIX = "【review-canvas 自身の開発用】";
+  const DEV_PREFIX_PATTERN = /^【review-canvas 自身の開発用】/;
   const skills = fs
     .readdirSync(path.join(root, ".claude/skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -245,7 +245,7 @@ describe("Claude Code のスキルとレビュー役（.claude/）", () => {
       expect(name).toBe(skill);
       expect(description.length).toBeGreaterThan(0);
       if (skill.startsWith("dev-")) {
-        expect(description.startsWith(DEV_PREFIX)).toBe(true);
+        expect(description).toMatch(DEV_PREFIX_PATTERN);
       }
     },
   );
@@ -258,7 +258,7 @@ describe("Claude Code のスキルとレビュー役（.claude/）", () => {
       );
 
       expect(name).toBe(agent);
-      expect(description.startsWith(DEV_PREFIX)).toBe(true);
+      expect(description).toMatch(DEV_PREFIX_PATTERN);
     },
   );
 
@@ -272,12 +272,30 @@ describe("Claude Code のスキルとレビュー役（.claude/）", () => {
     },
   );
 
+  /** スキル dev-multi-perspective-review の「1. 立てるレビュー役を決める」の、最初の表の 2 列目（立てるレビュー役）の文字 */
+  const reviewerCells = (() => {
+    const skill = read(".claude/skills/dev-multi-perspective-review/SKILL.md");
+    const section =
+      /\n## 1\. 立てるレビュー役を決める\n([\s\S]*?)\n## /.exec(skill)?.[1] ??
+      "";
+    const table = /(?:^\|.*\n?)+/m.exec(section)?.[0] ?? "";
+    return table
+      .split("\n")
+      .filter((line) => line.startsWith("|"))
+      .slice(2)
+      .map((line) => line.split("|")[2]?.trim() ?? "");
+  })();
+
+  test("[正常系]多視点レビューの「立てるレビュー役を決める」の表を読み取れている", () => {
+    expect(reviewerCells.length).toBeGreaterThan(3);
+  });
+
   test.each(agents)(
-    "[正常系]レビュー役 %s を、スキル dev-multi-perspective-review の「立てるレビュー役を決める」の表に載せている（足した役が呼ばれないままにならないように）",
+    "[正常系]レビュー役 %s を、スキル dev-multi-perspective-review の「立てるレビュー役を決める」の表の「立てるレビュー役」の列に載せている（足した役が呼ばれないままにならないように）",
     (agent) => {
       expect(
-        read(".claude/skills/dev-multi-perspective-review/SKILL.md"),
-      ).toContain(`\`${agent}\``);
+        reviewerCells.filter((cell) => cell.includes(`\`${agent}\``)),
+      ).toHaveLength(1);
     },
   );
 });
@@ -310,13 +328,13 @@ describe("Issue と PR のテンプレート（.github/）", () => {
     ],
     ".github/pull_request_template.md": [
       "閉じる Issue",
+      "黙らせた検査・残したこと",
       "何を・なぜ",
       "実際に動かしたこと",
       "テストの表",
       "画面の流れ",
       "確かめたこと",
       "レビュー実施記録",
-      "黙らせた検査・残したこと",
     ],
   };
   const issueTemplates = fs
@@ -359,8 +377,11 @@ describe("Issue と PR のテンプレート（.github/）", () => {
     expect(template).toContain("Medium 以上: N → 0 件");
   });
 
-  test.each(Object.keys(REQUIRED_HEADINGS))(
-    "[正常系]%s は、下書きの検査（scripts/check-issue-text.mjs）を通る（テンプレートから書いた本文が、そのまま投稿できる）",
+  test.each([
+    ...Object.keys(REQUIRED_HEADINGS),
+    ".claude/skills/dev-write-issue/examples/issue-comment.example.md",
+  ])(
+    "[正常系]%s は、下書きの検査（scripts/check-issue-text.mjs）を通る（テンプレート・見本から書いた本文が、そのまま投稿できる）",
     (file) => {
       expect(issueTextProblemsOf(read(file))).toStrictEqual([]);
     },
