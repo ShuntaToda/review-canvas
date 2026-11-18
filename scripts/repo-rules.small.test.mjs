@@ -380,8 +380,11 @@ describe("Issue と PR のテンプレート（.github/）", () => {
   test.each([
     ...Object.keys(REQUIRED_HEADINGS),
     ".claude/skills/dev-write-issue/examples/issue-comment.example.md",
+    ".claude/skills/dev-write-issue/SKILL.md",
+    ".claude/skills/dev-implement-issue/SKILL.md",
+    ".claude/skills/dev-multi-perspective-review/SKILL.md",
   ])(
-    "[正常系]%s は、下書きの検査（scripts/check-issue-text.mjs）を通る（テンプレート・見本から書いた本文が、そのまま投稿できる）",
+    "[正常系]%s は、下書きの検査（scripts/check-issue-text.mjs）を通る（テンプレート・見本・下書きの書き方を教えるスキルから写した文が、そのまま投稿できる）",
     (file) => {
       expect(issueTextProblemsOf(read(file))).toStrictEqual([]);
     },

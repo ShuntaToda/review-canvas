@@ -134,6 +134,32 @@ describe("problemsOf", () => {
     expect(problems).toEqual([]);
   });
 
+  test.each([
+    ["file:///home/", "画像は file:///home/yamada/work/point-a.png にある"],
+    ["file:///C:\\", "画像は <file:///C:/Users/yamada/point-a.png> にある"],
+    ["/home/", "見本は https://example.com/a と/home/yamada/work にある"],
+  ])(
+    "[異常系]file: の URL の手元のパスと、URL と並んだ手元のパスを返す（%s）",
+    (start, line) => {
+      const problems = problemsOf(`${line}\n`);
+
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(`手元のパス（${start.replace("\\", "")}`);
+    },
+  );
+
+  test("[正常系]URL のクエリ・フラグメントの中の /home/ と、後ろに名前が続かない始まりの説明は、手元のパスとして返さない", () => {
+    const problems = problemsOf(
+      [
+        "https://example.com/login?next=/home/yamada#/Users/yamada",
+        "[開く](https://example.com/?p=/tmp/a)",
+        "`/home/`・`/Users/`・`C:\\`・`/tmp/` で始まるパスを見つける",
+      ].join("\n"),
+    );
+
+    expect(problems).toEqual([]);
+  });
+
   test("[異常系]投稿した後の本文（posted）では、フェンスとインラインのコードの中の印も返す", () => {
     const problems = problemsOf(
       `\`${IMAGE_MARKER} point-a.png】\`\n\`\`\`\n${IMAGE_MARKER} point-b.png】\n\`\`\`\n`,

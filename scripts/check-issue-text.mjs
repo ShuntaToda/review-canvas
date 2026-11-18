@@ -24,9 +24,31 @@ export const IMAGE_MARKER = "【画像を貼る:";
 
 /**
  * 手元のパスの始まり。公開リポジトリの Issue・PR に、作業した人の手元のフォルダ（利用者名を含む）を出さないために見る。
- * コードの例・HTML のコメントの中も、投稿すればそのまま読めるので外さない
+ * コードの例・HTML のコメントの中も、投稿すればそのまま読めるので外さない。後ろに名前が続かない始まりだけ（「/home/ で始まる」
+ * という説明）は、手元のフォルダを出していないので見ない
  */
-const LOCAL_PATH = /(^|[^\w./~-])(\/home\/|\/Users\/|\/tmp\/|[A-Za-z]:\\)/;
+const LOCAL_PATH =
+  /(^|[^\w./~-])(\/home\/|\/Users\/|\/tmp\/|[A-Za-z]:\\)(?=[\w.~-])/;
+
+/** file: の URL のうち、手元のフォルダを指すもの（file:///home/… や file:///C:/…） */
+const LOCAL_FILE_URL =
+  /^file:\/\/\/?(home\/|Users\/|tmp\/|[A-Za-z]:[\\/])(?=[\w.~-])/i;
+
+/** URL（スキーム:// から、空白・括弧・引用符の手前まで） */
+const URL_PATTERN = /[A-Za-z][\w+.-]*:\/\/[^\s)\]>"'`]*/g;
+
+/**
+ * 行の中の手元のパス（見つかった始まり）。URL の中は、クエリ・フラグメントに /home/ があっても手元のパスではないので、
+ * file: の URL だけを見る
+ */
+const localPathOf = (line) => {
+  for (const [url] of line.matchAll(URL_PATTERN)) {
+    const file = LOCAL_FILE_URL.exec(url);
+    if (file !== null) return `file:///${file[1]}`;
+  }
+  const path = LOCAL_PATH.exec(line.replaceAll(URL_PATTERN, " "));
+  return path === null ? undefined : path[2];
+};
 
 /**
  * フェンス（``` か ~~~）の中の行かどうかを、行ごとに返す。フェンスの行そのものも中に数える。
@@ -88,10 +110,10 @@ export const problemsOf = (markdown, { posted = false } = {}) => {
 
   lines.forEach((rawLine, index) => {
     const where = `${index + 1} 行目`;
-    const localPath = LOCAL_PATH.exec(sourceLines[index] ?? "");
-    if (localPath !== null) {
+    const localPath = localPathOf(sourceLines[index] ?? "");
+    if (localPath !== undefined) {
       problems.push(
-        `${where}: 手元のパス（${localPath[2]}…）があります。作業した人の手元のフォルダは公開の本文に書きません。画像を貼る印はファイル名だけ（【画像を貼る: point-a.png】）にし、絶対パスの一覧は会話で人に渡してください`,
+        `${where}: 手元のパス（${localPath}…）があります。作業した人の手元のフォルダは公開の本文に書きません。画像を貼る印はファイル名だけ（【画像を貼る: point-a.png】）にし、絶対パスの一覧は会話で人に渡してください`,
       );
     }
     // 貼り残しの印は、コードの例・インラインのコードの中にあっても貼り残し
