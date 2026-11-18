@@ -112,6 +112,9 @@ describe("Storybook の配信の書き換え（storybook-rewrite.js）", () => {
     "/sb/main/shop/review-canvas-bridge.js",
     "/sb/main/blog/index.json",
     "/sb/main/meta.json",
+    // 発行のときに撮ったスクリーンショットと、その目録
+    "/sb/main/shop/review-canvas-shots.json",
+    "/sb/claude~2Fx/shop/review-canvas-shots/shop-list--default-1000-0123456789abcdef.png",
     "/sb/main/shop/sb-manager/runtime",
     "/sb/main",
   ])("Storybook の置き場の中のパス %s はそのまま渡す", (uri) => {

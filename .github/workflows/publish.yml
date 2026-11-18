@@ -16,7 +16,7 @@ name: review-canvas-publish
 #
 # 置く手順（スクリプト・橋渡し）は review-canvas のリポジトリ（review_canvas_repository）の review_canvas_ref（コミットの SHA）から取り出す（tool/）。
 # 置くブランチは使う側のリポジトリから別の場所（host/）へ取り出してビルドする。
-# ビルド（置くブランチのコードを動かす）と置く（AWS の資格情報を持つ）はジョブを分け、成果物で受け渡す。
+# ビルド・スクリーンショットの撮影（置くブランチのコードを動かす）と置く（AWS の資格情報を持つ）はジョブを分け、成果物で受け渡す。
 # 既定のブランチだけは、置くジョブが既定のブランチのチェックアウト（信頼できるもの）から自分でビルドする。
 #
 # Action はコミットの SHA で固定する（タグの付け替えで中身が変わらないように。認証情報を扱うため）。
@@ -327,7 +327,8 @@ jobs:
               ;;
           esac
 
-  # Storybook をビルドし、成果物として渡す。置くブランチのコード（ビルド）は、AWS の資格情報（id-token）を持たないこのジョブでだけ動かす。
+  # Storybook をビルドし、ストーリーのスクリーンショットを撮り、成果物として渡す。
+  # 置くブランチのコード（ビルド・ブラウザで動かすストーリー）は、AWS の資格情報（id-token）を持たないこのジョブでだけ動かす。
   # 既定のブランチは、ここではビルドしない（置くジョブが既定のブランチのコードから自分でビルドする）
   build:
     needs: [plan, check-published, list-published]
@@ -423,6 +424,30 @@ jobs:
             mkdir -p "artifact/$base/$(dirname "$out_dir")"
             cp -R "host/$base/$out_dir" "artifact/$base/$out_dir"
           done
+
+      # ストーリーのスクリーンショット（キャンバスがふだん並べる画像）を撮る手順は、review-canvas の review_canvas_ref のもの
+      - name: Checkout review-canvas
+        if: env.SKIP != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ inputs.review_canvas_repository }}
+          ref: ${{ inputs.review_canvas_ref }}
+          path: tool
+
+      # 置くブランチのコード（ストーリー）をブラウザで動かすので、AWS の資格情報（id-token）を持たないこのジョブで撮り、
+      # 成果物のビルド結果の中（review-canvas-shots/・review-canvas-shots.json）に入れて渡す。
+      # 撮れなくても置く（画像の無い画面は、キャンバスが iframe で出す）
+      - name: Screenshots
+        if: env.SKIP != 'true'
+        continue-on-error: true
+        working-directory: tool
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir infra exec playwright install --with-deps --only-shell chromium
+          pnpm --dir infra run screenshots \
+            --repo-root "$GITHUB_WORKSPACE/artifact" \
+            --config "$GITHUB_WORKSPACE/artifact/$CONFIG"
 
       - name: Artifact name
         if: env.SKIP != 'true'
@@ -543,6 +568,14 @@ jobs:
           INSTALL_COMMAND: ${{ inputs.install_command }}
         run: bash -c "$INSTALL_COMMAND"
 
+      # 既定のブランチは、置くスクリプトがビルドのあとにスクリーンショットも撮る（既定のブランチのコードだけを動かす）。
+      # 入らなくても置く（スクリプトが、撮れなければ画像なしで置く）
+      - name: Install Chromium
+        if: env.IS_DEFAULT_BRANCH == 'true'
+        continue-on-error: true
+        working-directory: tool
+        run: pnpm --dir infra exec playwright install --with-deps --only-shell chromium
+
       # ロールを選ぶ。既定のブランチ用のロールが無いまま既定のブランチを置こうとしたら、ほかのロールに落とさずに止める
       - name: Check role
         id: role
@@ -573,7 +606,7 @@ jobs:
           REVIEW_CANVAS_PUBLISH_AS_DEFAULT: ${{ env.IS_DEFAULT_BRANCH }}
         run: |
           if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
-            # 既定のブランチのコードから、ここでビルドして置く（橋渡しは上でビルドしたもの）
+            # 既定のブランチのコードから、ここでビルドし、スクリーンショットを撮って置く（橋渡しは上でビルドしたもの）
             pnpm --dir infra run publish-branch \
               --branch "$BRANCH" \
               --commit "$(git -C "$GITHUB_WORKSPACE/host" rev-parse --short HEAD)" \
@@ -581,12 +614,14 @@ jobs:
               --config "$GITHUB_WORKSPACE/host/$CONFIG" \
               --stack-name "$REVIEW_CANVAS_STACK_NAME"
           else
+            # 成果物の中のスクリーンショット（build ジョブが撮ったもの）を置く。このジョブではブラウザを動かさない
             pnpm --dir infra run publish-branch \
               --branch "$BRANCH" \
               --commit "$(cat "$GITHUB_WORKSPACE/artifact/COMMIT")" \
               --repo-root "$GITHUB_WORKSPACE/artifact" \
               --config "$GITHUB_WORKSPACE/artifact/$CONFIG" \
               --skip-build \
+              --skip-screenshots \
               --stack-name "$REVIEW_CANVAS_STACK_NAME"
           fi
 

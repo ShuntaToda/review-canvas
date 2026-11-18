@@ -3,13 +3,15 @@
  * phase は Storybook の StoryRender の段階（preparing → loading → rendering → playing → played → completing → completed → afterEach → finished）。
  * 途中で失敗・中断したとき（errored・aborted）も終わったとみなす
  */
-const SETTLED_PHASES: ReadonlySet<string> = new Set([
+export const SETTLED_STORY_PHASES: ReadonlyArray<string> = [
   "completed",
   "afterEach",
   "finished",
   "errored",
   "aborted",
-]);
+];
+
+const SETTLED_PHASES: ReadonlySet<string> = new Set(SETTLED_STORY_PHASES);
 
 export const isStoryRenderSettled = (phase: unknown): boolean =>
   typeof phase === "string" && SETTLED_PHASES.has(phase);

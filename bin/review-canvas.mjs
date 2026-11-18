@@ -16,7 +16,7 @@ const [command, ...rest] = process.argv.slice(2);
 
 const usage = `使い方: review-canvas <dev|publish|unpublish|list|is-published|schema> [オプション]
   dev          [--config <file>]
-  publish      [--config <file>] [--repo-root <dir>] [--branch <name>] [--commit <hash>] [--skip-build] [--profile <name>] [--stack-name <name>] [--dry-run]
+  publish      [--config <file>] [--repo-root <dir>] [--branch <name>] [--commit <hash>] [--skip-build] [--skip-screenshots] [--profile <name>] [--stack-name <name>] [--dry-run]
   unpublish    <branch> [--profile <name>] [--stack-name <name>] [--dry-run]
   list         [--profile <name>] [--stack-name <name>]
   is-published <branch> [--profile <name>] [--stack-name <name>]

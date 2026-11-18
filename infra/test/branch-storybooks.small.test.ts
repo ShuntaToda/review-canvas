@@ -45,13 +45,22 @@ const iframeFiles = {
   blog: "/tmp/stage/blog/iframe.html",
 };
 const bridgeFile = "/tmp/review-canvas-bridge.js";
+// shop は画像あり、blog は画像なし（撮っていない・撮れなかった）
+const shopShotsDir = path.join(shopDir, "review-canvas-shots");
+const shots = {
+  shop: {
+    manifestFile: "/tmp/stage/shop/review-canvas-shots.json",
+    dir: shopShotsDir,
+  },
+  blog: { manifestFile: "/tmp/stage/blog/review-canvas-shots.json", dir: null },
+};
 
 afterAll(() => {
   fs.rmSync(root, { recursive: true });
 });
 
 describe("planPublish", () => {
-  test("Storybook ごとにブランチの置き場だけを入れ替え（assets/ は消さずに先に長く持たせ、ほかは no-cache）、橋渡しと差し込んだ iframe.html・index.json を続けて置き、目録を書いてから使わない assets/ を消し、キャッシュを消す（既定のブランチでなければサービスワーカーは置かない）", () => {
+  test("Storybook ごとにブランチの置き場だけを入れ替え（assets/ とスクリーンショットは消さずに先に長く持たせ、ほかは no-cache）、橋渡しと差し込んだ iframe.html・index.json・画像の目録を続けて置き、目録を書いてから使わない assets/ と画像を消し、キャッシュを消す（既定のブランチでなければサービスワーカーは置かない）", () => {
     const calls = planPublish({
       target,
       branch: "claude/x-y",
@@ -59,6 +68,7 @@ describe("planPublish", () => {
       metaFile: "/tmp/meta.json",
       iframeFiles,
       bridgeFile,
+      shots,
     });
 
     const assetsSync = (dir: string, source: string, prune: boolean) => [
@@ -71,11 +81,29 @@ describe("planPublish", () => {
       "public, max-age=31536000, immutable",
       "--no-progress",
     ];
+    const shotsSync = (prune: boolean) => [
+      "s3",
+      "sync",
+      shopShotsDir,
+      "s3://site-bucket/sb/claude~2Fx-y/shop/review-canvas-shots/",
+      ...(prune ? ["--delete"] : []),
+      "--exclude",
+      "*",
+      "--include",
+      "*.png",
+      "--no-follow-symlinks",
+      "--content-type",
+      "image/png",
+      "--cache-control",
+      "public, max-age=31536000, immutable",
+      "--no-progress",
+    ];
     expect(calls).toStrictEqual([
       ...(["shop", "blog"] as const).flatMap((source) => {
         const dir = source === "shop" ? shopDir : blogDir;
         return [
           assetsSync(dir, source, false),
+          ...(source === "shop" ? [shotsSync(false)] : []),
           [
             "s3",
             "sync",
@@ -84,6 +112,10 @@ describe("planPublish", () => {
             "--delete",
             "--exclude",
             "assets/*",
+            "--exclude",
+            "review-canvas-shots/*",
+            "--exclude",
+            "review-canvas-shots.json",
             "--exclude",
             "mockServiceWorker.js",
             "--exclude",
@@ -129,6 +161,17 @@ describe("planPublish", () => {
             "application/json",
             "--no-progress",
           ],
+          [
+            "s3",
+            "cp",
+            shots[source].manifestFile,
+            `s3://site-bucket/sb/claude~2Fx-y/${source}/review-canvas-shots.json`,
+            "--cache-control",
+            "no-cache",
+            "--content-type",
+            "application/json",
+            "--no-progress",
+          ],
         ];
       }),
       [
@@ -144,6 +187,14 @@ describe("planPublish", () => {
       ],
       assetsSync(shopDir, "shop", true),
       assetsSync(blogDir, "blog", true),
+      // 目録に無い画像を消す。画像の無い Storybook は、前に置いた画像をすべて消す
+      shotsSync(true),
+      [
+        "s3",
+        "rm",
+        "s3://site-bucket/sb/claude~2Fx-y/blog/review-canvas-shots/",
+        "--recursive",
+      ],
       [
         "cloudfront",
         "create-invalidation",
@@ -164,6 +215,7 @@ describe("planPublish", () => {
         metaFile: "/tmp/meta.json",
         iframeFiles,
         bridgeFile,
+        shots,
       });
     const writesWorker = (calls: string[][]) =>
       calls.some(
@@ -186,6 +238,36 @@ describe("planPublish", () => {
     expect(JSON.stringify(other)).not.toContain('mockServiceWorker.js"]');
   });
 
+  test("スクリーンショットは、画像・画像の目録の順に置き、目録に無い画像を消すのはブランチの目録を書いたあとだけ", () => {
+    const calls = planPublish({
+      target,
+      branch: "main",
+      dirs: { shop: shopDir },
+      metaFile: "/tmp/meta.json",
+      iframeFiles,
+      bridgeFile,
+      shots,
+    });
+    const dest = "s3://site-bucket/sb/main/shop/review-canvas-shots/";
+    const indexOf = (match: (call: string[]) => boolean) =>
+      calls.findIndex(match);
+    const upload = indexOf(
+      (call) => call[3] === dest && !call.includes("--delete"),
+    );
+    const manifest = indexOf(
+      (call) => call[2] === shots.shop.manifestFile && call[1] === "cp",
+    );
+    const meta = indexOf((call) => call[2] === "/tmp/meta.json");
+    const prune = indexOf(
+      (call) => call[3] === dest && call.includes("--delete"),
+    );
+
+    expect(upload).toBeGreaterThanOrEqual(0);
+    expect(upload).toBeLessThan(manifest);
+    expect(manifest).toBeLessThan(meta);
+    expect(meta).toBeLessThan(prune);
+  });
+
   test("assets/ を消すのは目録を書いたあとだけ（途中で止まっても、目録の指す中身は揃ったまま）", () => {
     const calls = planPublish({
       target,
@@ -194,6 +276,7 @@ describe("planPublish", () => {
       metaFile: "/tmp/meta.json",
       iframeFiles,
       bridgeFile,
+      shots,
     });
     const metaIndex = calls.findIndex((call) => call[2] === "/tmp/meta.json");
     const deletes = calls
@@ -215,13 +298,17 @@ describe("planPublish", () => {
       metaFile: "/tmp/meta.json",
       iframeFiles,
       bridgeFile,
+      shots,
     });
 
     expect(calls.map((call) => call[3])).toStrictEqual([
+      "s3://site-bucket/sb/main/shop/review-canvas-shots/",
       "s3://site-bucket/sb/main/shop/",
       "s3://site-bucket/sb/main/shop/review-canvas-bridge.js",
       "s3://site-bucket/sb/main/shop/iframe.html",
+      "s3://site-bucket/sb/main/shop/review-canvas-shots.json",
       "s3://site-bucket/sb/main/meta.json",
+      "s3://site-bucket/sb/main/shop/review-canvas-shots/",
       "E123",
     ]);
   });
@@ -343,6 +430,7 @@ const entry = (overrides: Record<string, unknown> = {}) => ({
   outDir: "storybook-static",
   widths: [375, 1280],
   defaultWidth: 375,
+  baseHeight: 812,
   ...overrides,
 });
 
@@ -372,6 +460,7 @@ describe("parseStorybookConfig", () => {
     { storybooks: [entry({ build: undefined })] },
     { storybooks: [entry(), entry()] },
     { storybooks: [entry({ defaultWidth: 999 })] },
+    { storybooks: [entry({ baseHeight: undefined })] },
   ])("形の違う設定（%o）は例外にする", (raw) => {
     expect(() => parseStorybookConfig(raw)).toThrow();
   });
@@ -543,6 +632,7 @@ describe("parseArgs", () => {
         branch: "feature/a",
         commit: "abc1234",
         skipBuild: true,
+        skipScreenshots: false,
       },
       options: {
         bucket: "arg-bucket",
@@ -558,6 +648,25 @@ describe("parseArgs", () => {
         dryRun: false,
       },
     });
+  });
+
+  test("publish の --skip-screenshots は撮らずに置く。screenshots は撮るだけ（ブランチ・置き場を受けない）", () => {
+    expect(
+      parseArgs(["publish", "--skip-build", "--skip-screenshots"], {}).command,
+    ).toStrictEqual({
+      kind: "publish",
+      branch: undefined,
+      commit: undefined,
+      skipBuild: true,
+      skipScreenshots: true,
+    });
+    expect(
+      parseArgs(["screenshots", "--repo-root", "/work/host"], {}),
+    ).toMatchObject({
+      command: { kind: "screenshots" },
+      options: { repoRoot: "/work/host" },
+    });
+    expect(() => parseArgs(["screenshots", "main"], {})).toThrow("余分な引数");
   });
 
   test("unpublish・is-published はブランチを位置で受ける", () => {
@@ -580,8 +689,8 @@ describe("parseArgs", () => {
   });
 
   test.each([
-    { argv: [], message: "publish・unpublish" },
-    { argv: ["deploy"], message: "publish・unpublish" },
+    { argv: [], message: "publish・screenshots・unpublish" },
+    { argv: ["deploy"], message: "publish・screenshots・unpublish" },
     { argv: ["unpublish"], message: "ブランチを指定" },
     { argv: ["unpublish", "a", "b"], message: "余分な引数" },
     { argv: ["publish", "--bucket"], message: "--bucket に値" },

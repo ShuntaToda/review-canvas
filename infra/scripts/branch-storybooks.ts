@@ -10,7 +10,16 @@ import {
   BRIDGE_SCRIPT_NAME,
   injectBridge,
 } from "../../src/features/review/bridge/inject";
+import {
+  SHOTS_DIR,
+  SHOTS_MANIFEST_FILE,
+} from "../../src/features/review/model/story-shots";
 import { decodeBranchKey, encodeBranchKey } from "./branch-key";
+import {
+  captureStorybook,
+  type StagedShots,
+  stageShots,
+} from "./story-screenshots";
 
 /**
  * ブランチの Storybook を配信（review-canvas の S3・CloudFront）へ置く・消す・確かめるスクリプト。
@@ -20,6 +29,9 @@ import { decodeBranchKey, encodeBranchKey } from "./branch-key";
  * 置き場（docs/security.md。Storybook の配信がキャンバスと別のオリジンで返す）:
  *   sb/<ブランチのキー>/<設定の id>/                      … Storybook のビルド結果（ブランチごとに入れ替える）。
  *                                                          iframe.html には橋渡し（review-canvas-bridge.js。同じ場所に置く）を差し込む
+ *   sb/<ブランチのキー>/<設定の id>/review-canvas-shots.json … ストーリーのスクリーンショットの目録（ストーリー ID・幅・高さ・画像の場所）
+ *   sb/<ブランチのキー>/<設定の id>/review-canvas-shots/    … スクリーンショット（設定の幅ごと。名前に中身のハッシュを持つ）。
+ *                                                          キャンバスはふだんこの画像を並べ、触る画面だけ iframe に切り替える（story-screenshots.ts）
  *   sb/<ブランチのキー>/meta.json                           … 目録（branch・commit・builtAt・storybooks）。置くときは最後に書き、消すときは最初に消す
  *   sb/mockServiceWorker.js                                 … msw のサービスワーカー（Storybook の配信がオリジン直下で返す。どのブランチも同じものを読む）。
  *                                                          既定のブランチを置くときだけ書く（ほかのブランチのロールは書けない。オリジンの直下で動くため）
@@ -28,7 +40,10 @@ import { decodeBranchKey, encodeBranchKey } from "./branch-key";
  * 古いブランチを置くときも、橋渡しの差し込みはこのスクリプトの版で行う
  *
  * 使い方:
- *   pnpm --dir infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--repo-root <置くブランチの根>]
+ *   pnpm --dir infra run publish-branch [--branch <名前>] [--commit <ハッシュ>] [--skip-build] [--skip-screenshots] [--repo-root <置くブランチの根>]
+ *     ビルドの後・上げる前に、ストーリーのスクリーンショットを撮る（Playwright の Chromium）。--skip-screenshots は撮らず、
+ *     ビルド結果の中にすでにある画像と目録（下の screenshots で撮ったもの）があれば、それを置く
+ *   pnpm --dir infra run branch-storybooks screenshots [--repo-root <根>]   … スクリーンショットだけを撮る（AWS にはつながない。ビルド結果の中に書く）
  *   pnpm --dir infra run unpublish-branch <ブランチ>
  *   pnpm --dir infra run branch-storybooks is-published <ブランチ>   … true / false を出す
  *   pnpm --dir infra run branch-storybooks list                        … 置いてあるブランチを JSON の配列で出す
@@ -158,6 +173,7 @@ const NO_CACHE = ["--cache-control", REVALIDATE_CACHE_CONTROL];
  * 名前にハッシュを持つ assets/ は長く持たせ（immutable）、先に置く（新しい iframe.html が読むファイルを先に揃える）。
  * 先に置くときは古い assets/ を消さない（置き直しの途中で、古い iframe.html を読んだ画面が古い assets/ を読めるように）。
  * 目録を書いたあとで、新しいビルドに無い assets/ を消す（途中で止まっても、目録の指す中身は揃ったまま）。
+ * ストーリーのスクリーンショット（review-canvas-shots/）も同じ考え方で、画像を先に置き、画像の目録を置き、あとで使わない画像を消す。
  * ほかは使うたびに確かめ直させる（no-cache。名前の変わらない iframe.html が古いまま残らないように）。最後にキャッシュを消す
  */
 /** Storybook の id で引いた値。無ければ、呼び出す側の組み立ての誤り（undefined を aws の引数に渡さない） */
@@ -180,6 +196,7 @@ export const planPublish = ({
   metaFile,
   iframeFiles,
   bridgeFile,
+  shots,
 }: {
   target: Target;
   branch: string;
@@ -191,6 +208,8 @@ export const planPublish = ({
   iframeFiles: Record<string, string>;
   /** 橋渡しのファイル */
   bridgeFile: string;
+  /** Storybook ごとの、スクリーンショットの目録と画像（stageShots で作る） */
+  shots: Record<string, StagedShots>;
 }): AwsCall[] => {
   const key = encodeBranchKey(branch);
   const base = `s3://${target.bucket}/${STORYBOOK_PREFIX}${key}/`;
@@ -211,6 +230,34 @@ export const planPublish = ({
     IMMUTABLE_CACHE_CONTROL,
     "--no-progress",
   ];
+  const shotsOf = (source: string): StagedShots => {
+    const value = shots[source];
+    if (value === undefined) throw new Error(`shots に ${source} がありません`);
+    return value;
+  };
+  // 画像は名前に中身のハッシュを持つので長く持たせる。PNG だけを、画像として置く（成果物の中のリンク・ほかの種類のファイルは置かない）
+  const shotsSync = (source: string, prune: boolean): AwsCall => {
+    const { dir } = shotsOf(source);
+    const dest = `${base}${source}/${SHOTS_DIR}/`;
+    if (dir === null) return ["s3", "rm", dest, "--recursive"];
+    return [
+      "s3",
+      "sync",
+      dir,
+      dest,
+      ...(prune ? ["--delete"] : []),
+      "--exclude",
+      "*",
+      "--include",
+      "*.png",
+      "--no-follow-symlinks",
+      "--content-type",
+      "image/png",
+      "--cache-control",
+      IMMUTABLE_CACHE_CONTROL,
+      "--no-progress",
+    ];
+  };
   // 共有のサービスワーカー（オリジンの直下で動く）は、既定のブランチのものだけを置く（ほかのブランチのロールは書けない）
   const isDefault = branch === target.defaultBranch;
   const workerDir = isDefault
@@ -221,15 +268,21 @@ export const planPublish = ({
   return [
     ...sources.flatMap((source): AwsCall[] => [
       ...(withAssets.includes(source) ? [assetsSync(source, false)] : []),
+      // 画像は、それを指す目録より先に置く（古い画像は消さない。目録を書いたあとで消す）
+      ...(shotsOf(source).dir === null ? [] : [shotsSync(source, false)]),
       [
         "s3",
         "sync",
         dirOf(source),
         `${base}${source}/`,
         "--delete",
-        // assets/ は上で置き、iframe.html と橋渡しは下で置く（除いたものは --delete でも消さない）
+        // assets/ と画像は上で置き、iframe.html・橋渡し・画像の目録は下で置く（除いたものは --delete でも消さない）
         "--exclude",
         `${HASHED_ASSETS_DIR}/*`,
+        "--exclude",
+        `${SHOTS_DIR}/*`,
+        "--exclude",
+        SHOTS_MANIFEST_FILE,
         "--exclude",
         MOCK_SERVICE_WORKER_FILE,
         "--exclude",
@@ -277,6 +330,17 @@ export const planPublish = ({
             ],
           ]
         : []),
+      // 画像の目録（確かめ直したもの。画像が無ければ空の目録を置き、前の目録を残さない）
+      [
+        "s3",
+        "cp",
+        shotsOf(source).manifestFile,
+        `${base}${source}/${SHOTS_MANIFEST_FILE}`,
+        ...NO_CACHE,
+        "--content-type",
+        "application/json",
+        "--no-progress",
+      ],
     ]),
     ...(workerDir === undefined
       ? []
@@ -304,6 +368,8 @@ export const planPublish = ({
     ],
     // 新しいビルドに無い assets/ を消す（中身は上で置いたので、ここでは消すだけ）
     ...withAssets.map((source) => assetsSync(source, true)),
+    // 目録に無い画像を消す（画像が 1 枚も無ければ、前に置いた分をすべて消す）
+    ...sources.map((source) => shotsSync(source, true)),
     invalidation(target, [
       `/${STORYBOOK_PREFIX}${key}/*`,
       ...(workerDir === undefined ? [] : [`/${MOCK_SERVICE_WORKER_FILE}`]),
@@ -381,7 +447,15 @@ export const branchesFromPrefixes = (
   });
 
 export type Command =
-  | { kind: "publish"; branch?: string; commit?: string; skipBuild: boolean }
+  | {
+      kind: "publish";
+      branch?: string;
+      commit?: string;
+      skipBuild: boolean;
+      /** スクリーンショットを撮らない（ビルド結果の中にすでにあるものは置く） */
+      skipScreenshots: boolean;
+    }
+  | { kind: "screenshots" }
   | { kind: "unpublish"; branch: string }
   | { kind: "is-published"; branch: string }
   | { kind: "list" };
@@ -437,7 +511,11 @@ export const parseArgs = (
         throw new Error(`${name} に値を指定してください`);
       }
       values[VALUE_OPTIONS[name as keyof typeof VALUE_OPTIONS]] = value;
-    } else if (name === "--skip-build" || name === "--dry-run") {
+    } else if (
+      name === "--skip-build" ||
+      name === "--skip-screenshots" ||
+      name === "--dry-run"
+    ) {
       flags.add(name);
     } else if (name.startsWith("--")) {
       throw new Error(`知らないオプションです: ${name}`);
@@ -490,9 +568,13 @@ export const parseArgs = (
           branch: values.branch,
           commit: values.commit,
           skipBuild: flags.has("--skip-build"),
+          skipScreenshots: flags.has("--skip-screenshots"),
         },
         options,
       };
+    case "screenshots":
+      expectNoMore(0);
+      return { command: { kind: "screenshots" }, options };
     case "unpublish":
     case "is-published":
       expectNoMore(values.branch === undefined ? 1 : 0);
@@ -502,7 +584,7 @@ export const parseArgs = (
       return { command: { kind: "list" }, options };
     default:
       throw new Error(
-        "publish・unpublish・is-published・list のどれかを指定してください",
+        "publish・screenshots・unpublish・is-published・list のどれかを指定してください",
       );
   }
 };
@@ -771,10 +853,15 @@ const listPublished = (target: Target, options: CommonOptions): string[] => {
   );
 };
 
-const publish = (
-  command: Extract<Command, { kind: "publish" }>,
+/** 設定ファイルを読み、Storybook ごとのビルド結果の場所を決める（build が true ならビルドしてから） */
+const prepareStorybooks = (
   options: CommonOptions,
-): void => {
+  { build }: { build: boolean },
+): {
+  repoRoot: string;
+  config: ReviewCanvasConfig;
+  dirs: Record<string, string>;
+} => {
   const repoRoot = path.resolve(
     options.repoRoot ?? git(["rev-parse", "--show-toplevel"], process.cwd()),
   );
@@ -784,6 +871,65 @@ const publish = (
     configFile,
   );
   const configDir = path.dirname(configFile);
+  const dirs: Record<string, string> = {};
+  for (const { id: source, build: command, outDir } of config.storybooks) {
+    if (build) {
+      console.log(`$ ${command}`);
+      const result = spawnSync(command, {
+        cwd: configDir,
+        shell: true,
+        stdio: "inherit",
+      });
+      if (result.status !== 0) {
+        throw new Error(
+          `Storybook（${source}）のビルドに失敗しました: ${command}`,
+        );
+      }
+    }
+    const dir = resolveOutDir(configDir, outDir, repoRoot);
+    if (!fs.existsSync(path.join(dir, "index.json"))) {
+      throw new Error(
+        `Storybook（${source}）のビルド結果がありません: ${dir}/index.json`,
+      );
+    }
+    dirs[source] = dir;
+  }
+  return { repoRoot, config, dirs };
+};
+
+/**
+ * Storybook ごとにスクリーンショットを撮り、ビルド結果の中に書く。
+ * 撮れなかった 1 枚があっても続ける（キャンバスはその 1 枚を iframe で出す）。ブラウザを起こせないときは例外
+ */
+const captureScreenshots = async (
+  config: ReviewCanvasConfig,
+  dirs: Record<string, string>,
+): Promise<void> => {
+  for (const { id: source, widths, baseHeight } of config.storybooks) {
+    const dir = dirs[source];
+    if (dir === undefined) continue;
+    console.log(
+      `スクリーンショットを撮ります: ${source}（幅 ${widths.join("・")}px）`,
+    );
+    const { manifest, failures, elapsedMs } = await captureStorybook({
+      dir,
+      widths,
+      baseHeight,
+      log: (message) => console.warn(message),
+    });
+    console.log(
+      `  ${String(manifest.shots.length)} 枚を撮りました（${String(Math.round(elapsedMs / 1000))} 秒${failures.length === 0 ? "" : `。撮れなかったもの ${String(failures.length)} 枚`}）`,
+    );
+  }
+};
+
+const publish = async (
+  command: Extract<Command, { kind: "publish" }>,
+  options: CommonOptions,
+): Promise<void> => {
+  const { repoRoot, config, dirs } = prepareStorybooks(options, {
+    build: !command.skipBuild,
+  });
   const branch =
     command.branch ?? git(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
   if (branch === "HEAD") {
@@ -801,28 +947,15 @@ const publish = (
     publishAsDefault: options.publishAsDefault,
   });
 
-  const dirs: Record<string, string> = {};
-  for (const { id: source, build, outDir } of config.storybooks) {
-    if (!command.skipBuild) {
-      console.log(`$ ${build}`);
-      const result = spawnSync(build, {
-        cwd: configDir,
-        shell: true,
-        stdio: "inherit",
-      });
-      if (result.status !== 0) {
-        throw new Error(
-          `Storybook（${source}）のビルドに失敗しました: ${build}`,
-        );
-      }
-    }
-    const dir = resolveOutDir(configDir, outDir, repoRoot);
-    if (!fs.existsSync(path.join(dir, "index.json"))) {
-      throw new Error(
-        `Storybook（${source}）のビルド結果がありません: ${dir}/index.json`,
+  if (!command.skipScreenshots) {
+    try {
+      await captureScreenshots(config, dirs);
+    } catch (error) {
+      // 撮れなくても置く（キャンバスは、画像の無い画面を iframe で出す）
+      console.warn(
+        `スクリーンショットを撮れませんでした。画像なしで置きます（キャンバスは iframe で出します）。Chromium が無ければ pnpm --dir infra exec playwright install chromium で入れてください\n${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    dirs[source] = dir;
   }
 
   const bridgeFile = ensureBridge(command.skipBuild);
@@ -845,6 +978,7 @@ const publish = (
       canvasOrigins: target.canvasOrigins,
       outDir: workDir,
     });
+    const shots = stageShots({ dirs, outDir: workDir });
     for (const call of planPublish({
       target,
       branch,
@@ -852,6 +986,7 @@ const publish = (
       metaFile,
       iframeFiles,
       bridgeFile,
+      shots,
     })) {
       runAws(call, options);
     }
@@ -903,12 +1038,17 @@ const ensureBridge = (skipBuild: boolean): string => {
   return BRIDGE_BUILD_FILE;
 };
 
-const main = (): void => {
+const main = async (): Promise<void> => {
   const { command, options } = parseArgs(process.argv.slice(2), process.env);
   switch (command.kind) {
     case "publish":
-      publish(command, options);
+      await publish(command, options);
       return;
+    case "screenshots": {
+      const { config, dirs } = prepareStorybooks(options, { build: false });
+      await captureScreenshots(config, dirs);
+      return;
+    }
     case "unpublish": {
       // 受け付けない名前のブランチは置けない（publish が止める）ので、消すものも無い
       if (!isAcceptedBranchName(command.branch)) {
@@ -945,10 +1085,8 @@ const main = (): void => {
 };
 
 if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
-  }
+  });
 }
