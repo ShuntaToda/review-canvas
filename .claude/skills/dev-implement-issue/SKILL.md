@@ -48,7 +48,7 @@ Agent ツールで起こし、頼みに必ず書きます。
 3. **PR 単位の Issue の本文とコメントを全文**（リンクだけにしない）。親 Issue の方針の要点も添える
 4. Issue に書かれていない仕様に当たったら、**決めずに一覧にして止まる**。作り方は既存の形にそろえて決め、報告の「決めたこと」に挙げる
 5. テストは Issue の「テストで確かめること」のとおりに書く
-6. 終わりの条件: `pnpm run validate`・`pnpm run test:small`、コードを触ったなら `pnpm run docker:up` のうえ `pnpm run test:coverage`。生成物はコマンドで作り直す
+6. 終わりの条件: `pnpm run validate`・`pnpm run test:small`、コードを触ったなら `pnpm run docker:up` のうえ `pnpm run test:coverage`、infra を触ったなら `pnpm run infra:validate`・`pnpm run infra:test`。生成物はコマンドで作り直す
 7. コミット: 日本語で 1 行、署名・trailer を付けない。push・PR の作成・Issue への書き込みはしない
 8. 返し方: 変えたことの要旨／決めたこと／テストの表（区分・対象・確かめること）／検査の結果（落ちたものも正直に）／残したこと
 

@@ -36,7 +36,7 @@
 
 - [ ] 業務の判断は domain・use-case に、画面の純粋な処理は `model/` に置いた（handler・components に埋めていない）
 - [ ] 足した分岐・エラー・境界の値（空・上限・項目の無い前からのデータ）にテストがある
-- [ ] 検査を黙らせていない（`eslint-disable`・`any`・`!`・`ignores`・カバレッジの下限の引き下げ）。足したなら理由を下に書いた
+- [ ] 検査を黙らせていない（`eslint-disable`・`any`・`!`・`ignores`・カバレッジの下限の引き下げ）。足したなら「黙らせた検査・残したこと」に書いた
 - [ ] 生成物（`openapi.json`・`review-canvas.config.schema.json`）は、コマンドで作り直した（手で直していない）
 - [ ] 互換を崩していない（API・コメントの項目・設定ファイル・スタックの出力と論理 ID・ワークフローの入力）。崩すなら、README と docs に移し方を書いた
 - [ ] 文書を直した（`docs/api.md`・`docs/architecture.md`・決まりを足したなら `AGENTS.md` の表と `docs/development.md`・つくりを決めたなら `docs/adr/`）
