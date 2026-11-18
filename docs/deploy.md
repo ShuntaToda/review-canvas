@@ -23,7 +23,7 @@ pnpm run deploy --profile <プロファイル>
 
 画面をビルド（`build:deployed`）してから `cdk deploy` します。ビルド済みなら `pnpm --dir infra run deploy:no-build --profile <プロファイル>` で省けます。デプロイはこの 2 つのスクリプトから行ってください（`cdk deploy` を直に、とくに `--app cdk.out` で動かさない。組み立て済みの `cdk.out` を渡す経路は、出し先のアカウントを確かめないため）。
 
-出し先のリージョンは、プロファイルの既定のリージョンです。
+出し先のリージョンは、プロファイルの既定のリージョンです。`deploy`・`destroy` は、アプリの中のスタックをすべて扱います（ふだんは 1 つ。IP 制限を us-east-1 以外で使うときだけ、Web ACL のスタック `<スタック名>-Waf` が増える）。
 
 ## 設定
 
@@ -48,6 +48,18 @@ pnpm run deploy --profile <プロファイル>
 | `REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS`（`-c protectedAccountIds=`）     | 出してはいけないアカウント ID（カンマ区切り）。出し先がこれに当たれば止める。既定は無し                                                                                                                                                                                                     |
 | `REVIEW_CANVAS_PROTECTED_ACCOUNTS_FILE`（`-c protectedAccountsFile=`） | 出してはいけないアカウント ID を書いた JSON（`["<ID>", ...]` か `[{ "accountId": "<ID>" }, ...]`）。上と合わせて使える                                                                                                                                                                      |
 
+見られる人を絞る設定（どれも任意。指定しなければ今までと同じ構成。選び方と手順は [host-setup.md](host-setup.md#見られる人を絞るip-制限ログイン連動)）:
+
+| 環境変数（コンテキスト）                                                                                       | 内容                                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REVIEW_CANVAS_ALLOWED_IP_CIDRS`（`-c allowedIpCidrs=`）                                                       | 許可する IP の範囲（CIDR。IPv4・IPv6。カンマ区切り）。指定すると、これだけを通す Web ACL（AWS WAF）を作り、2 つの配信に付ける                   |
+| `REVIEW_CANVAS_WEB_ACL_ARN`（`-c webAclArn=`）                                                                 | 自分で用意した Web ACL（CloudFront 用。us-east-1 の `global`）の ARN。指定すると、作らずにこれを 2 つの配信に付ける（上と同時には指定できない） |
+| `REVIEW_CANVAS_CANVAS_DOMAIN`（`-c canvasDomain=`）・`REVIEW_CANVAS_STORYBOOK_DOMAIN`（`-c storybookDomain=`） | キャンバスと Storybook の独自ドメイン（同じ親ドメインの下の、別々のドメイン）                                                                   |
+| `REVIEW_CANVAS_CERTIFICATE_ARN`（`-c certificateArn=`）                                                        | 2 つのドメインを含む ACM の証明書（us-east-1）の ARN                                                                                            |
+| `REVIEW_CANVAS_STORYBOOK_PUBLIC_KEY_FILES`（`-c storybookPublicKeyFiles=`）                                    | 署名付きクッキーを確かめる公開鍵（PEM）のファイル（カンマ区切り。先頭が、いま署名に使う鍵）                                                     |
+| `REVIEW_CANVAS_STORYBOOK_PRIVATE_KEY_PARAMETER`（`-c storybookPrivateKeyParameter=`）                          | 先頭の公開鍵と対の秘密鍵を入れた、SSM パラメータストアの SecureString の名前（`/` で始まる）                                                    |
+| `REVIEW_CANVAS_HOSTED_ZONE_ID`（`-c hostedZoneId=`）・`REVIEW_CANVAS_HOSTED_ZONE_NAME`（`-c hostedZoneName=`） | Route 53 のホストゾーン。渡すと 2 つのドメインのレコードを作る（独自ドメインを指定したときだけ。2 つを対で渡す）                                |
+
 - API の `STAGE_NAME` は `DEV` だけです（`LOCAL` は擬似ログインと `/api/doc` を許すため、デプロイ先では使えない）
 - 出してはいけないアカウント（`protectedAccountIds`）は、アプリから組み立てる経路（`deploy`・`deploy:no-build`・`diff`・`destroy`・`synth`）で、組み立てるときに出し先のアカウントを確かめて止めます。本番のアカウントなど、レビュー用のツールを置かないアカウントを入れておくと、資格情報の取り違えで出すことを防げます
 - `synth`・`diff`・`destroy` も、Auth0 の 3 つの値（`REVIEW_CANVAS_AUTH0_*`）を付けないと動きません（スタックを組み立てるときに確かめるため）
@@ -59,14 +71,15 @@ pnpm --dir infra run diff --profile <プロファイル>     # destroy・synth �
 
 ## 出力
 
-| 出力                                         | 内容                                                                                                  |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `Url`                                        | キャンバスの URL（Auth0 の Allowed Callback URLs・Allowed Logout URLs・Allowed Web Origins に入れる） |
-| `StorybookUrl`                               | Storybook を配るオリジン（キャンバスと別のオリジン）                                                  |
-| `StorybookBucket`・`StorybookDistributionId` | Storybook の置き場（置くスクリプトが読む）                                                            |
-| `DistributionId`・`CommentTableName`         | キャンバスの配信・コメントのテーブル                                                                  |
-| `DefaultBranch`                              | 既定のブランチ（置くスクリプトが、ワークフローの値と食い違えば止める）                                |
-| `PublishRoleArn`・`PublishMainRoleArn`       | GitHub Actions から置くロール（OIDC プロバイダーを指定したときだけ）                                  |
+| 出力                                                        | 内容                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `Url`                                                       | キャンバスの URL（Auth0 の Allowed Callback URLs・Allowed Logout URLs・Allowed Web Origins に入れる）  |
+| `StorybookUrl`                                              | Storybook を配るオリジン（キャンバスと別のオリジン）                                                   |
+| `StorybookBucket`・`StorybookDistributionId`                | Storybook の置き場（置くスクリプトが読む）                                                             |
+| `DistributionId`・`CommentTableName`                        | キャンバスの配信・コメントのテーブル                                                                   |
+| `DefaultBranch`                                             | 既定のブランチ（置くスクリプトが、ワークフローの値と食い違えば止める）                                 |
+| `PublishRoleArn`・`PublishMainRoleArn`                      | GitHub Actions から置くロール（OIDC プロバイダーを指定したときだけ）                                   |
+| `DistributionDomainName`・`StorybookDistributionDomainName` | 2 つの配信の `*.cloudfront.net` の名前（独自ドメインを指定したときだけ。自分の DNS で CNAME を張る先） |
 
 出力の名前は、`ReviewCanvas` を使う側のスタックに組み込んだときも同じです（1 つのスタックに 1 つだけ置く）。
 
@@ -91,6 +104,6 @@ pnpm run destroy --profile <プロファイル>
 
 ## 持たないもの
 
-小さく使う前提のため、WAF・独自ドメイン・アクセスログ・アラームは持ちません。要るときは、使う側のスタックで `ReviewCanvas` を組み込み、そちらで足してください。
+小さく使う前提のため、アクセスログ・アラームは持ちません。要るときは、使う側のスタックで `ReviewCanvas` を組み込み、そちらで足してください。WAF（IP 制限）と独自ドメイン（ログイン連動）は、既定では作らず、設定を渡したときだけ作ります（[host-setup.md](host-setup.md#見られる人を絞るip-制限ログイン連動)）。
 
 CI（`.github/workflows/ci.yml`）は、架空の Auth0 の値で synth（Lambda のバンドルを含む）し、デプロイ先の画面のビルドに擬似ログインのコードが入っていないことを確かめます（`pnpm run check:deployed-bundle`）。AWS にはつなぎません。

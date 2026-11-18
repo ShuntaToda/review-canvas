@@ -8,7 +8,8 @@
 ## 決めたこと
 
 - 持つのは、S3 のバケット 1 つ・CloudFront の配信 2 つ（画面と API・Storybook）・Lambda 1 つ（API）・DynamoDB のテーブル 1 つ（コメント）と、GitHub Actions から置くためのロール
-- WAF・独自ドメイン・アクセスログ・アラームは持たない。要るときは、使う側のスタックに `ReviewCanvas` を組み込んで足す（[deploy.md](../deploy.md#持たないもの)）
+- アクセスログ・アラームは持たない。要るときは、使う側のスタックに `ReviewCanvas` を組み込んで足す（[deploy.md](../deploy.md#持たないもの)）
+- WAF（IP 制限）・独自ドメイン（Storybook のログイン連動）は、既定では作らない。Storybook を関係者の外に見せたくない使い方のために、設定を渡したときだけ作る（[host-setup.md](../host-setup.md#見られる人を絞るip-制限ログイン連動)）
 - ログインは外の IdP（Auth0）のアクセストークンを API が確かめる。利用者の台帳は持たない
 
 ## 結果

@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as net from "net";
 import * as path from "path";
 import {
   formatM2mClients,
@@ -48,6 +50,24 @@ export type ReviewCanvasSettings = {
      */
     m2mClients?: string;
   };
+  /**
+   * 開ける場所を IP アドレスで絞る（AWS WAF。docs/host-setup.md「IP 制限」）。省略・どちらも無ければ絞らない（WAF を作らない）。
+   * キャンバスの画面・API と Storybook の 2 つの配信の両方に付き、許可していない IP には 403 を返す
+   */
+  network?: {
+    /** 許可する IP アドレスの範囲（CIDR。IPv4・IPv6）。1 つ以上あれば、これだけを通す Web ACL を作る */
+    allowedIpCidrs: string[];
+    /**
+     * 使う側が用意した Web ACL（CloudFront 用。us-east-1）の ARN。指定したら Web ACL は作らず、これを 2 つの配信に付ける
+     * （allowedIpCidrs とは同時に指定しない）
+     */
+    webAclArn: string | undefined;
+  };
+  /**
+   * Storybook をログインした人だけに見せる（独自ドメインと CloudFront の署名付きクッキー。docs/host-setup.md「ログイン連動」）。
+   * 省略・null なら今までどおり（配信の既定のドメインで、Storybook のファイルは URL を知っていれば読める）
+   */
+  storybookLogin?: StorybookLoginSettings | null;
   /** 画面を開いたときに選ぶブランチ（API の DEFAULT_BRANCH。置いていなければ、いちばん新しく置いたブランチ） */
   defaultBranch: string;
   /**
@@ -70,6 +90,29 @@ export type ReviewCanvasSettings = {
      */
     mainEnvironment: string;
   };
+};
+
+export type StorybookLoginSettings = {
+  /** キャンバスの独自ドメイン（例: canvas.review.example.com） */
+  canvasDomain: string;
+  /** Storybook の独自ドメイン（例: sb.review.example.com）。キャンバスと同じ親ドメインの下に置く */
+  storybookDomain: string;
+  /**
+   * 署名付きクッキーを付けるドメイン（2 つのドメインに共通の親。例: review.example.com）。
+   * クッキーはこの下のどのホストにも送られるので、ほかの用途のホストが無い親にする
+   */
+  cookieDomain: string;
+  /** 2 つのドメインを含む ACM の証明書（CloudFront 用なので us-east-1）の ARN */
+  certificateArn: string;
+  /**
+   * 署名を確かめる公開鍵（PEM）。先頭が、いま署名に使う鍵（privateKeyParameter の秘密鍵と対）。
+   * 2 つ目からは、鍵を入れ替えるあいだだけ残す前の鍵（前の鍵で署名したクッキーを、期限まで通す）
+   */
+  publicKeys: string[];
+  /** 秘密鍵（PEM）を入れた SSM パラメータストアの SecureString の名前（/ で始まる）。API だけが読む */
+  privateKeyParameter: string;
+  /** Route 53 のホストゾーン。渡したら 2 つのドメインのレコード（A・AAAA のエイリアス）を作る。null なら使う側が DNS を設定する */
+  hostedZone: { id: string; name: string } | null;
 };
 
 /** デプロイ先の API の STAGE_NAME（api/di-container/register-container.ts の STAGE_NAMES の DEV） */
@@ -156,7 +199,88 @@ export const SETTING_KEYS = {
     context: "githubMainEnvironment",
     env: "REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT",
   },
+  allowedIpCidrs: {
+    context: "allowedIpCidrs",
+    env: "REVIEW_CANVAS_ALLOWED_IP_CIDRS",
+  },
+  webAclArn: { context: "webAclArn", env: "REVIEW_CANVAS_WEB_ACL_ARN" },
+  canvasDomain: { context: "canvasDomain", env: "REVIEW_CANVAS_CANVAS_DOMAIN" },
+  storybookDomain: {
+    context: "storybookDomain",
+    env: "REVIEW_CANVAS_STORYBOOK_DOMAIN",
+  },
+  certificateArn: {
+    context: "certificateArn",
+    env: "REVIEW_CANVAS_CERTIFICATE_ARN",
+  },
+  storybookPublicKeyFiles: {
+    context: "storybookPublicKeyFiles",
+    env: "REVIEW_CANVAS_STORYBOOK_PUBLIC_KEY_FILES",
+  },
+  storybookPrivateKeyParameter: {
+    context: "storybookPrivateKeyParameter",
+    env: "REVIEW_CANVAS_STORYBOOK_PRIVATE_KEY_PARAMETER",
+  },
+  hostedZoneId: {
+    context: "hostedZoneId",
+    env: "REVIEW_CANVAS_HOSTED_ZONE_ID",
+  },
+  hostedZoneName: {
+    context: "hostedZoneName",
+    env: "REVIEW_CANVAS_HOSTED_ZONE_NAME",
+  },
 } as const;
+
+/** CloudFront 用の Web ACL の ARN の形（CloudFront 用は us-east-1 の global） */
+const WEB_ACL_ARN_PATTERN =
+  /^arn:aws[a-z-]*:wafv2:us-east-1:\d{12}:global\/webacl\/[A-Za-z0-9_-]+\/[0-9a-f-]+$/;
+
+/** CloudFront 用の ACM の証明書の ARN の形（us-east-1） */
+const CERTIFICATE_ARN_PATTERN =
+  /^arn:aws[a-z-]*:acm:us-east-1:\d{12}:certificate\/[0-9a-f-]+$/;
+
+/** SSM パラメータストアの名前の形（階層の形。/ で始める） */
+const PARAMETER_NAME_PATTERN = /^(\/[A-Za-z0-9_.-]+)+$/;
+
+/** Route 53 のホストゾーンの ID の形 */
+const HOSTED_ZONE_ID_PATTERN = /^Z[A-Z0-9]+$/;
+
+/**
+ * IP アドレスの範囲（CIDR）を確かめ、IPv4 と IPv6 に分ける。
+ * AWS WAF の IP セットは /0 を受け付けない（IPv4 は /1〜/32、IPv6 は /1〜/128）
+ */
+export const splitIpCidrs = (
+  cidrs: ReadonlyArray<string>,
+): { ipv4: string[]; ipv6: string[] } => {
+  const ipv4: string[] = [];
+  const ipv6: string[] = [];
+  for (const cidr of cidrs) {
+    const [address = "", prefix = "", ...rest] = cidr.split("/");
+    const family = net.isIP(address);
+    const length = /^\d{1,3}$/.test(prefix) ? Number(prefix) : Number.NaN;
+    const max = family === 4 ? 32 : 128;
+    if (rest.length > 0 || family === 0 || !(length >= 1 && length <= max)) {
+      throw new Error(
+        `allowedIpCidrs は IP アドレスの範囲（CIDR。例: 203.0.113.0/24・2001:db8::/32。/0 は使えません）をカンマ区切りで指定してください: "${cidr}"`,
+      );
+    }
+    (family === 4 ? ipv4 : ipv6).push(cidr);
+  }
+  return { ipv4, ipv6 };
+};
+
+/** 2 つのドメインに共通の親ドメイン（ラベルの単位で、後ろから一致する分。無ければ ""） */
+export const commonParentDomain = (a: string, b: string): string => {
+  const left = a.split(".").reverse();
+  const right = b.split(".").reverse();
+  const shared: string[] = [];
+  for (let i = 0; i < Math.min(left.length, right.length); i += 1) {
+    const label = left[i];
+    if (label === undefined || label !== right[i]) break;
+    shared.unshift(label);
+  }
+  return shared.join(".");
+};
 
 type SettingKey = keyof typeof SETTING_KEYS;
 
@@ -362,6 +486,132 @@ export const readSettings = ({
     );
   }
 
+  // IP で絞る（AWS WAF）。指定しなければ絞らない
+  const allowedIpCidrs = toList(read("allowedIpCidrs"));
+  splitIpCidrs(allowedIpCidrs);
+  const webAclArn = read("webAclArn");
+  if (webAclArn !== undefined && !WEB_ACL_ARN_PATTERN.test(webAclArn)) {
+    throw new Error(
+      `webAclArn は CloudFront 用（us-east-1 の global）の Web ACL の ARN にしてください（arn:aws:wafv2:us-east-1:<アカウント>:global/webacl/<名前>/<ID>）: "${webAclArn}"`,
+    );
+  }
+  if (webAclArn !== undefined && allowedIpCidrs.length > 0) {
+    throw new Error(
+      "allowedIpCidrs と webAclArn は、どちらか片方だけを指定してください（自分の Web ACL を使うなら、IP の範囲はその Web ACL の側で決めます）",
+    );
+  }
+
+  // Storybook をログインした人だけに見せる（独自ドメインと署名付きクッキー）。どれも指定しなければ今までどおり
+  const loginKeys = [
+    "canvasDomain",
+    "storybookDomain",
+    "certificateArn",
+    "storybookPublicKeyFiles",
+    "storybookPrivateKeyParameter",
+  ] as const;
+  const loginValues = loginKeys.map((key) => read(key));
+  const hostedZoneId = read("hostedZoneId");
+  const hostedZoneName = read("hostedZoneName")
+    ?.toLowerCase()
+    .replace(/\.$/, "");
+  let storybookLogin: StorybookLoginSettings | null = null;
+  if (loginValues.some((value) => value !== undefined)) {
+    const missing = loginKeys.filter((_, i) => loginValues[i] === undefined);
+    if (missing.length > 0) {
+      throw new Error(
+        `Storybook のログイン連動（独自ドメイン）には ${loginKeys.join("・")} のすべてが要ります。足りないもの: ${missing.join("・")}（docs/host-setup.md）`,
+      );
+    }
+    const canvasDomain = requireSetting("canvasDomain").toLowerCase();
+    const storybookDomain = requireSetting("storybookDomain").toLowerCase();
+    for (const [name, value] of [
+      ["canvasDomain", canvasDomain],
+      ["storybookDomain", storybookDomain],
+    ] as const) {
+      if (!DOMAIN_PATTERN.test(value)) {
+        throw new Error(
+          `${name} は https:// も / も付けないドメインにしてください（例: canvas.review.example.com）: "${value}"`,
+        );
+      }
+    }
+    if (canvasDomain === storybookDomain) {
+      throw new Error(
+        `canvasDomain と storybookDomain は別のドメインにしてください（Storybook のコードからログインのトークンを守るため、オリジンを分けます）: "${canvasDomain}"`,
+      );
+    }
+    const cookieDomain = commonParentDomain(canvasDomain, storybookDomain);
+    if (cookieDomain.split(".").length < 2) {
+      throw new Error(
+        `canvasDomain と storybookDomain は、同じ親ドメインの下にしてください（例: canvas.review.example.com と sb.review.example.com。親ドメインに署名付きクッキーを付けます）: "${canvasDomain}"・"${storybookDomain}"`,
+      );
+    }
+    const certificateArn = requireSetting("certificateArn");
+    if (!CERTIFICATE_ARN_PATTERN.test(certificateArn)) {
+      throw new Error(
+        `certificateArn は us-east-1 の ACM の証明書の ARN にしてください（CloudFront が使えるのは us-east-1 の証明書だけです）: "${certificateArn}"`,
+      );
+    }
+    const privateKeyParameter = requireSetting("storybookPrivateKeyParameter");
+    if (!PARAMETER_NAME_PATTERN.test(privateKeyParameter)) {
+      throw new Error(
+        `storybookPrivateKeyParameter は / で始まる SSM パラメータストアの名前にしてください（例: /review-canvas/storybook-cookie-key-1）: "${privateKeyParameter}"`,
+      );
+    }
+    const publicKeys = requireSetting("storybookPublicKeyFiles")
+      .split(",")
+      .map((file) => file.trim())
+      .filter((file) => file !== "")
+      .map((file) => {
+        const pem = fs.readFileSync(path.resolve(cwd, file), "utf8").trim();
+        if (
+          !pem.startsWith("-----BEGIN PUBLIC KEY-----") ||
+          !pem.endsWith("-----END PUBLIC KEY-----")
+        ) {
+          throw new Error(
+            `storybookPublicKeyFiles のファイルは、公開鍵の PEM（-----BEGIN PUBLIC KEY----- で始まる）にしてください（秘密鍵のファイルを渡していませんか）: "${file}"`,
+          );
+        }
+        return `${pem}\n`;
+      });
+    if ((hostedZoneId === undefined) !== (hostedZoneName === undefined)) {
+      throw new Error(
+        "hostedZoneId と hostedZoneName は、両方を指定してください（Route 53 のレコードを作らないなら、どちらも指定しません）",
+      );
+    }
+    let hostedZone: StorybookLoginSettings["hostedZone"] = null;
+    if (hostedZoneId !== undefined && hostedZoneName !== undefined) {
+      if (!HOSTED_ZONE_ID_PATTERN.test(hostedZoneId)) {
+        throw new Error(
+          `hostedZoneId は Route 53 のホストゾーンの ID にしてください（Z で始まる英数字）: "${hostedZoneId}"`,
+        );
+      }
+      for (const domain of [canvasDomain, storybookDomain]) {
+        if (
+          domain !== hostedZoneName &&
+          !domain.endsWith(`.${hostedZoneName}`)
+        ) {
+          throw new Error(
+            `"${domain}" はホストゾーン "${hostedZoneName}" の下にありません`,
+          );
+        }
+      }
+      hostedZone = { id: hostedZoneId, name: hostedZoneName };
+    }
+    storybookLogin = {
+      canvasDomain,
+      storybookDomain,
+      cookieDomain,
+      certificateArn,
+      publicKeys,
+      privateKeyParameter,
+      hostedZone,
+    };
+  } else if (hostedZoneId !== undefined || hostedZoneName !== undefined) {
+    throw new Error(
+      "hostedZoneId・hostedZoneName は、独自ドメイン（canvasDomain・storybookDomain）を指定したときだけ使います",
+    );
+  }
+
   // 人の代わりに呼んでよい client。形の誤りは、出してから通らないと気づく前にここで止める（API と同じ関数で確かめる）
   const m2mClients = formatM2mClients(
     parseM2mClients(read("m2mClients"), "m2mClients"),
@@ -383,6 +633,8 @@ export const readSettings = ({
       clientId: requireSetting("auth0ClientId"),
       audience: requireSetting("auth0Audience"),
     },
+    network: { allowedIpCidrs, webAclArn },
+    storybookLogin,
     defaultBranch,
     publisher: { oidcProvider, subPrefix, environment, mainEnvironment },
   };

@@ -17,7 +17,11 @@ const main = async () => {
 
   root.render(
     <React.StrictMode>
-      <App auth={auth} storybookOrigin={config.storybookOrigin} />
+      <App
+        auth={auth}
+        storybookOrigin={config.storybookOrigin}
+        storybookAccess={config.storybookAccess}
+      />
     </React.StrictMode>,
   );
 };

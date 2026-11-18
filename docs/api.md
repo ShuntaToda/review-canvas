@@ -53,19 +53,21 @@ stateDiagram-v2
 
 ## API
 
-| メソッド | パス                                   | 内容                                                                                                                                                       |
-| -------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET      | `/api/meta`                            | Storybook を置いてあるブランチ（ブランチごとのコミット・置き場・ビルドの有無）・既定のブランチ・並べる Storybook（`sources`。設定ファイルの id・名前・幅） |
-| GET      | `/api/branches`                        | コメントのあるブランチの一覧（既定のブランチが先頭）                                                                                                       |
-| GET      | `/api/comments?branch=&since=&cursor=` | ブランチのコメントを書いた順に 200 件ずつ（下を参照）                                                                                                      |
-| POST     | `/api/comments`                        | 新しいピン（スレッドの最初のコメント）を書く                                                                                                               |
-| POST     | `/api/comments/{commentId}/replies`    | スレッドに返信する                                                                                                                                         |
-| PATCH    | `/api/comments/{commentId}`            | 本文を書き換える（書いた本人だけ）                                                                                                                         |
-| PUT      | `/api/comments/{commentId}/resolution` | 解決・再開する（誰でも）                                                                                                                                   |
-| PUT      | `/api/comments/{commentId}/ai-fixed`   | 「確認待ち」の印を付ける・外す（誰でも。付けた人を残す。解決済みなら 409）                                                                                 |
-| GET      | `/api/threads?branch=&status=`         | スレッド（最初のコメント・返信・ストーリーの情報）を状態で絞って読む（下を参照）                                                                           |
-| GET      | `/api/threads/{commentId}?branch=`     | スレッドを 1 件読む（最初のコメントの ID で指す）                                                                                                          |
-| DELETE   | `/api/comments/{commentId}?branch=`    | 削除する（書いた本人だけ。最初のコメントならスレッドごと）                                                                                                 |
+| メソッド | パス                                   | 内容                                                                                                                                                                                                                                                            |
+| -------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET      | `/api/meta`                            | Storybook を置いてあるブランチ（ブランチごとのコミット・置き場・ビルドの有無）・既定のブランチ・並べる Storybook（`sources`。設定ファイルの id・名前・幅）                                                                                                      |
+| GET      | `/api/branches`                        | コメントのあるブランチの一覧（既定のブランチが先頭）                                                                                                                                                                                                            |
+| GET      | `/api/comments?branch=&since=&cursor=` | ブランチのコメントを書いた順に 200 件ずつ（下を参照）                                                                                                                                                                                                           |
+| POST     | `/api/comments`                        | 新しいピン（スレッドの最初のコメント）を書く                                                                                                                                                                                                                    |
+| POST     | `/api/comments/{commentId}/replies`    | スレッドに返信する                                                                                                                                                                                                                                              |
+| PATCH    | `/api/comments/{commentId}`            | 本文を書き換える（書いた本人だけ）                                                                                                                                                                                                                              |
+| PUT      | `/api/comments/{commentId}/resolution` | 解決・再開する（誰でも）                                                                                                                                                                                                                                        |
+| PUT      | `/api/comments/{commentId}/ai-fixed`   | 「確認待ち」の印を付ける・外す（誰でも。付けた人を残す。解決済みなら 409）                                                                                                                                                                                      |
+| GET      | `/api/threads?branch=&status=`         | スレッド（最初のコメント・返信・ストーリーの情報）を状態で絞って読む（下を参照）                                                                                                                                                                                |
+| GET      | `/api/threads/{commentId}?branch=`     | スレッドを 1 件読む（最初のコメントの ID で指す）                                                                                                                                                                                                               |
+| DELETE   | `/api/comments/{commentId}?branch=`    | 削除する（書いた本人だけ。最初のコメントならスレッドごと）                                                                                                                                                                                                      |
+| POST     | `/api/storybook-session`               | Storybook の配信を読むためのクッキー（CloudFront の署名付きクッキー。30 分）を `Set-Cookie` で付け、期限（`expiresAt`）を返す。ログイン連動にしていなければ、何も付けず `expiresAt: null`（[host-setup.md](host-setup.md#見られる人を絞るip-制限ログイン連動)） |
+| DELETE   | `/api/storybook-session`               | 上のクッキーをブラウザから消す（ログアウトの前に画面が呼ぶ）                                                                                                                                                                                                    |
 
 一覧は `nextCursor` が null になるまで `cursor` を付けて読み進めます（1 回の応答を Lambda の上限より十分小さく保つため）。`since`（前回の応答の `asOf`）を付けると、その後に書き換わったコメントと、削除されたコメントの ID（`deletedIds`）だけを返します。画面は 10 秒ごとに差分を読み、30 回に 1 回は全件を読み直します。
 

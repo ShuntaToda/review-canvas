@@ -2,7 +2,12 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { describe, expect, test } from "vitest";
-import { DEFAULT_CONFIG_FILE, readSettings } from "../lib/settings";
+import {
+  commonParentDomain,
+  DEFAULT_CONFIG_FILE,
+  readSettings,
+  splitIpCidrs,
+} from "../lib/settings";
 
 const AUTH0_ENV = {
   REVIEW_CANVAS_AUTH0_DOMAIN: "tenant.jp.auth0.com",
@@ -37,6 +42,8 @@ describe("readSettings", () => {
         audience: "https://review-canvas.example.com/api",
       },
       access: { allowedEmailDomains: "*", allowedEmails: "", m2mClients: "" },
+      network: { allowedIpCidrs: [], webAclArn: undefined },
+      storybookLogin: null,
       defaultBranch: "main",
       publisher: {
         oidcProvider: null,
@@ -328,6 +335,146 @@ describe("readSettings", () => {
       { githubMainEnvironment: "review-canvas" },
     ])("形の違う値（%o）は例外にする", (context) => {
       expect(() => read({ context })).toThrow();
+    });
+  });
+
+  describe("IP で絞る（allowedIpCidrs・webAclArn）", () => {
+    const WEB_ACL_ARN =
+      "arn:aws:wafv2:us-east-1:123456789012:global/webacl/example/0a1b2c3d-0000-4000-8000-000000000000";
+
+    test("[正常系]IPv4・IPv6 の範囲をカンマ区切りで読む（環境変数・コンテキスト）", () => {
+      expect(
+        read({
+          env: {
+            ...AUTH0_ENV,
+            REVIEW_CANVAS_ALLOWED_IP_CIDRS: " 203.0.113.0/24 , 2001:DB8::/32 ",
+          },
+        }).network,
+      ).toStrictEqual({
+        allowedIpCidrs: ["203.0.113.0/24", "2001:db8::/32"],
+        webAclArn: undefined,
+      });
+      expect(
+        read({ context: { allowedIpCidrs: "198.51.100.7/32" } }).network
+          ?.allowedIpCidrs,
+      ).toStrictEqual(["198.51.100.7/32"]);
+    });
+
+    test("[正常系]自分の Web ACL の ARN を読む", () => {
+      expect(
+        read({ context: { webAclArn: WEB_ACL_ARN } }).network,
+      ).toStrictEqual({ allowedIpCidrs: [], webAclArn: WEB_ACL_ARN });
+    });
+
+    test.each([
+      { allowedIpCidrs: "203.0.113.0" },
+      { allowedIpCidrs: "203.0.113.0/33" },
+      { allowedIpCidrs: "0.0.0.0/0" },
+      { allowedIpCidrs: "::/0" },
+      { allowedIpCidrs: "203.0.113.0/24/1" },
+      { allowedIpCidrs: "example.com/24" },
+      {
+        webAclArn:
+          "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/example/0a1b2c3d-0000-4000-8000-000000000000",
+      },
+      { allowedIpCidrs: "203.0.113.0/24", webAclArn: WEB_ACL_ARN },
+    ])("[異常系]形の違う値・両方の指定（%o）は例外にする", (context) => {
+      expect(() => read({ context })).toThrow();
+    });
+
+    test("[正常系]splitIpCidrs は IPv4 と IPv6 に分ける", () => {
+      expect(
+        splitIpCidrs(["203.0.113.0/24", "2001:db8::/32", "198.51.100.7/32"]),
+      ).toStrictEqual({
+        ipv4: ["203.0.113.0/24", "198.51.100.7/32"],
+        ipv6: ["2001:db8::/32"],
+      });
+    });
+  });
+
+  describe("Storybook のログイン連動（独自ドメイン）", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "settings-login-"));
+    const PUBLIC_KEY =
+      "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----";
+    fs.writeFileSync(path.join(dir, "new.pem"), `${PUBLIC_KEY}\n\n`);
+    fs.writeFileSync(path.join(dir, "old.pem"), PUBLIC_KEY);
+    fs.writeFileSync(
+      path.join(dir, "private.pem"),
+      "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n",
+    );
+    const LOGIN = {
+      canvasDomain: "Canvas.review.example.com",
+      storybookDomain: "sb.review.example.com",
+      certificateArn:
+        "arn:aws:acm:us-east-1:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000",
+      storybookPublicKeyFiles: `${path.join(dir, "new.pem")}, ${path.join(dir, "old.pem")}`,
+      storybookPrivateKeyParameter: "/review-canvas/storybook-cookie-key-1",
+    };
+
+    test("[正常系]5 つをそろえて渡すと有効になり、クッキーを付ける親ドメインを 2 つのドメインから決める", () => {
+      expect(read({ context: LOGIN }).storybookLogin).toStrictEqual({
+        canvasDomain: "canvas.review.example.com",
+        storybookDomain: "sb.review.example.com",
+        cookieDomain: "review.example.com",
+        certificateArn: LOGIN.certificateArn,
+        publicKeys: [`${PUBLIC_KEY}\n`, `${PUBLIC_KEY}\n`],
+        privateKeyParameter: "/review-canvas/storybook-cookie-key-1",
+        hostedZone: null,
+      });
+    });
+
+    test("[正常系]ホストゾーンを渡すと、レコードを作る先として読む（末尾の . は落とす）", () => {
+      expect(
+        read({
+          context: {
+            ...LOGIN,
+            hostedZoneId: "Z0123456789ABCDEFGHIJ",
+            hostedZoneName: "Example.com.",
+          },
+        }).storybookLogin?.hostedZone,
+      ).toStrictEqual({ id: "Z0123456789ABCDEFGHIJ", name: "example.com" });
+    });
+
+    test.each([
+      { ...LOGIN, canvasDomain: "" },
+      { ...LOGIN, storybookPrivateKeyParameter: "" },
+      { canvasDomain: LOGIN.canvasDomain },
+      { ...LOGIN, canvasDomain: "https://canvas.review.example.com" },
+      { ...LOGIN, storybookDomain: "canvas.review.example.com" },
+      { ...LOGIN, storybookDomain: "sb.example.org" },
+      { ...LOGIN, canvasDomain: "canvas.com", storybookDomain: "sb.com" },
+      {
+        ...LOGIN,
+        certificateArn:
+          "arn:aws:acm:ap-northeast-1:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000",
+      },
+      { ...LOGIN, storybookPrivateKeyParameter: "storybook-cookie-key" },
+      { ...LOGIN, storybookPublicKeyFiles: path.join(dir, "private.pem") },
+      { ...LOGIN, hostedZoneId: "Z0123456789ABCDEFGHIJ" },
+      { ...LOGIN, hostedZoneId: "zone", hostedZoneName: "example.com" },
+      {
+        ...LOGIN,
+        hostedZoneId: "Z0123456789ABCDEFGHIJ",
+        hostedZoneName: "example.org",
+      },
+      { hostedZoneId: "Z0123456789ABCDEFGHIJ", hostedZoneName: "example.com" },
+    ])("[異常系]足りない・形の違う値（%o）は例外にする", (context) => {
+      expect(() => read({ context })).toThrow();
+    });
+
+    test("[正常系]commonParentDomain は、後ろから一致するラベルを返す（無ければ空）", () => {
+      expect(
+        commonParentDomain(
+          "canvas.review.example.com",
+          "sb.review.example.com",
+        ),
+      ).toBe("review.example.com");
+      expect(commonParentDomain("canvas.example.com", "sb.example.org")).toBe(
+        "",
+      );
+      expect(commonParentDomain("a.example.com", "example.com")).toBe(
+        "example.com",
+      );
     });
   });
 });

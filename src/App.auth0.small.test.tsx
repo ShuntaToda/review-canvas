@@ -100,7 +100,11 @@ const renderApp = async (path: string) => {
     // テストごとに SWR のキャッシュを分ける（前のテストの読み込みの結果を使わない）
     render(
       <SWRConfig value={{ provider: () => new Map() }}>
-        <App auth={auth} storybookOrigin="http://storybook.test" />
+        <App
+          auth={auth}
+          storybookOrigin="http://storybook.test"
+          storybookAccess="public"
+        />
       </SWRConfig>,
     );
     await Promise.resolve();

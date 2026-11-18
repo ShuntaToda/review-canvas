@@ -12,6 +12,8 @@ export const DEPLOYED_CONFIG_PATH = "/app-config.json";
 const deployedConfigSchema = z.object({
   /** Storybook を配るオリジン（CDK の Storybook の配信。https の、パスを持たない形） */
   storybookOrigin: z.string().regex(/^https:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?$/),
+  /** CDK は、ログイン連動（独自ドメイン）のときだけ書く。無ければ、だれでも読める配信 */
+  storybookAccess: z.enum(["public", "signed-cookie"]).default("public"),
   auth0: z.object({
     domain: z.string().min(1),
     clientId: z.string().min(1),

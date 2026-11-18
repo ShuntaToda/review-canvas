@@ -11,7 +11,16 @@ export {
   ReviewCanvasStack,
   type ReviewCanvasStackProps,
 } from "./review-canvas-stack";
-export { readSettings, type ReviewCanvasSettings } from "./settings";
+export {
+  ReviewCanvasWafStack,
+  type ReviewCanvasWafStackProps,
+} from "./review-canvas-waf-stack";
+export { IpAllowList, type IpAllowListProps } from "./ip-allow-list";
+export {
+  readSettings,
+  type ReviewCanvasSettings,
+  type StorybookLoginSettings,
+} from "./settings";
 export { loadReviewCanvasConfig } from "./load-config";
 export {
   assertDeployAccount,

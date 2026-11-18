@@ -67,6 +67,26 @@ describe("buildReviewApi", () => {
     });
   });
 
+  test("[正常系]issueStorybookSessionはクッキーをもらいに行き、期限を返す。clearStorybookSessionは消しに行く", async () => {
+    const issued = setUp(json(200, { expiresAt: "2026-11-18T01:30:00.000Z" }));
+
+    await expect(issued.api.issueStorybookSession()).resolves.toStrictEqual({
+      expiresAt: "2026-11-18T01:30:00.000Z",
+    });
+    expect(issued.lastRequest().method).toBe("POST");
+    expect(issued.lastRequest().url).toBe(
+      "http://localhost:4100/api/storybook-session",
+    );
+
+    const cleared = setUp(json(200, { cleared: true }));
+
+    await cleared.api.clearStorybookSession();
+    expect(cleared.lastRequest().method).toBe("DELETE");
+    expect(cleared.lastRequest().url).toBe(
+      "http://localhost:4100/api/storybook-session",
+    );
+  });
+
   test("[正常系]deleteCommentはブランチをクエリで送る", async () => {
     const { api, lastRequest } = setUp(json(200, { deletedIds: ["01"] }));
 

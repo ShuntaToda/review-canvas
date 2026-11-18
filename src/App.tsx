@@ -1,4 +1,5 @@
 import { SWRConfig } from "swr";
+import type { StorybookAccess } from "@/configType";
 import { ReviewPage } from "@/features/review";
 import { AppAuthProvider, AuthGate, type AuthModule } from "@/support/auth";
 
@@ -10,15 +11,21 @@ import { AppAuthProvider, AuthGate, type AuthModule } from "@/support/auth";
 export const App = ({
   auth,
   storybookOrigin,
+  storybookAccess,
 }: {
   auth: AuthModule;
   /** Storybook を配るオリジン（設定の storybookOrigin。キャンバスとは別のオリジン） */
   storybookOrigin: string;
+  /** Storybook の配信の読み方（設定の storybookAccess） */
+  storybookAccess: StorybookAccess;
 }) => (
   <SWRConfig value={{ revalidateOnFocus: true, shouldRetryOnError: false }}>
     <AppAuthProvider auth={auth}>
       <AuthGate LoginPage={auth.LoginPage}>
-        <ReviewPage storybookOrigin={storybookOrigin} />
+        <ReviewPage
+          storybookOrigin={storybookOrigin}
+          storybookAccess={storybookAccess}
+        />
       </AuthGate>
     </AppAuthProvider>
   </SWRConfig>

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -6,12 +7,15 @@ import {
   Duration,
   RemovalPolicy,
   Stack,
+  aws_certificatemanager,
   aws_cloudfront,
   aws_cloudfront_origins,
   aws_dynamodb,
   aws_iam,
   aws_lambda,
   aws_logs,
+  aws_route53,
+  aws_route53_targets,
   aws_s3,
   aws_s3_deployment,
 } from "aws-cdk-lib";
@@ -37,6 +41,7 @@ import {
   githubOidcProviderArn,
   STORYBOOK_PREFIX,
 } from "./github-publish-role";
+import { IpAllowList } from "./ip-allow-list";
 import { ANY_EMAIL_DOMAIN, type ReviewCanvasSettings } from "./settings";
 
 /** 画面がデプロイ先の設定を読む場所（src/config/index.ts の DEPLOYED_CONFIG_PATH と同じ） */
@@ -99,6 +104,28 @@ export const OUTPUT_NAMES = [
   "PublishMainRoleArn",
 ] as const;
 
+/** ログイン連動（独自ドメイン）のときだけ出す出力の名前（独自ドメインの DNS のレコードを向ける先） */
+export const LOGIN_OUTPUT_NAMES = [
+  "DistributionDomainName",
+  "StorybookDistributionDomainName",
+] as const;
+
+/**
+ * 資格情報つきの CORS で、キャンバスからの読み込みに許す要求ヘッダー。
+ * Access-Control-Allow-Credentials を付けるときは、CloudFront の応答ヘッダーのポリシーでヘッダーに * を使えないので、並べる
+ * （Chrome が fetch に付ける priority を含める。キャンバスの読み込みは、自分ではヘッダーを足さない単純な GET）
+ */
+const CREDENTIALED_CORS_HEADERS = [
+  "accept",
+  "accept-language",
+  "cache-control",
+  "if-modified-since",
+  "if-none-match",
+  "pragma",
+  "priority",
+  "range",
+];
+
 /**
  * review-canvas の AWS 構成（CDK のコンストラクト）。1 つのスタックに 1 つだけ置く（出力の名前を固定するため）。
  * そのまま出すときは ReviewCanvasStack（bin/review-canvas.ts）、使う側のスタックに組み込むときはこのクラスを使う。
@@ -120,8 +147,11 @@ export const OUTPUT_NAMES = [
  *   本文の SHA-256（x-amz-content-sha256）を付ける（src/support/api/api-client.ts）
  * - ログインの確かめは API が Auth0 のアクセストークンで行う（AUTH_MODE=auth0）。画面・Storybook のファイルそのものは誰でも読める
  *   （Storybook はモックのデータだけを置く前提。URL を外へ渡さない）
- * - 小さく使う前提のため、WAF・独自ドメイン・アクセスログ・アラームは持たない。消すとき（cdk destroy）はバケットごと消し、
+ * - 小さく使う前提のため、既定では WAF・独自ドメイン・アクセスログ・アラームは持たない。消すとき（cdk destroy）はバケットごと消し、
  *   コメントのテーブルだけ残す（消すなら手で消す）
+ * - 設定で選べるもの（docs/host-setup.md）: IP 制限（settings.network。2 つの配信に Web ACL を付ける）と、
+ *   Storybook のログイン連動（settings.storybookLogin。独自ドメインにして、Storybook の配信が CloudFront の署名付きクッキーを求める。
+ *   クッキーは、ログインした人に API が親ドメインへ付ける）。どちらも、渡さなければ何も作らない
  */
 export class ReviewCanvas extends Construct {
   /** キャンバスの URL */
@@ -143,6 +173,9 @@ export class ReviewCanvas extends Construct {
         "allowedEmailDomains が *（どのドメインも通す）です。確かめ済みのメールアドレスを持つ人はだれでも使えます。絞るときは REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS・REVIEW_CANVAS_ALLOWED_EMAILS を指定してください（docs/deploy.md）",
       );
     }
+
+    const login = settings.storybookLogin ?? null;
+    const webAclId = this.#webAclArn(settings);
 
     /**
      * コメント。パーティションキーはブランチ、ソートキーは ID（ULID）。削除済みの印は expiresAt（TTL）で消える
@@ -169,6 +202,38 @@ export class ReviewCanvas extends Construct {
       // 中身を消す Lambda（CDK の共通の部品）はログの置き場を指定できず、ログを持つ期間は決められない（消すときにだけ動く）
       autoDeleteObjects: true,
     });
+
+    // ログイン連動: Storybook の配信が署名付きクッキーを確かめる公開鍵。公開鍵は作ったあと書き換えられないので、
+    // 中身から論理 ID を決める（鍵を入れ替えたら、新しい公開鍵のリソースになる）。先頭が、API が署名に使う鍵
+    const storybookPublicKeys = (login?.publicKeys ?? []).map(
+      (encodedKey) =>
+        new aws_cloudfront.PublicKey(
+          this,
+          `StorybookPublicKey${createHash("sha256").update(encodedKey).digest("hex").slice(0, 8).toUpperCase()}`,
+          { encodedKey, comment: "review-canvas storybook signed cookies" },
+        ),
+    );
+    const [signingKey] = storybookPublicKeys;
+    if (login !== null && signingKey === undefined) {
+      throw new Error(
+        "storybookLogin.publicKeys に公開鍵（PEM）が 1 つ以上要ります",
+      );
+    }
+    const storybookKeyGroup =
+      storybookPublicKeys.length === 0
+        ? undefined
+        : new aws_cloudfront.KeyGroup(this, "StorybookKeyGroup", {
+            items: storybookPublicKeys,
+            comment: "review-canvas storybook signed cookies",
+          });
+    const certificate =
+      login === null
+        ? undefined
+        : aws_certificatemanager.Certificate.fromCertificateArn(
+            this,
+            "Certificate",
+            login.certificateArn,
+          );
 
     const apiFunction = new nodejs.NodejsFunction(this, "ApiFunction", {
       entry: path.join(
@@ -201,6 +266,16 @@ export class ReviewCanvas extends Construct {
           parseM2mClients(settings.access.m2mClients, "access.m2mClients"),
         ),
         NODE_OPTIONS: "--enable-source-maps",
+        // ログイン連動のときだけ: ログインした人に、Storybook の配信を読むための署名付きクッキーを出す
+        // （api/infrastructure/storybook-session/storybook-session-settings.ts）
+        ...(login === null || signingKey === undefined
+          ? {}
+          : {
+              STORYBOOK_COOKIE_ORIGIN: `https://${login.storybookDomain}`,
+              STORYBOOK_COOKIE_DOMAIN: login.cookieDomain,
+              STORYBOOK_COOKIE_KEY_PAIR_ID: signingKey.publicKeyId,
+              STORYBOOK_COOKIE_PRIVATE_KEY_PARAMETER: login.privateKeyParameter,
+            }),
       },
       bundling: {
         // api/ は ESM（package.json の type: module・import.meta.url を使う）。CommonJS の依存のために require を用意する
@@ -232,6 +307,23 @@ export class ReviewCanvas extends Construct {
         resources: [siteBucket.arnForObjects(`${STORYBOOK_PREFIX}*/meta.json`)],
       }),
     );
+
+    if (login !== null) {
+      // 署名用の秘密鍵（SSM パラメータストアの SecureString。使う側が入れる）を読む。
+      // 復号は、既定の鍵（alias/aws/ssm）なら追加の許可は要らない。自分の KMS の鍵で暗号化したときは、使う側が kms:Decrypt を足す
+      apiFunction.addToRolePolicy(
+        new aws_iam.PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            Stack.of(this).formatArn({
+              service: "ssm",
+              resource: "parameter",
+              resourceName: login.privateKeyParameter.replace(/^\//, ""),
+            }),
+          ],
+        }),
+      );
+    }
 
     // CloudFront（OAC）だけから呼べる関数 URL
     const apiFunctionUrl = apiFunction.addFunctionUrl({
@@ -299,6 +391,10 @@ export class ReviewCanvas extends Construct {
     const distribution = new aws_cloudfront.Distribution(this, "Distribution", {
       comment: `review-canvas (${Stack.of(this).stackName})`,
       defaultRootObject: "index.html",
+      ...(webAclId === undefined ? {} : { webAclId }),
+      ...(login === null || certificate === undefined
+        ? {}
+        : { domainNames: [login.canvasDomain], certificate }),
       defaultBehavior: {
         origin: siteOrigin,
         allowedMethods: aws_cloudfront.AllowedMethods.ALLOW_GET_HEAD,
@@ -354,13 +450,24 @@ export class ReviewCanvas extends Construct {
         this,
         "StorybookResponseHeadersPolicy",
         {
-          corsBehavior: {
-            accessControlAllowOrigins: ["*"],
-            accessControlAllowHeaders: ["*"],
-            accessControlAllowMethods: ["GET", "HEAD"],
-            accessControlAllowCredentials: false,
-            originOverride: true,
-          },
+          // ログイン連動のときは、キャンバスがクッキーを付けて読む（credentials: "include"）。
+          // 資格情報つきの CORS は、オリジンに * を使えないので、キャンバスのドメインだけを許す
+          corsBehavior:
+            login === null
+              ? {
+                  accessControlAllowOrigins: ["*"],
+                  accessControlAllowHeaders: ["*"],
+                  accessControlAllowMethods: ["GET", "HEAD"],
+                  accessControlAllowCredentials: false,
+                  originOverride: true,
+                }
+              : {
+                  accessControlAllowOrigins: [`https://${login.canvasDomain}`],
+                  accessControlAllowHeaders: CREDENTIALED_CORS_HEADERS,
+                  accessControlAllowMethods: ["GET", "HEAD"],
+                  accessControlAllowCredentials: true,
+                  originOverride: true,
+                },
         },
       );
     const storybookDistribution = new aws_cloudfront.Distribution(
@@ -371,6 +478,10 @@ export class ReviewCanvas extends Construct {
         // `/` は storybook-rewrite.js が 404 を返すので使われない。S3 をオリジンにする配信の基本の検査
         // （Security Hub の CloudFront.1）が既定のルートオブジェクトを求めるため付ける
         defaultRootObject: "index.html",
+        ...(webAclId === undefined ? {} : { webAclId }),
+        ...(login === null || certificate === undefined
+          ? {}
+          : { domainNames: [login.storybookDomain], certificate }),
         defaultBehavior: {
           origin: siteOrigin,
           allowedMethods: aws_cloudfront.AllowedMethods.ALLOW_GET_HEAD,
@@ -378,6 +489,10 @@ export class ReviewCanvas extends Construct {
           viewerProtocolPolicy:
             aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           responseHeadersPolicy: storybookResponseHeadersPolicy,
+          // ログイン連動のときは、署名付きクッキーの無い要求に 403 を返す（鍵の組のどれかで署名したクッキーを通す）
+          ...(storybookKeyGroup === undefined
+            ? {}
+            : { trustedKeyGroups: [storybookKeyGroup] }),
           functionAssociations: [
             {
               function: storybookRewriteFunction,
@@ -388,7 +503,10 @@ export class ReviewCanvas extends Construct {
         errorResponses,
       },
     );
-    const storybookOrigin = `https://${storybookDistribution.distributionDomainName}`;
+    const storybookOrigin =
+      login === null
+        ? `https://${storybookDistribution.distributionDomainName}`
+        : `https://${login.storybookDomain}`;
 
     // 2 つの配信が読めるファイルを、バケットのポリシーでも分ける（OAC が付ける許可はバケット全体なので、拒否を重ねる）。
     // 配信の関数はパスの字面で分けるだけで、%2F などの書き方で抜けうるため、ここで最後に止める
@@ -441,11 +559,41 @@ export class ReviewCanvas extends Construct {
       storybookOrigin,
     });
 
-    this.url = `https://${distribution.distributionDomainName}`;
+    // ホストゾーンを渡されたら、2 つのドメインを配信へ向けるレコードを作る（渡されなければ、使う側が DNS を設定する）
+    if (login?.hostedZone != null) {
+      const zone = aws_route53.HostedZone.fromHostedZoneAttributes(
+        this,
+        "HostedZone",
+        { hostedZoneId: login.hostedZone.id, zoneName: login.hostedZone.name },
+      );
+      for (const [name, recordName, target] of [
+        ["Canvas", login.canvasDomain, distribution],
+        ["Storybook", login.storybookDomain, storybookDistribution],
+      ] as const) {
+        const alias = aws_route53.RecordTarget.fromAlias(
+          new aws_route53_targets.CloudFrontTarget(target),
+        );
+        new aws_route53.ARecord(this, `${name}AliasRecord`, {
+          zone,
+          recordName,
+          target: alias,
+        });
+        new aws_route53.AaaaRecord(this, `${name}AliasRecordV6`, {
+          zone,
+          recordName,
+          target: alias,
+        });
+      }
+    }
+
+    this.url =
+      login === null
+        ? `https://${distribution.distributionDomainName}`
+        : `https://${login.canvasDomain}`;
     this.storybookOrigin = storybookOrigin;
     // 出力の論理 ID は名前のまま（コンストラクトの ID を頭に付けない）。置くスクリプトがこの名前で読む
     const output = (
-      name: (typeof OUTPUT_NAMES)[number],
+      name: (typeof OUTPUT_NAMES | typeof LOGIN_OUTPUT_NAMES)[number],
       value: string,
       description?: string,
     ) =>
@@ -470,6 +618,19 @@ export class ReviewCanvas extends Construct {
     output("StorybookDistributionId", storybookDistribution.distributionId);
     // 既定のブランチ（画面が開いたときに選ぶ・既定のブランチ用のロールだけが書ける・サービスワーカーを置く）。置くスクリプトが読む
     output("DefaultBranch", settings.defaultBranch);
+    if (login !== null) {
+      // 独自ドメインのレコード（CNAME・エイリアス）を向ける先
+      output(
+        "DistributionDomainName",
+        distribution.distributionDomainName,
+        `${login.canvasDomain} の DNS のレコードを向ける先（キャンバスの配信）`,
+      );
+      output(
+        "StorybookDistributionDomainName",
+        storybookDistribution.distributionDomainName,
+        `${login.storybookDomain} の DNS のレコードを向ける先（Storybook の配信）`,
+      );
+    }
 
     const { publisher } = settings;
     if (publisher.oidcProvider !== null) {
@@ -514,6 +675,28 @@ export class ReviewCanvas extends Construct {
   }
 
   /**
+   * 2 つの配信に付ける Web ACL の ARN（IP 制限。指定が無ければ undefined で、何も付けない）。
+   * 使う側の Web ACL の ARN を渡されたらそれを使い、IP アドレスの範囲を渡されたら、このスタック（us-east-1 に限る）に作る
+   */
+  #webAclArn(settings: ReviewCanvasSettings): string | undefined {
+    const network = settings.network;
+    if (network === undefined) return undefined;
+    if (network.webAclArn !== undefined) {
+      if (network.allowedIpCidrs.length > 0) {
+        throw new Error(
+          "network.allowedIpCidrs と network.webAclArn は、どちらか片方だけを指定してください",
+        );
+      }
+      return network.webAclArn;
+    }
+    if (network.allowedIpCidrs.length === 0) return undefined;
+    return new IpAllowList(this, "IpAllowList", {
+      allowedIpCidrs: network.allowedIpCidrs,
+      metricPrefix: settings.stackName,
+    }).webAclArn;
+  }
+
+  /**
    * ビルド結果と設定を配信へ置き、CloudFront のキャッシュを消す。
    * ビルド結果が無いもの（テスト・確かめるための synth）は置かない（デプロイの経路は REQUIRE_DIST=true で止める。dist-dirs.ts）。
    * 画面（ルート）は古いファイルを消さない（prune: false。ブラウザに残った古い index.html から古い assets/ を読めるように。
@@ -546,6 +729,10 @@ export class ReviewCanvas extends Construct {
     const appConfig = aws_s3_deployment.Source.jsonData(APP_CONFIG_KEY, {
       auth0: settings.auth0,
       storybookOrigin,
+      // ログイン連動のときだけ: 画面は、API からクッキーをもらってから、クッキーを付けて Storybook の配信を読む
+      ...((settings.storybookLogin ?? null) === null
+        ? {}
+        : { storybookAccess: "signed-cookie" }),
     });
     const appAssetsDir = path.join(distDirs.app, APP_ASSETS_DIR);
     const hasApp = hasAppDist(distDirs);

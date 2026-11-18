@@ -1,10 +1,19 @@
+// @vitest-environment jsdom
+import { renderHook, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { SWRConfig } from "swr";
 import { ReviewApiError } from "../api/review-api";
 import {
   COMMENTS_REFRESH_INTERVAL,
   commentsErrorMessage,
   fetchShots,
+  fetchStories,
+  logoutWithStorybook,
   retryCommentsOnError,
+  STORYBOOK_SESSION_REFRESH_INTERVAL,
+  useStorybookSession,
 } from "./useReviewData";
+import { accessTokenSlot } from "@/support/api/access-token";
 
 const errorOf = (
   status: number,
@@ -121,7 +130,7 @@ describe("fetchShots（useShots が読む、スクリーンショットの目録
       }),
     );
 
-    const catalog = await fetchShots(base, "shop");
+    const catalog = await fetchShots(base, "shop", "public");
 
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       `${base}shop/review-canvas-shots.json`,
@@ -147,10 +156,111 @@ describe("fetchShots（useShots が読む、スクリーンショットの目録
     async (_, response) => {
       respond(response);
 
-      const catalog = await fetchShots(base, "shop");
+      const catalog = await fetchShots(base, "shop", "public");
 
       expect(catalog.find("pages-list--default", 375)).toBeUndefined();
       expect(catalog.hasPlayFunction("pages-list--default")).toBeUndefined();
     },
   );
+});
+
+describe("Storybook の配信の読み方（だれでも読める／ログイン連動）", () => {
+  const base = "https://sb.review.example.com/sb/main/";
+  const stubFetch = (body: unknown) => {
+    const fetchMock = vi.fn(() => Promise.resolve(Response.json(body)));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    accessTokenSlot.set(undefined);
+  });
+
+  test.each([
+    ["public", "omit"],
+    ["signed-cookie", "include"],
+  ] as const)(
+    "[正常系]%s の配信は、一覧と目録を credentials: %s で読む",
+    async (access, credentials) => {
+      const fetchMock = stubFetch({ v: 5, entries: {} });
+
+      await fetchStories(base, "shop", access);
+      await fetchShots(base, "shop", access);
+
+      expect(fetchMock.mock.calls).toStrictEqual([
+        [`${base}shop/index.json`, { credentials }],
+        [`${base}shop/review-canvas-shots.json`, { credentials }],
+      ]);
+    },
+  );
+
+  test("[正常系]だれでも読める配信では、クッキーをもらいに行かず、はじめから読み始めてよい", () => {
+    const fetchMock = stubFetch({});
+
+    const { result } = renderHook(() => useStorybookSession("public"));
+
+    expect(result.current).toMatchObject({ access: "public", ready: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]ログイン連動では、API からクッキーをもらい終えるまで読み始めない", async () => {
+    const fetchMock = vi.fn((input: Request) =>
+      Promise.resolve(
+        Response.json({
+          expiresAt: "2026-11-18T01:30:00.000Z",
+          url: input.url,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    accessTokenSlot.set(() => Promise.resolve("token"));
+
+    const { result } = renderHook(() => useStorybookSession("signed-cookie"), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(
+          SWRConfig,
+          { value: { provider: () => new Map() } },
+          children,
+        ),
+    });
+
+    expect(result.current.ready).toBe(false);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const request = fetchMock.mock.calls[0]?.[0];
+    expect(request?.method).toBe("POST");
+    expect(new URL(request?.url ?? "").pathname).toBe("/api/storybook-session");
+  });
+
+  test("[正常系]クッキーを取り直す間隔は、クッキーの期限（30 分）の半分より短い", () => {
+    expect(STORYBOOK_SESSION_REFRESH_INTERVAL).toBeLessThan(15 * 60_000);
+  });
+
+  test("[正常系]ログイン連動のログアウトは、先にクッキーを消してからログアウトする。消せなくてもログアウトする", async () => {
+    const order: string[] = [];
+    const logout = vi.fn(() => {
+      order.push("logout");
+      return Promise.resolve();
+    });
+
+    await logoutWithStorybook("signed-cookie", logout, () => {
+      order.push("clear");
+      return Promise.resolve();
+    });
+    await logoutWithStorybook("signed-cookie", logout, () =>
+      Promise.reject(new Error("offline")),
+    );
+
+    expect(order).toStrictEqual(["clear", "logout", "logout"]);
+  });
+
+  test("[正常系]だれでも読める配信のログアウトは、クッキーを消しに行かない", async () => {
+    const clear = vi.fn(() => Promise.resolve());
+    const logout = vi.fn(() => Promise.resolve());
+
+    await logoutWithStorybook("public", logout, clear);
+
+    expect(clear).not.toHaveBeenCalled();
+    expect(logout).toHaveBeenCalledOnce();
+  });
 });

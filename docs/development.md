@@ -153,6 +153,13 @@ npm には出しません。使う側は、このリポジトリのコミット�
 - Storybook ごとの画像の目録（`review-canvas-shots.json`）も `version: 1` です。目録の無い置き場（撮る前の版で置いたブランチ）は、キャンバスが iframe で出します（置き直すと画像になる）
 - 依存は `pnpm-workspace.yaml` の `minimumReleaseAge`（出てから 3 週間）を待ってから上げ、`save-exact` で固定します
 
+### IP 制限・ログイン連動を足した版で変わること
+
+- 何も指定しなければ、スタックのリソース・論理 ID・出力は前のままです（足した設定はどれも任意）。API に `POST`・`DELETE /api/storybook-session` が増えました（ログイン連動にしていなければ、クッキーを付けない）
+- `/app-config.json` に、ログイン連動のときだけ `storybookAccess: "signed-cookie"` が入ります（無ければ、だれでも読める配信として読む）
+- `pnpm run deploy`・`destroy`（`infra`）は `--all` を付けて動かします（スタックは、IP 制限を us-east-1 以外で使うときだけ 2 つ。ふだんは 1 つのまま）
+- ワークフロー（`publish.yml`）の `build` のジョブの上限は 60 分です（step ごとの上限: 依存を入れる 10 分・ビルド 20 分・Chromium 8 分・撮影 12 分）。入力・出力は変えていません
+
 ### 移し方: 画面の幅・高さの既定をなくした版へ
 
 画面の幅・高さは使う側が決めるものとして、review-canvas が持っていた px の既定・候補の範囲をなくしました。この版より前のコミットから上げるときは、次を確かめます。

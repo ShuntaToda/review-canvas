@@ -1060,6 +1060,33 @@
         "required": [
           "items"
         ]
+      },
+      "PostStorybookSessionResponse": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "description": "クッキーの期限（切れる前に取り直す）。Storybook の配信がクッキーを求めない設定なら null（クッキーは付けない）",
+            "example": "2026-11-18T01:30:00.000Z"
+          }
+        },
+        "required": [
+          "expiresAt"
+        ]
+      },
+      "DeleteStorybookSessionResponse": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "boolean",
+            "description": "クッキーを消したか（Storybook の配信がクッキーを求めない設定なら false）"
+          }
+        },
+        "required": [
+          "cleared"
+        ]
       }
     },
     "parameters": {}
@@ -2101,6 +2128,134 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BranchList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/storybook-session": {
+      "post": {
+        "tags": [
+          "Meta"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "Storybook の配信を読むためのクッキー（CloudFront の署名付きクッキー）を付ける（ログインした人だけ。期限は短い）",
+        "responses": {
+          "200": {
+            "description": "クッキーの期限。クッキーは Set-Cookie で付ける（HttpOnly。画面のスクリプトからは読めない）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostStorybookSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "トークンが無い・不正・期限切れ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Meta"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "summary": "Storybook の配信を読むためのクッキーをブラウザから消す（ログアウトの前に呼ぶ）",
+        "responses": {
+          "200": {
+            "description": "消したか",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteStorybookSessionResponse"
                 }
               }
             }

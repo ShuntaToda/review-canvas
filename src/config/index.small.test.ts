@@ -35,7 +35,20 @@ describe("loadDeployedConfig", () => {
       authProvider: "auth0",
       auth0,
       storybookOrigin,
+      storybookAccess: "public",
     });
+  });
+
+  test("[正常系]ログイン連動の配信（storybookAccess: signed-cookie）を読む。知らない値は形の違いとして弾く", async () => {
+    const load = (storybookAccess: string) =>
+      loadDeployedConfig(() =>
+        Promise.resolve(
+          jsonResponse(200, { auth0, storybookOrigin, storybookAccess }),
+        ),
+      );
+
+    expect((await load("signed-cookie")).storybookAccess).toBe("signed-cookie");
+    await expect(load("basic")).rejects.toThrow("形が違います");
   });
 
   test("[異常系]読めないときは例外にする", async () => {
@@ -84,18 +97,26 @@ describe("assertConfig", () => {
         stageName: "LOCAL",
         authProvider: "dev",
         storybookOrigin,
+        storybookAccess: "public",
       }),
     ).toStrictEqual({
       stageName: "LOCAL",
       authProvider: "dev",
       storybookOrigin,
+      storybookAccess: "public",
     });
     expect(
-      assertConfig({ stageName: "TEST", authProvider: "dev", storybookOrigin }),
+      assertConfig({
+        stageName: "TEST",
+        authProvider: "dev",
+        storybookOrigin,
+        storybookAccess: "public",
+      }),
     ).toStrictEqual({
       stageName: "TEST",
       authProvider: "dev",
       storybookOrigin,
+      storybookAccess: "public",
     });
   });
 
@@ -105,6 +126,7 @@ describe("assertConfig", () => {
         stageName: "DEPLOYED",
         authProvider: "dev",
         storybookOrigin,
+        storybookAccess: "public",
       }),
     ).toThrow("DEPLOYED では authProvider を dev");
   });

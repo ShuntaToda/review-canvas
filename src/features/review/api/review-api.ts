@@ -12,6 +12,8 @@ export type BranchItem = components["schemas"]["BranchList"]["items"][number];
 export type CreateCommentInput =
   components["schemas"]["CreateCommentRequestBody"];
 export type CommentPage = components["schemas"]["CommentList"];
+export type StorybookSession =
+  components["schemas"]["PostStorybookSessionResponse"];
 
 /** サーバーの業務エラーの名前（API の契約のエラーレスポンスの enum から取る） */
 export type BusinessErrorName = NonNullable<
@@ -136,6 +138,18 @@ const call = async <T>(
  */
 export const buildReviewApi = (client: ApiClient) => ({
   getMeta: (): Promise<ReviewMeta> => call(() => client.GET("/api/meta")),
+
+  /**
+   * Storybook の配信を読むためのクッキーをもらう（ログイン連動のときだけ呼ぶ）。クッキーは画面のスクリプトからは読めず、
+   * 返るのは期限だけ（連動していない API は null）
+   */
+  issueStorybookSession: (): Promise<StorybookSession> =>
+    call(() => client.POST("/api/storybook-session")),
+
+  /** Storybook の配信を読むためのクッキーを、このブラウザから消す（ログアウトの前に呼ぶ） */
+  clearStorybookSession: async (): Promise<void> => {
+    await call(() => client.DELETE("/api/storybook-session"));
+  },
 
   listBranches: async (): Promise<BranchItem[]> =>
     (await call(() => client.GET("/api/branches"))).items,

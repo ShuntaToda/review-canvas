@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { S3Client } from "@aws-sdk/client-s3";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { Container } from "inversify";
 import { unwrapEnv } from "./env-util";
@@ -19,6 +20,7 @@ import type { PublishedStorybooks } from "@/domain/support/published-storybooks"
 import type { ReviewSources } from "@/domain/support/review-sources";
 import type { ReviewTarget } from "@/domain/support/review-target";
 import type { StorybookCatalog } from "@/domain/support/storybook-catalog";
+import type { StorybookSession } from "@/domain/support/storybook-session";
 import { Auth0ReviewerTokenVerifier } from "@/infrastructure/auth/auth0/auth0-reviewer-token-verifier";
 import { DevReviewerTokenVerifier } from "@/infrastructure/auth/dev/dev-reviewer-token-verifier";
 import {
@@ -42,12 +44,17 @@ import { S3PublishedStorybooks } from "@/infrastructure/published-storybooks/s3-
 import { CommentRepositoryImpl } from "@/infrastructure/repository/comment-repository";
 import { resolveReviewTarget } from "@/infrastructure/review-target/git-review-target";
 import { LocalStorybookCatalog } from "@/infrastructure/storybook-catalog/local-storybook-catalog";
+import { CloudFrontStorybookSession } from "@/infrastructure/storybook-session/cloudfront-storybook-session";
+import { buildSsmPrivateKeyLoader } from "@/infrastructure/storybook-session/ssm-private-key";
+import { readStorybookSessionSettings } from "@/infrastructure/storybook-session/storybook-session-settings";
 import { buildErrorResponseBuilder } from "@/presenter/error-response-builder";
+import { ClearStorybookSessionUseCaseImpl } from "@/use-case/clear-storybook-session-use-case";
 import { CreateCommentUseCaseImpl } from "@/use-case/create-comment-use-case";
 import { DeleteCommentUseCaseImpl } from "@/use-case/delete-comment-use-case";
 import { EditCommentUseCaseImpl } from "@/use-case/edit-comment-use-case";
 import { GetReviewMetaUseCaseImpl } from "@/use-case/get-review-meta-use-case";
 import { GetThreadUseCaseImpl } from "@/use-case/get-thread-use-case";
+import { IssueStorybookSessionUseCaseImpl } from "@/use-case/issue-storybook-session-use-case";
 import { ListBranchesUseCaseImpl } from "@/use-case/list-branches-use-case";
 import { ListCommentsUseCaseImpl } from "@/use-case/list-comments-use-case";
 import { ListThreadsUseCaseImpl } from "@/use-case/list-threads-use-case";
@@ -299,6 +306,22 @@ export const registerContainer = ({
     )
     .inSingletonScope();
 
+  container
+    .bind(serviceId.STORYBOOK_SESSION)
+    // Storybook の配信が署名付きクッキーを求める設定（独自ドメインのデプロイ先）のときだけ作る。無ければ null（クッキーを出さない）
+    .toDynamicValue((): StorybookSession | null => {
+      const settings = readStorybookSessionSettings(process.env);
+      if (settings === null) return null;
+      return new CloudFrontStorybookSession({
+        ...settings,
+        loadPrivateKey: buildSsmPrivateKeyLoader({
+          ssm: new SSMClient({ region, maxAttempts: 3 }),
+          parameterName: settings.privateKeyParameter,
+        }),
+      });
+    })
+    .inSingletonScope();
+
   // リポジトリ
   container
     .bind(serviceId.COMMENT_REPOSITORY)
@@ -471,6 +494,33 @@ export const registerContainer = ({
             serviceId.COMMENT_REPOSITORY,
           ),
           fetchNow: ctx.container.get<FetchNow>(serviceId.FETCH_NOW),
+          logger: ctx.container.get<Logger>(serviceId.LOGGER),
+        }),
+    )
+    .inSingletonScope();
+
+  container
+    .bind(serviceId.ISSUE_STORYBOOK_SESSION_USE_CASE)
+    .toDynamicValue(
+      (ctx) =>
+        new IssueStorybookSessionUseCaseImpl({
+          storybookSession: ctx.container.get<StorybookSession | null>(
+            serviceId.STORYBOOK_SESSION,
+          ),
+          fetchNow: ctx.container.get<FetchNow>(serviceId.FETCH_NOW),
+          logger: ctx.container.get<Logger>(serviceId.LOGGER),
+        }),
+    )
+    .inSingletonScope();
+
+  container
+    .bind(serviceId.CLEAR_STORYBOOK_SESSION_USE_CASE)
+    .toDynamicValue(
+      (ctx) =>
+        new ClearStorybookSessionUseCaseImpl({
+          storybookSession: ctx.container.get<StorybookSession | null>(
+            serviceId.STORYBOOK_SESSION,
+          ),
           logger: ctx.container.get<Logger>(serviceId.LOGGER),
         }),
     )

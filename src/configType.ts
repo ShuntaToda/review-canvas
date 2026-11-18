@@ -26,4 +26,11 @@ export type Config = {
    * （ストーリーのコードから、キャンバスのログインのトークン・API に届かないように）。iframe・リンク・ストーリーの一覧はここから読む
    */
   storybookOrigin: string;
+  /**
+   * Storybook の配信の読み方。public=だれでも読める（資格情報を付けずに読む）、
+   * signed-cookie=ログインした人だけが読める（API からクッキーをもらってから、クッキーを付けて読む。docs/host-setup.md「ログイン連動」）
+   */
+  storybookAccess: StorybookAccess;
 } & AuthConfig;
+
+export type StorybookAccess = "public" | "signed-cookie";

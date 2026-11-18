@@ -21,9 +21,10 @@ import {
   storybookShotsManifestPath,
   storybookSourceBase,
 } from "../model/storybook";
+import type { StorybookAccess } from "@/configType";
 import { messages } from "@/constants/messages";
 import { apiClient } from "@/support/api/api-client";
-import { fetchWithoutCredentials } from "@/support/api/fetch-without-credentials";
+import { fetchStorybook } from "@/support/api/fetch-storybook";
 
 export const reviewApi = buildReviewApi(apiClient);
 
@@ -35,6 +36,16 @@ export const branchesKey = "GET /api/branches";
 export const commentsKey = "GET /api/comments";
 export const storybookIndexKey = "GET {base}{source}/index.json";
 export const storybookShotsKey = "GET {base}{source}/review-canvas-shots.json";
+export const storybookSessionKey = "POST /api/storybook-session";
+
+/**
+ * Storybook の配信を読むためのクッキーを取り直す間隔(ms)。クッキーの期限（API の STORYBOOK_SESSION_TTL_SECONDS。30 分）より
+ * 十分に短くする（開いたままの画面で、iframe・画像の読み込みが期限切れで 403 にならないように）
+ */
+export const STORYBOOK_SESSION_REFRESH_INTERVAL = 10 * 60_000;
+
+/** Storybook の配信の読み方と、読み始めてよいか（ログイン連動では、クッキーをもらってから） */
+export type StorybookReading = { access: StorybookAccess; ready: boolean };
 
 /**
  * ウィンドウに戻るたびには読み直さないもの（置いてあるブランチ・ブランチの一覧・ストーリーの一覧）。
@@ -58,13 +69,62 @@ export const useBranches = (enabled: boolean) =>
 export type StoriesResult =
   { kind: "ok"; stories: Story[] } | { kind: "error"; message: string };
 
-/** Storybook のストーリーの一覧を読む（Storybook は別のオリジンなので、資格情報（Cookie）を付けずに読む） */
-const fetchStories = async (
+/**
+ * Storybook の配信を読むためのクッキー（ログイン連動のときだけ）。画面を開いたとき・ウィンドウに戻ったとき・一定の間隔でもらい直す。
+ * 失敗したら、コメントと同じ決まりで読み直す（ログインし直しが要る失敗は読み直さない）。連動していなければ何も呼ばない
+ */
+export const useStorybookSession = (
+  access: StorybookAccess,
+): StorybookReading & { error: unknown; retry: () => void } => {
+  const session = useSWR(
+    access === "signed-cookie" ? storybookSessionKey : null,
+    () => reviewApi.issueStorybookSession(),
+    {
+      refreshInterval: STORYBOOK_SESSION_REFRESH_INTERVAL,
+      shouldRetryOnError: true,
+      onErrorRetry: (error, _key, _config, revalidate, { retryCount }) =>
+        retryCommentsOnError(error, () => void revalidate({ retryCount })),
+    },
+  );
+  return {
+    access,
+    ready: access === "public" || session.data !== undefined,
+    error: session.error,
+    retry: () => void session.mutate(),
+  };
+};
+
+/**
+ * ログアウトする。ログイン連動のときは、先に Storybook の配信のクッキーをこのブラウザから消す
+ * （消せなくてもログアウトは続ける。残ったクッキーは期限で切れる）
+ */
+export const logoutWithStorybook = async (
+  access: StorybookAccess,
+  logout: () => Promise<void>,
+  clear: () => Promise<void> = reviewApi.clearStorybookSession,
+): Promise<void> => {
+  if (access === "signed-cookie") {
+    try {
+      await clear();
+    } catch {
+      // 続ける
+    }
+  }
+  await logout();
+};
+
+/**
+ * Storybook のストーリーの一覧を読む。Storybook は別のオリジンなので、だれでも読める配信には資格情報（Cookie）を付けず、
+ * ログイン連動の配信にはクッキーを付けて読む
+ */
+export const fetchStories = async (
   base: string,
   source: StorySource,
+  access: StorybookAccess,
 ): Promise<Story[]> => {
-  const response = await fetchWithoutCredentials(
+  const response = await fetchStorybook(
     storybookIndexPath(base, source),
+    access,
   );
   if (!response.ok) {
     throw new Error(`Storybook の一覧を読めません（${response.status}）`);
@@ -76,12 +136,16 @@ const fetchStories = async (
  * 置いてあるページ（sources）のストーリーの一覧を、まとめて読む（ページの数は設定で決まるため、1 つの読み込みにまとめる）。
  * base は選んでいるブランチの置き場（Storybook のオリジンから）。1 つのページが読めなくても、ほかのページは出す
  */
-export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
+export const useStories = (
+  base: string,
+  sources: ReadonlyArray<StorySource>,
+  reading: StorybookReading,
+) =>
   useSWR(
-    [storybookIndexKey, base, sources.join(",")],
+    reading.ready ? [storybookIndexKey, base, sources.join(",")] : null,
     async (): Promise<Record<StorySource, StoriesResult>> => {
       const settled = await Promise.allSettled(
-        sources.map((source) => fetchStories(base, source)),
+        sources.map((source) => fetchStories(base, source, reading.access)),
       );
       return Object.fromEntries(
         settled.map((result, index): [StorySource, StoriesResult] => [
@@ -102,10 +166,12 @@ export const useStories = (base: string, sources: ReadonlyArray<StorySource>) =>
 export const fetchShots = async (
   base: string,
   source: StorySource,
+  access: StorybookAccess,
 ): Promise<ShotCatalog> => {
   try {
-    const response = await fetchWithoutCredentials(
+    const response = await fetchStorybook(
       storybookShotsManifestPath(base, source),
+      access,
     );
     if (!response.ok) return EMPTY_SHOT_CATALOG;
     return buildShotCatalog(
@@ -118,12 +184,16 @@ export const fetchShots = async (
 };
 
 /** 置いてあるページ（sources）のスクリーンショットの目録を、まとめて読む（base は選んでいるブランチの置き場） */
-export const useShots = (base: string, sources: ReadonlyArray<StorySource>) =>
+export const useShots = (
+  base: string,
+  sources: ReadonlyArray<StorySource>,
+  reading: StorybookReading,
+) =>
   useSWR(
-    [storybookShotsKey, base, sources.join(",")],
+    reading.ready ? [storybookShotsKey, base, sources.join(",")] : null,
     async (): Promise<Record<StorySource, ShotCatalog>> => {
       const catalogs = await Promise.all(
-        sources.map((source) => fetchShots(base, source)),
+        sources.map((source) => fetchShots(base, source, reading.access)),
       );
       return Object.fromEntries(
         sources.map((source, index): [StorySource, ShotCatalog] => [

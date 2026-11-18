@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { isReviewerNotAllowed, isUnauthorized } from "../api/review-api";
 import {
+  logoutWithStorybook,
   useComments,
   useReviewMeta,
   useShots,
   useStories,
+  useStorybookSession,
 } from "../hooks/useReviewData";
 import { SourcesContext } from "../hooks/useSources";
 import { StorybookBaseContext } from "../hooks/useStorybookBase";
@@ -23,6 +25,7 @@ import {
   type UrlState,
 } from "../model/url-state";
 import { ReviewWorkspace } from "./ReviewWorkspace";
+import type { StorybookAccess } from "@/configType";
 import { localHints, messages } from "@/constants/messages";
 import { LoginAgainButton, useAuth } from "@/support/auth";
 
@@ -34,9 +37,12 @@ import { LoginAgainButton, useAuth } from "@/support/auth";
  */
 export const ReviewPage = ({
   storybookOrigin,
+  storybookAccess,
 }: {
   /** Storybook を配るオリジン（キャンバスとは別。設定の storybookOrigin） */
   storybookOrigin: string;
+  /** Storybook の配信の読み方（設定の storybookAccess。ログイン連動なら、クッキーをもらってから読む） */
+  storybookAccess: StorybookAccess;
 }) => {
   const { user, logout } = useAuth();
   // 作業の画面を開くときの場所（はじめは URL、ブランチを切り替えたらそのブランチといまのページ）
@@ -69,15 +75,21 @@ export const ReviewPage = ({
     setCatalog(buildSourceCatalog(meta.data.sources));
   }
   const availableIds = catalog.ids.filter(available);
-  const stories = useStories(base, availableIds);
+  // ログイン連動のときは、Storybook の配信を読むためのクッキーをもらってから、一覧・目録・iframe・画像を読む
+  const session = useStorybookSession(storybookAccess);
+  const stories = useStories(base, availableIds, session);
   // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
-  const shots = useShots(base, availableIds);
+  const shots = useShots(base, availableIds, session);
   const comments = useComments(branch);
 
-  if (meta.error !== undefined) {
+  // クッキーをもらえないと Storybook を何も読めないので、置いてあるブランチを読めないときと同じ扱いにする
+  const metaError: unknown = meta.error;
+  const startError =
+    metaError ?? (session.ready ? undefined : (session.error ?? undefined));
+  if (startError !== undefined) {
     // ログインし直しが要るなら、その操作を出す（出さないと、擬似ログインは名前がブラウザに残ったまま抜けられない）
     // 許可していないアカウントでログインした（メールアドレスが確かめ済みでない・許可していないドメイン等）。別のアカウントで入り直せるよう、ログアウトの操作を出す
-    if (isReviewerNotAllowed(meta.error)) {
+    if (isReviewerNotAllowed(startError)) {
       return (
         <FullScreenMessage
           action={<LoginAgainButton label="別のアカウントでログイン" />}
@@ -86,7 +98,7 @@ export const ReviewPage = ({
         </FullScreenMessage>
       );
     }
-    if (isUnauthorized(meta.error)) {
+    if (isUnauthorized(startError)) {
       return (
         <FullScreenMessage action={<LoginAgainButton />}>
           {messages.unauthorized}
@@ -99,7 +111,10 @@ export const ReviewPage = ({
           <button
             type="button"
             className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-panel-sub"
-            onClick={() => void meta.mutate()}
+            onClick={() => {
+              void meta.mutate();
+              session.retry();
+            }}
           >
             読み直す
           </button>
@@ -190,7 +205,9 @@ export const ReviewPage = ({
           initialComments={comments.data?.comments ?? []}
           me={user}
           onLogout={() =>
-            void logout({ logoutParams: { returnTo: window.location.origin } })
+            void logoutWithStorybook(storybookAccess, () =>
+              logout({ logoutParams: { returnTo: window.location.origin } }),
+            )
           }
         />
       </StorybookBaseContext>

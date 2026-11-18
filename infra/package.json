@@ -6,9 +6,9 @@
   "scripts": {
     "branch-storybooks": "node -r esbuild-register scripts/branch-storybooks.ts",
     "cdk": "cdk",
-    "deploy": "pnpm --dir .. run build:deployed && REQUIRE_DIST=true cdk deploy",
-    "deploy:no-build": "REQUIRE_DIST=true cdk deploy",
-    "destroy": "cdk destroy",
+    "deploy": "pnpm --dir .. run build:deployed && REQUIRE_DIST=true cdk deploy --all",
+    "deploy:no-build": "REQUIRE_DIST=true cdk deploy --all",
+    "destroy": "cdk destroy --all",
     "diff": "cdk diff",
     "fix": "run-s fix:format fix:lint",
     "fix:format": "prettier --cache --write '**/*.{ts,json,md}' 'lib/cloudfront-functions/*.js'",
