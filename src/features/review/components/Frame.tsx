@@ -12,6 +12,8 @@ import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
 import {
+  defersMeasure,
+  heldHeightToReport,
   iframeHeightFor,
   matchesWidth,
   type MeasuredAt,
@@ -247,7 +249,12 @@ export const Frame = ({
     const current = sizeContextRef.current;
     if (!matchesWidth(width, current.width)) return false;
     liveHeightRef.current = height;
-    onMeasureRef.current(story.id, height);
+    // 画像を出しているあいだは並びに渡さず持っておく（model/frame-height.ts の defersMeasure）
+    if (defersMeasureRef.current) {
+      heldHeightRef.current = { height, width: current.width };
+    } else {
+      onMeasureRef.current(story.id, height);
+    }
     setMeasuredAt((previous) =>
       previous?.generation === current.generation &&
       previous.width === current.width
@@ -256,6 +263,17 @@ export const Frame = ({
     );
     return true;
   };
+  // 画像の下で読み込んでいるあいだに測った高さ（画像から切り替わったときに並びへ渡す）
+  const heldHeightRef = useRef<{ height: number; width: number } | null>(null);
+  const defers = defersMeasure({ hasShot: shot !== null, revealed });
+  const defersMeasureRef = useRef(defers);
+  useLayoutEffect(() => {
+    defersMeasureRef.current = defers;
+    if (defers) return;
+    const held = heldHeightToReport(heldHeightRef.current, w);
+    heldHeightRef.current = null;
+    if (held !== null) onMeasureRef.current(story.id, held);
+  }, [defers, w, story.id]);
   const iframeHeight = iframeHeightFor({
     frameHeight: h,
     baseHeight,
