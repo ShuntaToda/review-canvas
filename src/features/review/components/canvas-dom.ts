@@ -4,6 +4,13 @@ import { isTypingTarget } from "../model/shortcuts";
 /** キャンバスの外枠（フォーカスの戻り先） */
 const CANVAS_ROOT_SELECTOR = "[data-canvas-root]";
 
+/** 左の画面の一覧の外枠（閉じる前に、フォーカスが中にあるかを見る） */
+const STORY_LIST_SELECTOR = "[data-story-list]";
+
+/** 要素が左の画面の一覧の中にあるか */
+export const isInsideStoryList = (element: Element | null): boolean =>
+  (element?.closest(STORY_LIST_SELECTOR) ?? null) !== null;
+
 /** キャンバスへフォーカスを戻す（吹き出しを閉じたあと・画面の中からフォーカスを追い出したあとの戻り先） */
 export const focusCanvas = (): HTMLElement | null => {
   const canvas = document.querySelector<HTMLElement>(CANVAS_ROOT_SELECTOR);

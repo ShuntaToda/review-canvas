@@ -9,6 +9,7 @@ export type ShortcutAction =
   | { type: "zoom-fit" }
   | { type: "zoom-reset" }
   | { type: "focus-search" }
+  /** 右のコメント一覧を開閉する */
   | { type: "toggle-sidebar" }
   /** 左の画面の一覧を開閉する */
   | { type: "toggle-story-list" }

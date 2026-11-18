@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   MAX_CUSTOM_WIDTH,
   parseWidthInput,
@@ -35,19 +35,17 @@ export const DisplaySettings = ({
   onPerRowChange,
 }: DisplaySettingsProps) => {
   // 足す幅の入力（px）。足せない値のまま足そうとしたら、欄に印を付ける
+  const headingId = useId();
   const [widthInput, setWidthInput] = useState("");
   const [widthInvalid, setWidthInvalid] = useState(false);
   const selectedCustom =
     widthOptions.find((option) => option.width === width)?.custom ?? false;
   return (
     <section
-      aria-labelledby="display-settings-heading"
+      aria-labelledby={headingId}
       className="flex flex-col gap-2 border-t border-line px-3 py-2 text-sm text-ink-sub"
     >
-      <h2
-        id="display-settings-heading"
-        className="text-xs font-bold text-muted"
-      >
+      <h2 id={headingId} className="text-xs font-bold text-muted">
         表示
       </h2>
 

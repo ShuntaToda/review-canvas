@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { SourcesContext } from "../hooks/useSources";
 import { buildSourceCatalog } from "../model/sources";
 import { Toolbar } from "./Toolbar";
@@ -121,19 +127,50 @@ describe("Toolbar", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  test("[正常系]アカウントの中身は Esc で閉じ、ボタンへフォーカスを戻す", () => {
+  test("[正常系]アカウントの中身は Esc で閉じ、ボタンへフォーカスを戻し、キャンバスのショートカット（window）には Esc を届けない", () => {
+    const onWindowKeyDown = vi.fn();
+    window.addEventListener("keydown", onWindowKeyDown);
     renderToolbar();
     const button = screen.getByRole("button", {
       name: "アカウント（山田 太郎）",
     });
     fireEvent.click(button);
 
-    fireEvent.keyDown(screen.getByRole("button", { name: "ログアウト" }), {
-      key: "Escape",
-    });
+    // フォーカスはどこにも無い（ボタンを押してもフォーカスを移さないブラウザと同じ）
+    fireEvent.keyDown(document.body, { key: "Escape" });
 
     expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(button);
+    expect(onWindowKeyDown).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", onWindowKeyDown);
+  });
+
+  test("[正常系]アカウントの中身は、外を押すと閉じ、中の名前を押しても閉じない", () => {
+    renderToolbar();
+    fireEvent.click(
+      screen.getByRole("button", { name: "アカウント（山田 太郎）" }),
+    );
+
+    fireEvent.pointerDown(screen.getByText("山田 太郎 としてログイン中"));
+    expect(screen.getByRole("button", { name: "ログアウト" })).not.toBeNull();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
+  });
+
+  test("[正常系]アカウントの中身は、外へフォーカスが移ると閉じる", () => {
+    renderToolbar();
+    fireEvent.click(
+      screen.getByRole("button", { name: "アカウント（山田 太郎）" }),
+    );
+
+    act(() =>
+      screen
+        .getByRole("button", { name: "使い方・ショートカット（?）" })
+        .focus(),
+    );
+
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
   });
 });

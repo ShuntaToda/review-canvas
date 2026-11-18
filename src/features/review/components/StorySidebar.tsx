@@ -30,6 +30,7 @@ export const StorySidebar = ({
 }) => (
   <aside
     aria-label="画面の一覧"
+    data-story-list
     // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（右のコメント一覧と同じ）
     className="flex w-60 shrink-0 flex-col border-r border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-r-0"
   >
@@ -53,7 +54,7 @@ export const StorySidebar = ({
       </label>
     </div>
 
-    <nav aria-label="画面" className="min-h-0 flex-1 overflow-y-auto py-1">
+    <nav className="min-h-0 flex-1 overflow-y-auto py-1">
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-center text-sm text-muted">
           絞り込みに合う画面はありません
@@ -62,12 +63,12 @@ export const StorySidebar = ({
         <ul>
           {rows.map((row) => (
             <li key={row.title}>
-              <p
+              <h3
                 className="truncate px-3 pt-2 pb-0.5 text-xs font-bold text-ink"
                 title={row.title}
               >
                 {row.title}
-              </p>
+              </h3>
               <ul>
                 {row.frames.map(({ story }) => (
                   <li key={story.id}>

@@ -23,6 +23,7 @@ import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
+import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
@@ -33,6 +34,7 @@ import {
   useComments,
 } from "../hooks/useReviewData";
 import { useSources } from "../hooks/useSources";
+import { useStoryListOpen } from "../hooks/useStoryListOpen";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
 import {
@@ -109,10 +111,6 @@ const parsePerRow = (raw: string): number | undefined => {
   const value = Number(raw);
   return FRAMES_PER_ROW_OPTIONS.includes(value) ? value : undefined;
 };
-
-/** 画面の一覧の開閉をブラウザに覚える形 */
-const parseOpen = (raw: string): boolean | undefined =>
-  raw === "true" ? true : raw === "false" ? false : undefined;
 
 /** スレッドへ移るときの倍率（今の倍率を保ちつつ、読める大きさにする） */
 const focusZoom = (current: number): number =>
@@ -234,18 +232,13 @@ export const ReviewWorkspace = ({
   const [sidebarOpen, setSidebarOpen] = useState(
     () => !isNarrowViewport(window.innerWidth),
   );
-  // 左の画面の一覧。開閉は広い幅のときだけ覚える（狭い幅ではキャンバスに重なるので、はじめは閉じる）
-  const [storyListRemembered, rememberStoryList] = useLocalSetting(
-    "review-canvas.storyListOpen",
-    true,
-    { parse: parseOpen, serialize: String },
-  );
-  const [storyListOpen, setStoryListOpenState] = useState(
-    () => !isNarrowViewport(window.innerWidth) && storyListRemembered,
+  const [storyListOpen, setStoryListOpenState] = useStoryListOpen(
+    () => window.innerWidth,
   );
   const setStoryListOpen = (open: boolean) => {
+    // 一覧の中にいるまま閉じると、フォーカスが body へ落ちるので、キャンバスへ戻す
+    if (!open && isInsideStoryList(document.activeElement)) focusCanvas();
     setStoryListOpenState(open);
-    if (!isNarrowViewport(window.innerWidth)) rememberStoryList(open);
   };
 
   const [cameraStates, setCameraStates] = useState(initial.cameras);
@@ -456,6 +449,7 @@ export const ReviewWorkspace = ({
       [page]: {
         kind: "focus",
         storyId: story.id,
+        // 開いたときの初めの見え方（URL の story=）と同じく、画面の上の方を真ん中に寄せる
         point: { x: width / 2, y: 300 },
         zoom: focusZoom(camera.zoom),
       },
