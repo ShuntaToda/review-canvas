@@ -99,6 +99,7 @@ describe("problemsOf", () => {
   test.each([
     ["/home/", `${IMAGE_MARKER} /home/yamada/work/point-a.png】`],
     ["/Users/", "画像は /Users/yamada/work/point-a.png にある"],
+    ["/Users/", "画像は /Users/山田/work/point-a.png にある"],
     ["C:\\", "画像は C:\\Users\\yamada\\point-a.png にある"],
     ["/tmp/", "出力: `/tmp/out/point-a.png`"],
   ])(

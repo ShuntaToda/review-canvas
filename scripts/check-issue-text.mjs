@@ -28,11 +28,11 @@ export const IMAGE_MARKER = "【画像を貼る:";
  * という説明）は、手元のフォルダを出していないので見ない
  */
 const LOCAL_PATH =
-  /(^|[^\w./~-])(\/home\/|\/Users\/|\/tmp\/|[A-Za-z]:\\)(?=[\w.~-])/;
+  /(^|[^\w./~-])(\/home\/|\/Users\/|\/tmp\/|[A-Za-z]:\\)(?=[\p{L}\p{N}_.~-])/u;
 
 /** file: の URL のうち、手元のフォルダを指すもの（file:///home/… や file:///C:/…） */
 const LOCAL_FILE_URL =
-  /^file:\/\/\/?(home\/|Users\/|tmp\/|[A-Za-z]:[\\/])(?=[\w.~-])/i;
+  /^file:\/\/\/?(home\/|Users\/|tmp\/|[A-Za-z]:[\\/])(?=[\p{L}\p{N}_.~-])/iu;
 
 /** URL（スキーム:// から、空白・括弧・引用符の手前まで） */
 const URL_PATTERN = /[A-Za-z][\w+.-]*:\/\/[^\s)\]>"'`]*/g;
