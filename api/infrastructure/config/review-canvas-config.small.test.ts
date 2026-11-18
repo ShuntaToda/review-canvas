@@ -18,6 +18,7 @@ const entry = {
   outDir: "storybook-static",
   widths: [375, 1280],
   defaultWidth: 375,
+  baseHeight: 800,
 };
 
 describe("parseReviewCanvasConfig", () => {
@@ -28,11 +29,19 @@ describe("parseReviewCanvasConfig", () => {
     expect(config.storybooks.map((s) => s.id)).toStrictEqual(["shop"]);
   });
 
-  test("[正常系]省いた値は既定で埋める（baseHeight・excludeTitlePrefixes・watchPaths）", () => {
+  test("[正常系]省いた値は空で埋める（excludeTitlePrefixes・watchPaths）", () => {
     const config = parseReviewCanvasConfig({ storybooks: [entry] });
-    expect(config.storybooks[0]?.baseHeight).toBe(800);
     expect(config.excludeTitlePrefixes).toStrictEqual([]);
     expect(config.watchPaths).toStrictEqual([]);
+  });
+
+  test("[正常系]幅は使う側が好きな px を好きな数だけ書ける（このリポジトリは範囲を決めない）", () => {
+    const widths = [120, 320, 1000, 1280, 1440, 1920, 2560, 3840, 5120, 7680];
+    const config = parseReviewCanvasConfig({
+      storybooks: [{ ...entry, widths, defaultWidth: 1000, baseHeight: 96 }],
+    });
+    expect(config.storybooks[0]?.widths).toStrictEqual(widths);
+    expect(config.storybooks[0]?.baseHeight).toBe(96);
   });
 
   test.each([
@@ -46,6 +55,12 @@ describe("parseReviewCanvasConfig", () => {
     ["outDir が絶対パス", { storybooks: [{ ...entry, outDir: "/etc" }] }],
     ["outDir が上へ出る", { storybooks: [{ ...entry, outDir: "a/../../b" }] }],
     ["Storybook が無い", { storybooks: [] }],
+    [
+      "baseHeight が無い（px の既定の値は持たない）",
+      { storybooks: [{ ...entry, baseHeight: undefined }] },
+    ],
+    ["幅が正の整数でない", { storybooks: [{ ...entry, widths: [375, 0] }] }],
+    ["幅が 1 つも無い", { storybooks: [{ ...entry, widths: [] }] }],
   ])("[異常系]%s ときは、どこが違うかを添えて例外にする", (_, raw) => {
     expect(() => parseReviewCanvasConfig(raw, "x.json")).toThrow(
       "x.json の形が違います",

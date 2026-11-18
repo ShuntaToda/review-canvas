@@ -33,40 +33,40 @@
           },
           "widths": {
             "minItems": 1,
-            "maxItems": 8,
+            "maxItems": 32,
             "type": "array",
             "items": {
               "type": "integer",
-              "minimum": 200,
-              "maximum": 4000
+              "minimum": 1,
+              "maximum": 10000
             },
-            "description": "切り替えられる画面の幅(px。200〜4000 の整数を 1〜8 個)。ストーリーの iframe をこの幅で並べる。コメントには書いたときの幅（frameWidth）が残る",
+            "description": "切り替えられる画面の幅(px。正の整数を 1 個以上。好きな幅を好きなだけ書ける)。発行のときにこの幅のそれぞれでスクリーンショットを撮り、キャンバスに並べる。見る人が画面で自分用の幅を足すこともできる（その幅は iframe で出す）。コメントには書いたときの幅（frameWidth）が残る",
             "examples": [
               [
                 375,
                 768,
+                1000,
                 1280
               ]
             ]
           },
           "defaultWidth": {
             "type": "integer",
-            "minimum": 200,
-            "maximum": 4000,
+            "minimum": 1,
+            "maximum": 10000,
             "description": "開いたときの画面の幅(px)。widths のどれかにする（違うと読み込みで止まる）",
             "examples": [
               375
             ]
           },
           "baseHeight": {
-            "default": 800,
-            "description": "中身を測る前の画面の高さ(px。200〜4000。省くと 800)。読み込んだあとは中身の高さに合わせるが、これより低くはしない",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20000,
+            "description": "画面の最低の高さ(px。正の整数。省けない)。ストーリーをこの高さの画面で開き、中身がこれより高ければ中身に合わせる（発行のときのスクリーンショットも同じ）。これより低くはしない",
             "examples": [
               812
-            ],
-            "type": "integer",
-            "minimum": 200,
-            "maximum": 4000
+            ]
           },
           "build": {
             "type": "string",
@@ -89,6 +89,7 @@
           "label",
           "widths",
           "defaultWidth",
+          "baseHeight",
           "build",
           "outDir"
         ]

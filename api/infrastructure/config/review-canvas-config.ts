@@ -15,12 +15,15 @@ import { z } from "zod";
 /** Storybook の ID の形。URL のパス（/sb/<ブランチのキー>/<ID>/）とコメントの source に使う */
 export const SOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
-/** 幅の範囲(px) */
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 4000;
+/**
+ * 幅・高さ(px)は使う側が決める。このリポジトリは既定の値も、好みの範囲も持たない。
+ * 上限は壊れないためだけのもの（コメントの API が受け付ける frameWidth・y の上限と同じ。comment-schema.ts）
+ */
+const MAX_WIDTH_PX = 10_000;
+const MAX_BASE_HEIGHT_PX = 20_000;
 
-/** 既定の「中身を測る前の画面の高さ」(px) */
-export const DEFAULT_BASE_HEIGHT = 800;
+/** 幅の数の上限（壊れないためだけのもの。発行のときは幅の数だけ撮り、デプロイ先には環境変数で渡す） */
+const MAX_WIDTHS = 32;
 
 /** 並べられる Storybook の数の上限 */
 export const MAX_STORYBOOKS = 8;
@@ -33,7 +36,7 @@ const isSafeRelativePath = (value: string): boolean => {
   return !value.split(/[\\/]+/).includes("..");
 };
 
-const widthSchema = z.number().int().min(MIN_WIDTH).max(MAX_WIDTH);
+const widthSchema = z.number().int().min(1).max(MAX_WIDTH_PX);
 
 /** storybooks[] の項目（画面に出す分と、作り方・置き場で共有する） */
 const fields = {
@@ -57,11 +60,11 @@ const fields = {
   widths: z
     .array(widthSchema)
     .min(1)
-    .max(8)
+    .max(MAX_WIDTHS)
     .meta({
       description:
-        "切り替えられる画面の幅(px。200〜4000 の整数を 1〜8 個)。ストーリーの iframe をこの幅で並べる。コメントには書いたときの幅（frameWidth）が残る",
-      examples: [[375, 768, 1280]],
+        "切り替えられる画面の幅(px。正の整数を 1 個以上。好きな幅を好きなだけ書ける)。発行のときにこの幅のそれぞれでスクリーンショットを撮り、キャンバスに並べる。見る人が画面で自分用の幅を足すこともできる（その幅は iframe で出す）。コメントには書いたときの幅（frameWidth）が残る",
+      examples: [[375, 768, 1000, 1280]],
     }),
   defaultWidth: widthSchema.meta({
     description:
@@ -71,12 +74,11 @@ const fields = {
   baseHeight: z
     .number()
     .int()
-    .min(200)
-    .max(4000)
-    .default(DEFAULT_BASE_HEIGHT)
+    .min(1)
+    .max(MAX_BASE_HEIGHT_PX)
     .meta({
       description:
-        "中身を測る前の画面の高さ(px。200〜4000。省くと 800)。読み込んだあとは中身の高さに合わせるが、これより低くはしない",
+        "画面の最低の高さ(px。正の整数。省けない)。ストーリーをこの高さの画面で開き、中身がこれより高ければ中身に合わせる（発行のときのスクリーンショットも同じ）。これより低くはしない",
       examples: [812],
     }),
 };
