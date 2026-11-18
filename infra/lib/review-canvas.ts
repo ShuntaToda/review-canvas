@@ -145,7 +145,7 @@ const CREDENTIALED_CORS_HEADERS = [
  * - API は Lambda の関数 URL を CloudFront の OAC だけから呼べるようにする（関数 URL を直に叩いても 403）。
  *   OAC は Authorization を署名で上書きするため、画面はトークンを X-Authorization で送り、本文のあるリクエストには
  *   本文の SHA-256（x-amz-content-sha256）を付ける（src/support/api/api-client.ts）
- * - ログインの確かめは API が Auth0 のアクセストークンで行う（AUTH_MODE=auth0）。画面・Storybook のファイルそのものは誰でも読める
+ * - ログインの確かめは API が Auth0 のアクセストークンで行う（AUTH_MODE=auth0）。画面・Storybook のファイルそのものは、既定では誰でも読める
  *   （Storybook はモックのデータだけを置く前提。URL を外へ渡さない）
  * - 小さく使う前提のため、既定では WAF・独自ドメイン・アクセスログ・アラームは持たない。消すとき（cdk destroy）はバケットごと消し、
  *   コメントのテーブルだけ残す（消すなら手で消す）

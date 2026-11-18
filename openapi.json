@@ -1076,6 +1076,25 @@
           "expiresAt"
         ]
       },
+      "StorybookSessionNotForClientErrorResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "StorybookSessionNotForClientError"
+                ],
+                "example": "StorybookSessionNotForClientError"
+              }
+            }
+          }
+        ]
+      },
       "DeleteStorybookSessionResponse": {
         "type": "object",
         "properties": {
@@ -2218,11 +2237,18 @@
             }
           },
           "403": {
-            "description": "使ってよい人ではない（許可していないメールアドレス）",
+            "description": "人の代わりに呼ぶ client（AI・CI）には出さない・使ってよい人ではない",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StorybookSessionNotForClientErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReviewerNotAllowedErrorResponse"
+                    }
+                  ]
                 }
               }
             }

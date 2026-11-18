@@ -2,10 +2,13 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Container } from "inversify";
 import type { AuthedHono } from "../../hono";
 import {
+  businessErrorResponseSchema,
   commonErrorResponses,
+  ReviewerNotAllowedErrorResponseSchema,
   reviewerSecurity,
 } from "../error-response-schema";
 import { ISSUE_STORYBOOK_SESSION_USE_CASE } from "@/di-container/service-id";
+import { StorybookSessionNotForClientError } from "@/domain/support/storybook-session";
 import { toSetCookie } from "@/presenter/storybook-session-cookie";
 import type { IssueStorybookSessionUseCase } from "@/use-case/issue-storybook-session-use-case";
 
@@ -35,6 +38,20 @@ const postStorybookSessionRoute = createRoute({
         "クッキーの期限。クッキーは Set-Cookie で付ける（HttpOnly。画面のスクリプトからは読めない）",
     },
     ...commonErrorResponses,
+    403: {
+      content: {
+        "application/json": {
+          schema: z.union([
+            businessErrorResponseSchema(
+              StorybookSessionNotForClientError.errorName,
+            ),
+            ReviewerNotAllowedErrorResponseSchema,
+          ]),
+        },
+      },
+      description:
+        "人の代わりに呼ぶ client（AI・CI）には出さない・使ってよい人ではない",
+    },
   },
 });
 
@@ -50,7 +67,7 @@ export const buildPostStorybookSessionHandler = ({
       ISSUE_STORYBOOK_SESSION_USE_CASE,
     );
 
-    const { session } = await useCase.execute({});
+    const { session } = await useCase.execute({ reviewer: c.var.reviewer });
     if (session === null) return c.json({ expiresAt: null }, 200);
 
     for (const cookie of session.cookies) {

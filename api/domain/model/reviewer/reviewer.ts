@@ -16,3 +16,10 @@ export type Reviewer = {
    */
   name: string;
 };
+
+/** 人の代わりに呼ぶ client（AI・CI）の利用者ID の後ろ（Auth0 は client credentials のトークンの sub を `<Client ID>@clients` にする） */
+const CLIENT_ID_SUFFIX = "@clients";
+
+/** 人ではなく、人の代わりに呼ぶ client（AI・CI）か（人の利用者ID はこの形にならない） */
+export const isClientReviewer = (reviewer: Reviewer): boolean =>
+  reviewer.id.endsWith(CLIENT_ID_SUFFIX);

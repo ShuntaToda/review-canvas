@@ -1,4 +1,5 @@
 import { ISSUE_STORYBOOK_SESSION_USE_CASE } from "@/di-container/service-id";
+import { StorybookSessionNotForClientError } from "@/domain/support/storybook-session";
 import {
   AUTH_HEADERS,
   buildHandlerTestApp,
@@ -53,6 +54,26 @@ describe("POST /api/storybook-session", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toStrictEqual({ expiresAt: null });
+    expect(response.headers.getSetCookie()).toStrictEqual([]);
+  });
+
+  test("[異常系]人の代わりに呼ぶ client には 403 を返し、クッキーを付けない", async () => {
+    const execute = vi
+      .fn()
+      .mockRejectedValue(new StorybookSessionNotForClientError());
+    const app = buildHandlerTestApp((c) =>
+      c.bind(ISSUE_STORYBOOK_SESSION_USE_CASE).toConstantValue({ execute }),
+    );
+
+    const response = await app.request("/api/storybook-session", {
+      method: "POST",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: "StorybookSessionNotForClientError",
+    });
     expect(response.headers.getSetCookie()).toStrictEqual([]);
   });
 

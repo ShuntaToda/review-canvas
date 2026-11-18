@@ -20,7 +20,7 @@ export type StorybookSessionSettings = {
 
 /**
  * 署名付きクッキーの設定を読む。どれも無ければ null（クッキーを出さない）。
- * 一部だけあるときは例外にする（配信はクッキーを求めるのに API が出せない、という出し方を起動時に止める）
+ * 一部だけあるときは例外にする（配信はクッキーを求めるのに API が出せない、という出し方を止める。Lambda の入口が起動時に解決する）
  */
 export const readStorybookSessionSettings = (
   env: Readonly<Record<string, string | undefined>>,

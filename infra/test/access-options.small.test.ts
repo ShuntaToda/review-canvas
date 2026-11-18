@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { App } from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
+import { Annotations, Match, Template } from "aws-cdk-lib/assertions";
 import { afterAll, describe, expect, test } from "vitest";
 import { parseReviewCanvasConfig } from "../../api/infrastructure/config/review-canvas-config";
 import { type DistDirs } from "../lib/dist-dirs";
@@ -270,6 +270,27 @@ describe("IP 制限（AWS WAF）", () => {
     );
 
     template.resourceCountIs("AWS::WAFv2::IPSet", 1);
+  });
+
+  test("/8 より広い範囲（打ち間違いを疑う広さ）は、組み立てるときに警告を出す。ふつうの範囲では出さない", () => {
+    const warningsOf = (cidrs: string[]) => {
+      const { stack } = synth(
+        { network: { allowedIpCidrs: cidrs, webAclArn: undefined } },
+        "us-east-1",
+      );
+      return Annotations.fromStack(stack).findWarning(
+        "*",
+        Match.stringLikeRegexp("より広い範囲があります"),
+      );
+    };
+
+    const wide = warningsOf(["203.0.113.0/1", "198.51.100.0/24"]);
+    expect(wide).toHaveLength(1);
+    expect(JSON.stringify(wide[0]?.entry.data)).toContain("203.0.113.0/1");
+    expect(JSON.stringify(wide[0]?.entry.data)).not.toContain(
+      "198.51.100.0/24",
+    );
+    expect(warningsOf(["203.0.113.0/8", "2001:db8::/32"])).toHaveLength(0);
   });
 
   test("us-east-1 以外のスタックでは、Web ACL を作れない理由と、作り方を挙げて止める", () => {

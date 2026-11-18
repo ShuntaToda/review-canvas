@@ -55,6 +55,7 @@ pnpm run deploy --profile <プロファイル>
 | `REVIEW_CANVAS_ALLOWED_IP_CIDRS`（`-c allowedIpCidrs=`）                                                       | 許可する IP の範囲（CIDR。IPv4・IPv6。カンマ区切り）。指定すると、これだけを通す Web ACL（AWS WAF）を作り、2 つの配信に付ける                   |
 | `REVIEW_CANVAS_WEB_ACL_ARN`（`-c webAclArn=`）                                                                 | 自分で用意した Web ACL（CloudFront 用。us-east-1 の `global`）の ARN。指定すると、作らずにこれを 2 つの配信に付ける（上と同時には指定できない） |
 | `REVIEW_CANVAS_CANVAS_DOMAIN`（`-c canvasDomain=`）・`REVIEW_CANVAS_STORYBOOK_DOMAIN`（`-c storybookDomain=`） | キャンバスと Storybook の独自ドメイン（同じ親ドメインの下の、別々のドメイン）                                                                   |
+| `REVIEW_CANVAS_COOKIE_DOMAIN`（`-c cookieDomain=`）                                                            | 署名付きクッキーを付ける親ドメイン（2 つのドメインに共通の親。review-canvas 専用のサブドメインにする。自動では決めない）                        |
 | `REVIEW_CANVAS_CERTIFICATE_ARN`（`-c certificateArn=`）                                                        | 2 つのドメインを含む ACM の証明書（us-east-1）の ARN                                                                                            |
 | `REVIEW_CANVAS_STORYBOOK_PUBLIC_KEY_FILES`（`-c storybookPublicKeyFiles=`）                                    | 署名付きクッキーを確かめる公開鍵（PEM）のファイル（カンマ区切り。先頭が、いま署名に使う鍵）                                                     |
 | `REVIEW_CANVAS_STORYBOOK_PRIVATE_KEY_PARAMETER`（`-c storybookPrivateKeyParameter=`）                          | 先頭の公開鍵と対の秘密鍵を入れた、SSM パラメータストアの SecureString の名前（`/` で始まる）                                                    |
@@ -97,6 +98,7 @@ REVIEW_CANVAS_AUTH0_DOMAIN=... REVIEW_CANVAS_AUTH0_CLIENT_ID=... REVIEW_CANVAS_A
 pnpm run destroy --profile <プロファイル>
 ```
 
+- IP 制限を us-east-1 以外で使っているときは、**入れたときと同じ `REVIEW_CANVAS_ALLOWED_IP_CIDRS` を付けて**動かします（付けないと、us-east-1 の `<スタック名>-Waf` のスタックが残り、Web ACL の料金が掛かり続ける）。残してしまったときは `aws cloudformation delete-stack --stack-name <スタック名>-Waf --region us-east-1 --profile <プロファイル>` で消します（[host-setup.md](host-setup.md#ip-制限aws-waf)）
 - バケット（画面・置いた Storybook）は中身ごと消えます。コメントのテーブル（`CommentTableName`）だけは残ります（要らなければ手で消す）
 - 消した後に出し直すと新しいテーブルを作るため、残したテーブルのコメントは画面に出ません
 - `create` で作った GitHub の OIDC プロバイダーも消えます（同じアカウントのほかのものが使っていないか確かめてから消す）

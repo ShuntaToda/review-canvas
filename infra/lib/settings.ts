@@ -99,7 +99,9 @@ export type StorybookLoginSettings = {
   storybookDomain: string;
   /**
    * 署名付きクッキーを付けるドメイン（2 つのドメインに共通の親。例: review.example.com）。
-   * クッキーはこの下のどのホストにも送られるので、ほかの用途のホストが無い親にする
+   * クッキーはこの下のどのホストにも送られるので、使う側が明示で決める（2 つのドメインから推さない。
+   * 推すと、canvas.example.com と sb.example.com から example.com が出て、その下の全部のホストに届く）。
+   * ほかの用途のホストが無い、専用のサブドメインにする
    */
   cookieDomain: string;
   /** 2 つのドメインを含む ACM の証明書（CloudFront 用なので us-east-1）の ARN */
@@ -205,6 +207,7 @@ export const SETTING_KEYS = {
   },
   webAclArn: { context: "webAclArn", env: "REVIEW_CANVAS_WEB_ACL_ARN" },
   canvasDomain: { context: "canvasDomain", env: "REVIEW_CANVAS_CANVAS_DOMAIN" },
+  cookieDomain: { context: "cookieDomain", env: "REVIEW_CANVAS_COOKIE_DOMAIN" },
   storybookDomain: {
     context: "storybookDomain",
     env: "REVIEW_CANVAS_STORYBOOK_DOMAIN",
@@ -259,7 +262,13 @@ export const splitIpCidrs = (
     const family = net.isIP(address);
     const length = /^\d{1,3}$/.test(prefix) ? Number(prefix) : Number.NaN;
     const max = family === 4 ? 32 : 128;
-    if (rest.length > 0 || family === 0 || !(length >= 1 && length <= max)) {
+    if (
+      rest.length > 0 ||
+      family === 0 ||
+      // Node は fe80::1%eth0 のようなゾーン ID 付きも IP アドレスとして通すが、AWS WAF は受け付けない
+      address.includes("%") ||
+      !(length >= 1 && length <= max)
+    ) {
       throw new Error(
         `allowedIpCidrs は IP アドレスの範囲（CIDR。例: 203.0.113.0/24・2001:db8::/32。/0 は使えません）をカンマ区切りで指定してください: "${cidr}"`,
       );
@@ -267,19 +276,6 @@ export const splitIpCidrs = (
     (family === 4 ? ipv4 : ipv6).push(cidr);
   }
   return { ipv4, ipv6 };
-};
-
-/** 2 つのドメインに共通の親ドメイン（ラベルの単位で、後ろから一致する分。無ければ ""） */
-export const commonParentDomain = (a: string, b: string): string => {
-  const left = a.split(".").reverse();
-  const right = b.split(".").reverse();
-  const shared: string[] = [];
-  for (let i = 0; i < Math.min(left.length, right.length); i += 1) {
-    const label = left[i];
-    if (label === undefined || label !== right[i]) break;
-    shared.unshift(label);
-  }
-  return shared.join(".");
 };
 
 type SettingKey = keyof typeof SETTING_KEYS;
@@ -505,6 +501,7 @@ export const readSettings = ({
   const loginKeys = [
     "canvasDomain",
     "storybookDomain",
+    "cookieDomain",
     "certificateArn",
     "storybookPublicKeyFiles",
     "storybookPrivateKeyParameter",
@@ -518,8 +515,15 @@ export const readSettings = ({
   if (loginValues.some((value) => value !== undefined)) {
     const missing = loginKeys.filter((_, i) => loginValues[i] === undefined);
     if (missing.length > 0) {
+      const names = (keys: ReadonlyArray<SettingKey>) =>
+        keys
+          .map(
+            (key) =>
+              `${SETTING_KEYS[key].env}（-c ${SETTING_KEYS[key].context}=）`,
+          )
+          .join("・");
       throw new Error(
-        `Storybook のログイン連動（独自ドメイン）には ${loginKeys.join("・")} のすべてが要ります。足りないもの: ${missing.join("・")}（docs/host-setup.md）`,
+        `Storybook のログイン連動（独自ドメイン）には ${names(loginKeys)} のすべてが要ります。足りないもの: ${names(missing)}（docs/host-setup.md）`,
       );
     }
     const canvasDomain = requireSetting("canvasDomain").toLowerCase();
@@ -539,11 +543,27 @@ export const readSettings = ({
         `canvasDomain と storybookDomain は別のドメインにしてください（Storybook のコードからログインのトークンを守るため、オリジンを分けます）: "${canvasDomain}"`,
       );
     }
-    const cookieDomain = commonParentDomain(canvasDomain, storybookDomain);
-    if (cookieDomain.split(".").length < 2) {
+    // クッキーを付ける親ドメインは、2 つのドメインから推さずに、使う側に決めてもらう（広すぎる親を黙って選ばない）
+    const cookieDomain = requireSetting("cookieDomain")
+      .toLowerCase()
+      .replace(/^\./, "");
+    if (
+      !DOMAIN_PATTERN.test(cookieDomain) ||
+      cookieDomain.split(".").length < 2
+    ) {
       throw new Error(
-        `canvasDomain と storybookDomain は、同じ親ドメインの下にしてください（例: canvas.review.example.com と sb.review.example.com。親ドメインに署名付きクッキーを付けます）: "${canvasDomain}"・"${storybookDomain}"`,
+        `cookieDomain は、ラベルが 2 つ以上のドメインにしてください（例: review.example.com）: "${cookieDomain}"`,
       );
+    }
+    for (const [name, value] of [
+      ["canvasDomain", canvasDomain],
+      ["storybookDomain", storybookDomain],
+    ] as const) {
+      if (!value.endsWith(`.${cookieDomain}`)) {
+        throw new Error(
+          `cookieDomain "${cookieDomain}" は、canvasDomain と storybookDomain に共通の親ドメインにしてください（${name} "${value}" がその下にありません。例: canvas.review.example.com と sb.review.example.com なら review.example.com）`,
+        );
+      }
     }
     const certificateArn = requireSetting("certificateArn");
     if (!CERTIFICATE_ARN_PATTERN.test(certificateArn)) {
@@ -562,17 +582,30 @@ export const readSettings = ({
       .map((file) => file.trim())
       .filter((file) => file !== "")
       .map((file) => {
-        const pem = fs.readFileSync(path.resolve(cwd, file), "utf8").trim();
+        let pem: string;
+        try {
+          pem = fs.readFileSync(path.resolve(cwd, file), "utf8").trim();
+        } catch (cause) {
+          throw new Error(
+            `${SETTING_KEYS.storybookPublicKeyFiles.env}（-c ${SETTING_KEYS.storybookPublicKeyFiles.context}=）の公開鍵のファイルを読めません: "${file}"`,
+            { cause },
+          );
+        }
         if (
           !pem.startsWith("-----BEGIN PUBLIC KEY-----") ||
           !pem.endsWith("-----END PUBLIC KEY-----")
         ) {
           throw new Error(
-            `storybookPublicKeyFiles のファイルは、公開鍵の PEM（-----BEGIN PUBLIC KEY----- で始まる）にしてください（秘密鍵のファイルを渡していませんか）: "${file}"`,
+            `${SETTING_KEYS.storybookPublicKeyFiles.env}（-c ${SETTING_KEYS.storybookPublicKeyFiles.context}=）のファイルは、公開鍵の PEM（-----BEGIN PUBLIC KEY----- で始まる）にしてください（秘密鍵のファイルを渡していませんか）: "${file}"`,
           );
         }
         return `${pem}\n`;
       });
+    if (publicKeys.length === 0) {
+      throw new Error(
+        `${SETTING_KEYS.storybookPublicKeyFiles.env}（-c ${SETTING_KEYS.storybookPublicKeyFiles.context}=）に、公開鍵のファイルを 1 つ以上指定してください`,
+      );
+    }
     if ((hostedZoneId === undefined) !== (hostedZoneName === undefined)) {
       throw new Error(
         "hostedZoneId と hostedZoneName は、両方を指定してください（Route 53 のレコードを作らないなら、どちらも指定しません）",

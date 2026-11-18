@@ -6,6 +6,7 @@ export {
   ReviewCanvas,
   type ReviewCanvasProps,
   OUTPUT_NAMES,
+  LOGIN_OUTPUT_NAMES,
 } from "./review-canvas";
 export {
   ReviewCanvasStack,

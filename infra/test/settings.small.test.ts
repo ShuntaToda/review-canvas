@@ -3,7 +3,6 @@ import * as os from "os";
 import * as path from "path";
 import { describe, expect, test } from "vitest";
 import {
-  commonParentDomain,
   DEFAULT_CONFIG_FILE,
   readSettings,
   splitIpCidrs,
@@ -367,20 +366,43 @@ describe("readSettings", () => {
     });
 
     test.each([
-      { allowedIpCidrs: "203.0.113.0" },
-      { allowedIpCidrs: "203.0.113.0/33" },
-      { allowedIpCidrs: "0.0.0.0/0" },
-      { allowedIpCidrs: "::/0" },
-      { allowedIpCidrs: "203.0.113.0/24/1" },
-      { allowedIpCidrs: "example.com/24" },
-      {
-        webAclArn:
-          "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/example/0a1b2c3d-0000-4000-8000-000000000000",
+      [
+        { allowedIpCidrs: "203.0.113.0" },
+        "allowedIpCidrs は IP アドレスの範囲",
+      ],
+      [
+        { allowedIpCidrs: "203.0.113.0/33" },
+        "allowedIpCidrs は IP アドレスの範囲",
+      ],
+      [{ allowedIpCidrs: "0.0.0.0/0" }, "/0 は使えません"],
+      [{ allowedIpCidrs: "::/0" }, "/0 は使えません"],
+      [
+        { allowedIpCidrs: "203.0.113.0/24/1" },
+        "allowedIpCidrs は IP アドレスの範囲",
+      ],
+      [
+        { allowedIpCidrs: "example.com/24" },
+        "allowedIpCidrs は IP アドレスの範囲",
+      ],
+      // Node はゾーン ID 付きを IP アドレスとして通すが、AWS WAF は受け付けない
+      [{ allowedIpCidrs: "fe80::1%eth0/64" }, 'fe80::1%eth0/64"'],
+      [
+        {
+          webAclArn:
+            "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/example/0a1b2c3d-0000-4000-8000-000000000000",
+        },
+        "webAclArn は CloudFront 用",
+      ],
+      [
+        { allowedIpCidrs: "203.0.113.0/24", webAclArn: WEB_ACL_ARN },
+        "どちらか片方だけ",
+      ],
+    ])(
+      "[異常系]形の違う値・両方の指定（%o）は、理由（%s）を出して例外にする",
+      (context, message) => {
+        expect(() => read({ context })).toThrow(message);
       },
-      { allowedIpCidrs: "203.0.113.0/24", webAclArn: WEB_ACL_ARN },
-    ])("[異常系]形の違う値・両方の指定（%o）は例外にする", (context) => {
-      expect(() => read({ context })).toThrow();
-    });
+    );
 
     test("[正常系]splitIpCidrs は IPv4 と IPv6 に分ける", () => {
       expect(
@@ -405,13 +427,14 @@ describe("readSettings", () => {
     const LOGIN = {
       canvasDomain: "Canvas.review.example.com",
       storybookDomain: "sb.review.example.com",
+      cookieDomain: "Review.example.com",
       certificateArn:
         "arn:aws:acm:us-east-1:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000",
       storybookPublicKeyFiles: `${path.join(dir, "new.pem")}, ${path.join(dir, "old.pem")}`,
       storybookPrivateKeyParameter: "/review-canvas/storybook-cookie-key-1",
     };
 
-    test("[正常系]5 つをそろえて渡すと有効になり、クッキーを付ける親ドメインを 2 つのドメインから決める", () => {
+    test("[正常系]6 つをそろえて渡すと有効になる（クッキーを付ける親ドメインは、渡されたものを使う）", () => {
       expect(read({ context: LOGIN }).storybookLogin).toStrictEqual({
         canvasDomain: "canvas.review.example.com",
         storybookDomain: "sb.review.example.com",
@@ -436,45 +459,119 @@ describe("readSettings", () => {
     });
 
     test.each([
-      { ...LOGIN, canvasDomain: "" },
-      { ...LOGIN, storybookPrivateKeyParameter: "" },
-      { canvasDomain: LOGIN.canvasDomain },
-      { ...LOGIN, canvasDomain: "https://canvas.review.example.com" },
-      { ...LOGIN, storybookDomain: "canvas.review.example.com" },
-      { ...LOGIN, storybookDomain: "sb.example.org" },
-      { ...LOGIN, canvasDomain: "canvas.com", storybookDomain: "sb.com" },
-      {
-        ...LOGIN,
-        certificateArn:
-          "arn:aws:acm:ap-northeast-1:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000",
+      [
+        { ...LOGIN, canvasDomain: "" },
+        "足りないもの: REVIEW_CANVAS_CANVAS_DOMAIN",
+      ],
+      [
+        { ...LOGIN, storybookPrivateKeyParameter: "" },
+        "足りないもの: REVIEW_CANVAS_STORYBOOK_PRIVATE_KEY_PARAMETER",
+      ],
+      [{ canvasDomain: LOGIN.canvasDomain }, "のすべてが要ります"],
+      // クッキーを付ける親ドメインは推さない。無ければ止める
+      [
+        { ...LOGIN, cookieDomain: "" },
+        "足りないもの: REVIEW_CANVAS_COOKIE_DOMAIN（-c cookieDomain=）",
+      ],
+      [
+        { ...LOGIN, canvasDomain: "https://canvas.review.example.com" },
+        "canvasDomain は https:// も / も付けないドメイン",
+      ],
+      [
+        { ...LOGIN, storybookDomain: "canvas.review.example.com" },
+        "別のドメインにしてください",
+      ],
+      [
+        { ...LOGIN, storybookDomain: "sb.example.org" },
+        'storybookDomain "sb.example.org" がその下にありません',
+      ],
+      [
+        { ...LOGIN, cookieDomain: "other.example.com" },
+        "共通の親ドメインにしてください",
+      ],
+      // 片方のドメインそのものは、もう片方の親であっても使えない（2 つとも、その下に置く）
+      [
+        {
+          ...LOGIN,
+          canvasDomain: "review.example.com",
+          cookieDomain: "review.example.com",
+        },
+        'canvasDomain "review.example.com" がその下にありません',
+      ],
+      [
+        {
+          ...LOGIN,
+          canvasDomain: "canvas.test",
+          storybookDomain: "sb.test",
+          cookieDomain: "test",
+        },
+        "ラベルが 2 つ以上のドメイン",
+      ],
+      [
+        {
+          ...LOGIN,
+          certificateArn:
+            "arn:aws:acm:ap-northeast-1:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000",
+        },
+        "us-east-1 の ACM の証明書",
+      ],
+      [
+        { ...LOGIN, storybookPrivateKeyParameter: "storybook-cookie-key" },
+        "/ で始まる SSM パラメータストアの名前",
+      ],
+      [
+        { ...LOGIN, storybookPublicKeyFiles: path.join(dir, "private.pem") },
+        "REVIEW_CANVAS_STORYBOOK_PUBLIC_KEY_FILES（-c storybookPublicKeyFiles=）のファイルは、公開鍵の PEM",
+      ],
+      [
+        { ...LOGIN, storybookPublicKeyFiles: path.join(dir, "missing.pem") },
+        "REVIEW_CANVAS_STORYBOOK_PUBLIC_KEY_FILES（-c storybookPublicKeyFiles=）の公開鍵のファイルを読めません",
+      ],
+      [
+        { ...LOGIN, storybookPublicKeyFiles: " , " },
+        "公開鍵のファイルを 1 つ以上指定してください",
+      ],
+      [
+        { ...LOGIN, hostedZoneId: "Z0123456789ABCDEFGHIJ" },
+        "両方を指定してください",
+      ],
+      [
+        { ...LOGIN, hostedZoneId: "zone", hostedZoneName: "example.com" },
+        "hostedZoneId は Route 53 のホストゾーンの ID",
+      ],
+      [
+        {
+          ...LOGIN,
+          hostedZoneId: "Z0123456789ABCDEFGHIJ",
+          hostedZoneName: "example.org",
+        },
+        'はホストゾーン "example.org" の下にありません',
+      ],
+      [
+        {
+          hostedZoneId: "Z0123456789ABCDEFGHIJ",
+          hostedZoneName: "example.com",
+        },
+        "独自ドメイン（canvasDomain・storybookDomain）を指定したときだけ",
+      ],
+    ])(
+      "[異常系]足りない・形の違う値（%o）は、理由（%s）を出して例外にする",
+      (context, message) => {
+        expect(() => read({ context })).toThrow(message);
       },
-      { ...LOGIN, storybookPrivateKeyParameter: "storybook-cookie-key" },
-      { ...LOGIN, storybookPublicKeyFiles: path.join(dir, "private.pem") },
-      { ...LOGIN, hostedZoneId: "Z0123456789ABCDEFGHIJ" },
-      { ...LOGIN, hostedZoneId: "zone", hostedZoneName: "example.com" },
-      {
-        ...LOGIN,
-        hostedZoneId: "Z0123456789ABCDEFGHIJ",
-        hostedZoneName: "example.org",
-      },
-      { hostedZoneId: "Z0123456789ABCDEFGHIJ", hostedZoneName: "example.com" },
-    ])("[異常系]足りない・形の違う値（%o）は例外にする", (context) => {
-      expect(() => read({ context })).toThrow();
-    });
+    );
 
-    test("[正常系]commonParentDomain は、後ろから一致するラベルを返す（無ければ空）", () => {
+    test("[正常系]登録できるドメインそのもの（example.com）も、明示で渡されれば通す（広さは使う側が決める。docs/security.md）", () => {
       expect(
-        commonParentDomain(
-          "canvas.review.example.com",
-          "sb.review.example.com",
-        ),
-      ).toBe("review.example.com");
-      expect(commonParentDomain("canvas.example.com", "sb.example.org")).toBe(
-        "",
-      );
-      expect(commonParentDomain("a.example.com", "example.com")).toBe(
-        "example.com",
-      );
+        read({
+          context: {
+            ...LOGIN,
+            canvasDomain: "canvas.example.com",
+            storybookDomain: "sb.example.com",
+            cookieDomain: ".example.com",
+          },
+        }).storybookLogin?.cookieDomain,
+      ).toBe("example.com");
     });
   });
 });
