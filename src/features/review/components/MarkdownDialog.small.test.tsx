@@ -47,7 +47,7 @@ describe("MarkdownDialog", () => {
     expect(screen.getByRole("button", { name: ".json を保存" })).not.toBeNull();
   });
 
-  test("[正常系]対象に「AI 修正済み（確認待ち）」を選べる", () => {
+  test("[正常系]対象に「確認待ち」を選べ、Storybook が 1 つなら「すべてのページ」を出さない", () => {
     const buildText = vi.fn(() => "");
     render(
       <MarkdownDialog
@@ -66,5 +66,7 @@ describe("MarkdownDialog", () => {
     expect(buildText).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: "ai-fixed" }),
     );
+    expect(screen.getByRole("option", { name: "確認待ち" })).not.toBeNull();
+    expect(screen.queryByLabelText("すべてのページ")).toBeNull();
   });
 });

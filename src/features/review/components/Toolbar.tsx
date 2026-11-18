@@ -19,7 +19,7 @@ import {
 import { FRAMES_PER_ROW_OPTIONS } from "../model/layout";
 import type { Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
-import { IconButton } from "./ThreadPopover";
+import { IconButton } from "./IconButton";
 import { focusCanvas } from "./canvas-dom";
 
 const TOOLS: ReadonlyArray<{
@@ -106,47 +106,69 @@ export const Toolbar = ({
   const selectedCustom =
     widthOptions.find((option) => option.width === width)?.custom ?? false;
   return (
+    // 狭い幅（768px 未満）では、ページ・道具・絞り込み・ブランチと、右端の「?」・一覧の開閉だけを出す
+    // （閲覧・返信・解決ができれば足りる。幅や並べ方を変える欄は出さない）。「?」と一覧の開閉は、1 段目の右端に固定する
     <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3 py-1.5">
       <h1 className="hidden text-sm font-bold whitespace-nowrap text-ink min-[1400px]:block">
         Review Canvas
       </h1>
 
-      <nav aria-label="ページ" className="flex rounded-md bg-panel-sub p-0.5">
-        {sources.ids.map((source) => (
-          <button
-            key={source}
-            type="button"
-            aria-current={source === page ? "page" : undefined}
-            className={[
-              "rounded px-3 py-1 text-sm whitespace-nowrap",
-              source === page
-                ? "bg-panel font-bold text-ink shadow-sm"
-                : "text-ink-sub hover:text-ink",
-            ].join(" ")}
-            onClick={() => onPageChange(source)}
-          >
-            {sources.label(source)}
-            {(openCounts[source] ?? 0) > 0 && (
-              <span
-                className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white"
-                title={`未解決・確認待ち ${openCounts[source]} 件`}
-              >
-                <span aria-hidden="true">{openCounts[source]}</span>
-                <span className="sr-only">
-                  （未解決・確認待ち {openCounts[source]} 件）
+      {/* Storybook が 1 つなら、切り替える先が無いので出さない */}
+      {sources.ids.length > 1 && (
+        <nav
+          aria-label="ページ"
+          className="flex min-w-0 overflow-x-auto rounded-md bg-panel-sub p-0.5 max-md:order-1 max-md:max-w-36"
+        >
+          {sources.ids.map((source) => (
+            <button
+              key={source}
+              type="button"
+              aria-current={source === page ? "page" : undefined}
+              className={[
+                "rounded px-3 py-1 text-sm whitespace-nowrap",
+                source === page
+                  ? "bg-panel font-bold text-ink shadow-sm"
+                  : "text-ink-sub hover:text-ink",
+              ].join(" ")}
+              onClick={() => onPageChange(source)}
+            >
+              {sources.label(source)}
+              {(openCounts[source] ?? 0) > 0 && (
+                <span
+                  className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white"
+                  title={`未解決・確認待ち ${openCounts[source]} 件`}
+                >
+                  <span aria-hidden="true">{openCounts[source]}</span>
+                  <span className="sr-only">
+                    （未解決・確認待ち {openCounts[source]} 件）
+                  </span>
                 </span>
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
+              )}
+            </button>
+          ))}
+        </nav>
+      )}
 
-      <div role="toolbar" aria-label="操作" className="flex gap-0.5">
+      <div
+        role="toolbar"
+        aria-label="操作"
+        className="flex gap-0.5 max-md:order-1"
+      >
         {TOOLS.map(({ tool: value, label, key, Icon }) => (
           <IconButton
             key={value}
             label={`${label}（${key}）`}
             pressed={tool === value}
+            // アイコンだけでは何の道具か伝わりにくいので、名前を添える（キーは小さく）
+            text={
+              <>
+                {label}
+                <kbd className="ml-1 font-sans text-[10px] text-muted">
+                  {key}
+                </kbd>
+              </>
+            }
+            hideTextWhenNarrow
             onClick={() => onToolChange(value)}
           >
             <Icon aria-hidden className="size-4" />
@@ -154,15 +176,15 @@ export const Toolbar = ({
         ))}
       </div>
 
-      <label className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-accent">
+      <label className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-accent max-md:order-3">
         <Search aria-hidden className="size-4 text-muted" />
         <input
           ref={searchRef}
           type="search"
           aria-label="画面名で絞り込む"
-          placeholder="画面名で絞り込む /"
+          placeholder="絞り込む（/）"
           value={query}
-          className="w-32 bg-transparent py-1 text-sm outline-none"
+          className="w-28 bg-transparent py-1 text-sm outline-none"
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => {
             // 抜けた先をキャンバスにする（blur だと抜けた入力欄が「最後にいた所」に残り、画面の中に取られたフォーカスがそこへ戻るため）
@@ -171,7 +193,7 @@ export const Toolbar = ({
         />
       </label>
 
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
+      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
         <input
           type="checkbox"
           checked={showComponents}
@@ -180,7 +202,7 @@ export const Toolbar = ({
         部品も表示
       </label>
 
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
+      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
         幅
         <select
           value={width}
@@ -197,7 +219,7 @@ export const Toolbar = ({
 
       {/* 設定に無い幅を、見る人が自分用に足す（ブラウザに覚える。足した幅は iframe で並べる） */}
       <form
-        className="flex items-center gap-1"
+        className="flex items-center gap-1 max-md:hidden"
         onSubmit={(event) => {
           event.preventDefault();
           const next = parseWidthInput(widthInput);
@@ -253,7 +275,7 @@ export const Toolbar = ({
         )}
       </form>
 
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
+      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
         横に
         <select
           value={perRow}
@@ -269,9 +291,9 @@ export const Toolbar = ({
         </select>
       </label>
 
-      <div className="ml-auto flex items-center gap-2">
-        <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
-          ブランチ
+      <div className="flex min-w-0 items-center gap-2 max-md:order-3 md:ml-auto">
+        <label className="flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
+          <span className="max-md:sr-only">ブランチ</span>
           <select
             value={branch}
             className="max-w-40 rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
@@ -294,7 +316,7 @@ export const Toolbar = ({
           </code>
         )}
         <span
-          className="inline-flex items-center gap-1 px-1 py-1 text-sm text-ink-sub"
+          className="inline-flex items-center gap-1 px-1 py-1 text-sm text-ink-sub max-md:hidden"
           title={`${userName} としてログイン中`}
         >
           <UserRound aria-hidden className="size-4 shrink-0" />
@@ -303,6 +325,9 @@ export const Toolbar = ({
         <IconButton label="ログアウト" onClick={onLogout}>
           <LogOut aria-hidden className="size-4" />
         </IconButton>
+      </div>
+
+      <div className="flex items-center gap-1 max-md:order-2 max-md:ml-auto">
         <IconButton label="使い方・ショートカット（?）" onClick={onHelp}>
           <CircleHelp aria-hidden className="size-4" />
         </IconButton>

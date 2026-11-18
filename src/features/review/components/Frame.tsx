@@ -30,7 +30,7 @@ import {
   type RenderState,
   STORY_SETTLE_TIMEOUT_MS,
 } from "../model/story-render";
-import type { ShotView } from "../model/story-shots";
+import { type ShotView, shotUrlAt } from "../model/story-shots";
 import { storybookUrl, storyIframeUrl } from "../model/storybook";
 import type { CommentAnchor, ThreadStatus } from "../model/threads";
 import { Pin } from "./Pin";
@@ -49,8 +49,6 @@ export type PinView = {
   x: number;
   y: number;
   status: ThreadStatus;
-  /** いまと違う幅の表示で書かれた（位置がずれているかもしれない） */
-  mismatched: boolean;
   /** 指していた要素の手がかり（持たないコメントは無い） */
   anchor: CommentAnchor | undefined;
   /** 読み込んだ画面で、指していた要素が見つからなかった（置いたときの位置に出している） */
@@ -691,18 +689,18 @@ export const Frame = ({
             <button
               type="button"
               className="shrink-0 rounded px-1 text-warn hover:bg-panel"
-              title="play 関数の途中で入力欄へフォーカスを戻したため、Storybook と違う状態かもしれません"
+              title="自動の操作（play 関数）の途中で止めたので、Storybook で開いたときと違う状態かもしれません。押すと読み込み直します"
               tabIndex={-1}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={reload}
             >
-              再読み込み
+              読み込み直す
             </button>
           )}
           {shot !== null && !revealed && (
             <span
               className="shrink-0 rounded bg-panel-sub px-1 text-muted"
-              title="発行のときに撮った画像です。クリックする・寄る・コメントや操作の道具で指すと、Storybook の画面そのものに切り替わります"
+              title="置いたときに撮った画像です。クリックする・大きく寄る・「コメント」や「操作」で指すと、動く画面に切り替わります"
             >
               {mounted ? "読み込み中…" : "画像"}
             </span>
@@ -710,9 +708,9 @@ export const Frame = ({
           {bridgeMissing && (
             <span
               className="shrink-0 rounded px-1 text-warn"
-              title="このブランチの Storybook には橋渡しがありません。review-canvas の手順で置き直すと、高さの測り直し・ピンの要素への追従・要素の手がかりが効きます"
+              title="このブランチの画面は古い手順で置かれているため、高さの測り直し・ピンが要素を追いかける動きが効きません（Storybook に橋渡しが無い）。review-canvas の手順で置き直すと直ります"
             >
-              置き直しが必要
+              一部の機能が使えません
             </span>
           )}
           <a
@@ -753,7 +751,8 @@ export const Frame = ({
           )}
           {shot !== null && !revealed && (
             <img
-              src={shot.url}
+              // 引いて見るときは縮小した画像を出す（全体を見渡すときに、原寸の画像を全部は読まない）
+              src={shotUrlAt(shot, zoom, window.devicePixelRatio)}
               alt={`${story.title} / ${story.name}`}
               width={w}
               height={shot.height}
@@ -820,7 +819,6 @@ export const Frame = ({
             y={pin.y}
             zoom={zoom}
             status={pin.status}
-            mismatched={pin.mismatched}
             missing={pin.missing}
             active={pin.id === activeThreadId}
             label={pin.label}

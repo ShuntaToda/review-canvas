@@ -143,10 +143,10 @@ describe("buildMarkdown", () => {
     };
 
     expect(buildMarkdown(input)).toContain(
-      "- [ ] **#1**（AI 修正済み・確認待ち） Default（山田",
+      "- [ ] **#1**（確認待ち） Default（山田",
     );
     expect(buildMarkdown({ ...input, format: "ai" })).toContain(
-      "## #1 AI 修正済み（確認待ち）: サンプルショップ / Features/Search / Default",
+      "## #1 確認待ち: サンプルショップ / Features/Search / Default",
     );
   });
 

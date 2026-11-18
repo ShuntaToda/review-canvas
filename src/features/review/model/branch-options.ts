@@ -38,6 +38,6 @@ export const buildBranchOptions = ({
 
 /** 欄の行の見出し */
 export const branchOptionLabel = (option: BranchOption): string =>
-  `${option.branch}${option.published ? "" : "（ビルドなし）"}${
+  `${option.branch}${option.published ? "" : "（コメントのみ）"}${
     option.commentCount > 0 ? `・${option.commentCount}件` : ""
   }`;

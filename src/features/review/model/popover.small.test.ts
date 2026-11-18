@@ -52,3 +52,28 @@ describe("popoverPosition", () => {
     ).toBe(116);
   });
 });
+
+describe("popoverPosition（画面の外に出す）", () => {
+  const viewport = { width: 1600, height: 800 };
+  const frame = { left: 500, top: 100, right: 900, bottom: 700 };
+
+  test("[正常系]ピンが画面の左半分にあれば画面の左の外、右半分なら右の外に置く", () => {
+    expect(
+      popoverPosition({ x: 600, y: 300 }, viewport, null, frame).left,
+    ).toBe(500 - 16 - POPOVER_WIDTH);
+    expect(
+      popoverPosition({ x: 800, y: 300 }, viewport, null, frame).left,
+    ).toBe(916);
+  });
+
+  test("[正常系]外に入らないときは、いままでの置き方（ピン・要素の横）にする", () => {
+    const narrow = { left: 100, top: 100, right: 900, bottom: 700 };
+    expect(
+      popoverPosition({ x: 300, y: 300 }, viewport, null, narrow).left,
+    ).toBe(316);
+    const wide = { left: 500, top: 100, right: 1500, bottom: 700 };
+    expect(
+      popoverPosition({ x: 1400, y: 300 }, viewport, null, wide).left,
+    ).toBe(1400 - 16 - POPOVER_WIDTH);
+  });
+});

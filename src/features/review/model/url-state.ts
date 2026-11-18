@@ -1,4 +1,5 @@
 import { isStorySourceId, type StorySource } from "./sources";
+import { isStatusFilter, type StatusFilter } from "./threads";
 
 /**
  * URL のクエリに持つ状態。共有したリンクで同じ場所が開くようにする
@@ -6,12 +7,14 @@ import { isStorySourceId, type StorySource } from "./sources";
  * - page: ページ（設定ファイルの Storybook の ID。設定に無い ID は開くときに 1 つ目へ戻す）
  * - story: その画面（ストーリー）へ移る
  * - comment: そのスレッドを開く
+ * - status: 一覧の状態のタブ（無ければ未解決。知らない値は捨てる）
  */
 export type UrlState = {
   branch?: string;
   page?: StorySource;
   story?: string;
   comment?: string;
+  status?: StatusFilter;
 };
 
 /** ブランチ名の長さの上限（API の branch と同じ） */
@@ -37,6 +40,8 @@ export const parseUrlState = (search: string): UrlState => {
   if (story !== null && story !== "") state.story = story;
   const comment = params.get("comment");
   if (comment !== null && comment !== "") state.comment = comment;
+  const status = params.get("status");
+  if (isStatusFilter(status)) state.status = status;
   return state;
 };
 
@@ -47,6 +52,7 @@ export const buildSearch = (state: UrlState): string => {
   if (state.page !== undefined) params.set("page", state.page);
   if (state.story !== undefined) params.set("story", state.story);
   if (state.comment !== undefined) params.set("comment", state.comment);
+  if (state.status !== undefined) params.set("status", state.status);
   const query = params.toString();
   return query === "" ? "" : `?${query}`;
 };

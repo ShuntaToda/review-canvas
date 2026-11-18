@@ -23,7 +23,7 @@ import {
   type UrlState,
 } from "../model/url-state";
 import { ReviewWorkspace } from "./ReviewWorkspace";
-import { messages } from "@/constants/messages";
+import { localHints, messages } from "@/constants/messages";
 import { LoginAgainButton, useAuth } from "@/support/auth";
 
 /**
@@ -105,8 +105,8 @@ export const ReviewPage = ({
           </button>
         }
       >
-        API に接続できません。手元では `pnpm run serve`（開発中は `pnpm run
-        dev`）で起動しているか確かめてください。
+        サーバーに接続できません。少し待ってから「読み直す」を押してください。
+        {localHints.apiDown}
       </FullScreenMessage>
     );
   }
@@ -163,7 +163,14 @@ export const ReviewPage = ({
           defaultBranch={meta.data.defaultBranch}
           published={published}
           publishedBranches={meta.data.branches}
-          onBranchChange={(next, page) => setUrlState({ branch: next, page })}
+          // 切り替える前に真ん中に見えていた画面を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
+          onBranchChange={(next, page, story) =>
+            setUrlState({
+              branch: next,
+              page,
+              ...(story === undefined ? {} : { story }),
+            })
+          }
           stories={mapSources(catalog.ids, (id) => {
             const result = stories.data?.[id];
             return result?.kind === "ok" ? result.stories : [];

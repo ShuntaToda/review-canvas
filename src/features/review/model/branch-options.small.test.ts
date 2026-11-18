@@ -19,7 +19,7 @@ describe("buildBranchOptions", () => {
     ]);
   });
 
-  test("[正常系]選んでいるブランチがどこにも無くても行に入れる（ビルドなし）", () => {
+  test("[正常系]選んでいるブランチがどこにも無くても行に入れる（コメントのみ）", () => {
     const options = buildBranchOptions({
       current: "typo",
       defaultBranch: "main",
@@ -40,7 +40,7 @@ describe("branchOptionLabel", () => {
     [{ branch: "main", published: true, commentCount: 2 }, "main・2件"],
     [
       { branch: "old/c", published: false, commentCount: 3 },
-      "old/c（ビルドなし）・3件",
+      "old/c（コメントのみ）・3件",
     ],
   ])("[正常系]%o は %s", (option, expected) => {
     expect(branchOptionLabel(option)).toBe(expected);

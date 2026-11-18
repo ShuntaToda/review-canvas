@@ -8,27 +8,27 @@ import { MissingMark } from "./Pin";
 export const HelpDialog = ({ onClose }: { onClose: () => void }) => (
   <Modal title="使い方・ショートカット" onClose={onClose} width={520}>
     <div className="flex flex-col gap-3 text-sm">
-      <p className="text-ink-sub">
-        Storybook
-        の画面（ストーリー）を、画面ごとに1行・状態ごとに横へ並べています。
-        「コメント」で画面をクリックするとピンを置けます。コメントはブランチごとに分かれます。上の「ブランチ」で、ほかのブランチの
-        Storybook とコメントに切り替えられます（「ビルドなし」はコメントだけ）。
-      </p>
-      <ul className="flex flex-col gap-1.5 text-ink-sub" aria-label="ピンの印">
-        <li className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="relative size-4 shrink-0 rounded-full rounded-bl-none bg-accent"
-          >
-            <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-warn ring-2 ring-panel" />
-          </span>
-          右上の点:
-          いまと違う幅の表示で書かれ、指していた要素の記録が無いか見つからないピン（位置がずれているかもしれません）
+      <ul className="flex list-disc flex-col gap-1.5 pl-5 text-ink-sub">
+        <li>
+          Storybook
+          の画面を、画面ごとに1段・状態ごとに横へ並べています。上の「コメント」を選んで画面をクリックすると、ピンを置いてコメントを書けます。
         </li>
-        <li className="flex items-center gap-2">
+        <li>
+          並んでいるのは、置いたときに撮った画像です。クリックする・大きく寄る・「コメント」や「操作」で指すと、その1枚だけ動く画面に切り替わります。
+        </li>
+        <li>
+          幅は上の「幅」で切り替えます。一覧に無い幅は「幅を足す」に px
+          を入れると自分用に足せます（このブラウザだけに覚え、ほかの人には出ません。足した幅は画像が無いので、動く画面を読み込みます）。
+        </li>
+        <li>
+          コメントはブランチごとに分かれます。上の「ブランチ」で、ほかのブランチの画面とコメントに切り替えられます（「コメントのみ」は画面を置いていないブランチ）。
+        </li>
+        <li className="flex list-none items-center gap-2">
           <MissingMark />
-          「?」:
-          指していた要素がいまの画面で見つからないピン。置いたときの位置に出しています（一覧にも同じ印が付きます）
+          <span>
+            「?」の付いたピン:
+            指していた要素がいまの画面で見つからず、置いたときの位置に出しています
+          </span>
         </li>
       </ul>
       <table className="w-full border-collapse">
@@ -37,7 +37,7 @@ export const HelpDialog = ({ onClose }: { onClose: () => void }) => (
             <tr key={keys} className="border-t border-line">
               <th
                 scope="row"
-                className="py-1.5 pr-4 text-left font-mono text-xs font-normal whitespace-nowrap text-ink"
+                className="py-1.5 pr-4 text-left font-mono text-xs font-normal text-ink"
               >
                 {keys}
               </th>

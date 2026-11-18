@@ -85,9 +85,12 @@ import {
   type Comment,
   type CommentAnchor,
   countByStatus,
+  countPendingByStory,
   filterThreads,
+  navigationOrder,
   type StatusFilter,
   type Thread,
+  threadNeighbors,
 } from "../model/threads";
 import { buildSearch, type UrlState } from "../model/url-state";
 import type { AuthUser } from "@/support/auth";
@@ -134,6 +137,12 @@ const parseWidths =
     }
   };
 
+/** これより狭い表示では、コメント一覧をはじめ閉じておく（キャンバスに重ねて出すため。Tailwind の md と同じ） */
+const NARROW_VIEWPORT_WIDTH = 768;
+
+const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean =>
+  a.length === b.length && a.every((id, index) => id === b[index]);
+
 /** スレッドへ移るときの倍率（今の倍率を保ちつつ、読める大きさにする） */
 const focusZoom = (current: number): number =>
   Math.min(1, Math.max(0.5, current));
@@ -147,8 +156,12 @@ type ReviewWorkspaceProps = {
   published: ReviewMetaBranch | null;
   /** Storybook を置いてあるブランチ（切り替える欄の行） */
   publishedBranches: ReadonlyArray<ReviewMetaBranch>;
-  /** ブランチを切り替える（いまのページは保つ） */
-  onBranchChange: (branch: string, page: StorySource) => void;
+  /** ブランチを切り替える（いまのページと、真ん中に見えている画面は保つ） */
+  onBranchChange: (
+    branch: string,
+    page: StorySource,
+    story: string | undefined,
+  ) => void;
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
@@ -227,8 +240,15 @@ export const ReviewWorkspace = ({
       cameras,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
-      // 未解決でない（確認待ち・解決済み）スレッドへのリンクは、一覧を「すべて」にして開く
-      resolved: thread !== undefined && thread.root.status !== "open",
+      // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
+      status: ((): StatusFilter => {
+        const wanted = initialUrl.status ?? "open";
+        return thread === undefined ||
+          wanted === "all" ||
+          thread.root.status === wanted
+          ? wanted
+          : "all";
+      })(),
       showComponents:
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
@@ -264,7 +284,9 @@ export const ReviewWorkspace = ({
   /** ページの幅（覚えていなければ既定） */
   const widthOf = (source: StorySource): number =>
     widths[source] ?? sources.get(source).defaultWidth;
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => window.innerWidth >= NARROW_VIEWPORT_WIDTH,
+  );
   const [cameraStates, setCameraStates] = useState(initial.cameras);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
@@ -288,9 +310,9 @@ export const ReviewWorkspace = ({
       }
       return previous[key] === body ? previous : { ...previous, [key]: body };
     });
-  const [status, setStatus] = useState<StatusFilter>(
-    initial.resolved ? "all" : "open",
-  );
+  const [status, setStatus] = useState<StatusFilter>(initial.status);
+  // 前へ・次へで巡る並び（開いているスレッドが一覧から外れる前の並びを覚えておく）
+  const [navigationIds, setNavigationIds] = useState<ReadonlyArray<string>>([]);
   const [titleFilter, setTitleFilter] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
@@ -432,30 +454,35 @@ export const ReviewWorkspace = ({
         ? { story: centerStoryId }
         : {}),
       ...(urlCommentId === null ? {} : { comment: urlCommentId }),
+      // 一覧の状態のタブ（はじめの「未解決」は載せない）
+      ...(status === "open" ? {} : { status }),
     });
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}${search}`,
     );
-  }, [branch, defaultBranch, page, urlCommentId, centerStoryId]);
+  }, [branch, defaultBranch, page, urlCommentId, centerStoryId, status]);
 
-  /** API の失敗を知らせて、呼んだ側（入力欄）にも失敗を伝える */
+  /**
+   * API の失敗を、呼んだ側（入力欄・吹き出し）へそのまま伝える。失敗は消えるお知らせにせず、送った所に残して送り直せるようにする
+   * （お知らせは成功のときだけ）。ログインの期限切れだけは、ログインし直す操作と一緒に出す
+   */
   const report = async <T,>(action: () => Promise<T>): Promise<T> => {
     try {
       return await action();
     } catch (error) {
-      if (isUnauthorized(error)) {
-        setWriteUnauthorized(true);
-      } else {
-        showToast(error instanceof Error ? error.message : "失敗しました");
-      }
+      if (isUnauthorized(error)) setWriteUnauthorized(true);
       throw error;
     }
   };
 
   const shareUrl = (state: UrlState) =>
-    `${window.location.origin}${window.location.pathname}${buildSearch({ branch, ...state })}`;
+    `${window.location.origin}${window.location.pathname}${buildSearch({
+      branch,
+      ...state,
+      ...(status === "open" ? {} : { status }),
+    })}`;
   const copyLink = (state: UrlState) => {
     navigator.clipboard
       .writeText(shareUrl(state))
@@ -601,6 +628,69 @@ export const ReviewWorkspace = ({
     showToast("未解決へ差し戻しました");
   };
 
+  // ピン（いまのページ。一覧の絞り込みに合わせ、開いているスレッドは必ず出す）
+  const pageThreads = threads.filter((t) => t.root.source === page);
+  const pinThreads = new Set(
+    filterThreads(pageThreads, { status, stories: storiesByKey }).map(
+      (t) => t.root.id,
+    ),
+  );
+  const pinsByStory = new Map<string, PinView[]>();
+  for (const thread of pageThreads) {
+    if (!pinThreads.has(thread.root.id) && thread.root.id !== activeThreadId) {
+      continue;
+    }
+    const pins = pinsByStory.get(thread.root.storyId) ?? [];
+    const result = located[locatedKey(page, width, thread.root.id)];
+    const missing = result?.kind === "missing";
+    pins.push({
+      id: thread.root.id,
+      number: thread.number,
+      ...pinPointOf(thread),
+      status: thread.root.status,
+      anchor: thread.root.anchor,
+      missing,
+      box: result?.kind === "found" ? result.box : null,
+      label: `#${thread.number} ${thread.root.author}: ${thread.root.body}${
+        missing
+          ? "（指していた要素が見つかりません。置いたときの位置に出しています）"
+          : ""
+      }`,
+    });
+    pinsByStory.set(thread.root.storyId, pins);
+  }
+
+  // いまの幅の画面で、指していた要素が見つからないスレッド（一覧にもピンと同じ印を付ける）
+  const missingThreadIds = new Set(
+    pageThreads
+      .filter(
+        (t) => located[locatedKey(page, width, t.root.id)]?.kind === "missing",
+      )
+      .map((t) => t.root.id),
+  );
+
+  // 一覧（いまのページ・解決の状態・画面で絞り込む）
+  const titleThreads = filterThreads(pageThreads, {
+    status: "all",
+    title: titleFilter,
+    stories: storiesByKey,
+  });
+  const counts = countByStatus(titleThreads);
+  const listed = filterThreads(titleThreads, { status, stories: storiesByKey });
+  // 前へ・次へ（一覧の並び。解決にして一覧から外れた直後は、外れる前の並びで次を決める）
+  const listedIds = listed.map((t) => t.root.id);
+  const navigation = navigationOrder({
+    listed: listedIds,
+    previous: navigationIds,
+    activeId: activeThread?.root.source === page ? activeThread.root.id : null,
+  });
+  if (!sameIds(navigation, navigationIds)) setNavigationIds(navigation);
+  const neighbors = threadNeighbors(navigation, activeThreadId);
+  const goToThread = (threadId: string | undefined) => {
+    const target = threads.find((t) => t.root.id === threadId);
+    if (target !== undefined) focusThread(target);
+  };
+  const pendingByStory = countPendingByStory(pageThreads);
   // キーボードの操作（入力欄にいるときは Esc 以外を効かせない）
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -664,6 +754,13 @@ export const ReviewWorkspace = ({
         case "help":
           setDialog("help");
           break;
+        // 操作モードでは、J・K は画面の中の入力に使う
+        case "thread-next":
+          if (tool !== "interact") goToThread(neighbors.next);
+          break;
+        case "thread-previous":
+          if (tool !== "interact") goToThread(neighbors.previous);
+          break;
         case "pan":
           updateCamera((c) => ({
             ...c,
@@ -687,61 +784,6 @@ export const ReviewWorkspace = ({
     };
   });
 
-  // ピン（いまのページ。一覧の絞り込みに合わせ、開いているスレッドは必ず出す）
-  const pageThreads = threads.filter((t) => t.root.source === page);
-  const pinThreads = new Set(
-    filterThreads(pageThreads, { status, stories: storiesByKey }).map(
-      (t) => t.root.id,
-    ),
-  );
-  const pinsByStory = new Map<string, PinView[]>();
-  for (const thread of pageThreads) {
-    if (!pinThreads.has(thread.root.id) && thread.root.id !== activeThreadId) {
-      continue;
-    }
-    const pins = pinsByStory.get(thread.root.storyId) ?? [];
-    const result = located[locatedKey(page, width, thread.root.id)];
-    const missing = result?.kind === "missing";
-    // 要素を見つけて追従できているピンは、幅が違ってもずれないので印を付けない
-    const mismatched =
-      thread.root.frameWidth !== null &&
-      thread.root.frameWidth !== width &&
-      result?.kind !== "found";
-    pins.push({
-      id: thread.root.id,
-      number: thread.number,
-      ...pinPointOf(thread),
-      status: thread.root.status,
-      mismatched,
-      anchor: thread.root.anchor,
-      missing,
-      box: result?.kind === "found" ? result.box : null,
-      label: `#${thread.number} ${thread.root.author}: ${thread.root.body}${
-        mismatched
-          ? `（幅 ${thread.root.frameWidth}px の表示で書かれたコメント）`
-          : ""
-      }${missing ? "（指していた要素が見つかりません。置いたときの位置に出しています）" : ""}`,
-    });
-    pinsByStory.set(thread.root.storyId, pins);
-  }
-
-  // いまの幅の画面で、指していた要素が見つからないスレッド（一覧にもピンと同じ印を付ける）
-  const missingThreadIds = new Set(
-    pageThreads
-      .filter(
-        (t) => located[locatedKey(page, width, t.root.id)]?.kind === "missing",
-      )
-      .map((t) => t.root.id),
-  );
-
-  // 一覧（いまのページ・解決の状態・画面で絞り込む）
-  const titleThreads = filterThreads(pageThreads, {
-    status: "all",
-    title: titleFilter,
-    stories: storiesByKey,
-  });
-  const counts = countByStatus(titleThreads);
-  const listed = filterThreads(titleThreads, { status, stories: storiesByKey });
   const titles = [
     ...new Set(
       pageThreads.flatMap((t) => {
@@ -783,7 +825,18 @@ export const ReviewWorkspace = ({
               bottom: bottomRight.y,
             };
           })();
-    return popoverPosition(toScreen(point), viewport, avoid);
+    // 画面（フレーム）の矩形。吹き出しを、見ている画面の外（左か右）に出す
+    const frameTopLeft = worldToScreen(camera, { x: frame.x, y: frame.y });
+    const frameBottomRight = worldToScreen(camera, {
+      x: frame.x + frame.w,
+      y: frame.y + frame.h,
+    });
+    return popoverPosition(toScreen(point), viewport, avoid, {
+      left: frameTopLeft.x,
+      top: frameTopLeft.y,
+      right: frameBottomRight.x,
+      bottom: frameBottomRight.y,
+    });
   };
   const activeLocated =
     activeThread === undefined
@@ -861,7 +914,7 @@ export const ReviewWorkspace = ({
         commit={commit}
         branchOptions={branchOptions}
         onBranchChange={(next) => {
-          if (next !== branch) onBranchChange(next, page);
+          if (next !== branch) onBranchChange(next, page, centerStoryId);
         }}
         userName={me.name}
         onLogout={onLogout}
@@ -869,7 +922,7 @@ export const ReviewWorkspace = ({
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1" aria-label="キャンバス">
           {published === null ? (
             <BranchNotPublishedNotice branch={branch} />
@@ -899,6 +952,7 @@ export const ReviewWorkspace = ({
                   tool={tool}
                   spaceHeld={spaceHeld}
                   pinsByStory={pinsByStory}
+                  pendingByStory={pendingByStory}
                   activeThreadId={activeThreadId}
                   draft={
                     draft !== null && draft.source === page
@@ -934,6 +988,11 @@ export const ReviewWorkspace = ({
                     setActiveThreadId(null);
                     setDraft(null);
                   }}
+                  onFrameClick={() =>
+                    showToast(
+                      "コメントするには上の「コメント」を選んで、画面をクリックします",
+                    )
+                  }
                 />
               </ErrorBoundary>
               {activeThread !== undefined && threadPosition !== undefined && (
@@ -956,14 +1015,33 @@ export const ReviewWorkspace = ({
                   me={me.sub}
                   drafts={drafts}
                   onDraftChange={setDraftBody}
-                  onSwitchWidth={
-                    activeThread.root.frameWidth !== null &&
-                    pageWidthOptions.some(
-                      (option) => option.width === activeThread.root.frameWidth,
-                    )
-                      ? (next) => setWidths({ ...widths, [page]: next })
-                      : undefined
-                  }
+                  navigation={{
+                    position:
+                      neighbors.index === -1 ? null : neighbors.index + 1,
+                    total: navigation.length,
+                    onPrevious:
+                      neighbors.previous === undefined
+                        ? undefined
+                        : () => goToThread(neighbors.previous),
+                    onNext:
+                      neighbors.next === undefined
+                        ? undefined
+                        : () => goToThread(neighbors.next),
+                  }}
+                  onSwitchWidth={(next) => {
+                    // 設定にも自分用にも無い幅は、自分用に足してから切り替える
+                    if (!pageWidthOptions.some((o) => o.width === next)) {
+                      setCustomWidths(
+                        addCustomWidth(
+                          customWidths,
+                          page,
+                          next,
+                          sources.get(page).widths,
+                        ),
+                      );
+                    }
+                    setWidths({ ...widths, [page]: next });
+                  }}
                   onClose={() => setActiveThreadId(null)}
                   onReply={reply(activeThread)}
                   onEdit={editComment}
@@ -1069,14 +1147,19 @@ export const ReviewWorkspace = ({
             storiesById={storiesByKey}
             activeThreadId={activeThreadId}
             missingThreadIds={missingThreadIds}
-            currentCommit={commit}
             loading={commentsQuery.isLoading}
             errorMessage={
               commentsQuery.error === undefined
                 ? undefined
                 : commentsErrorMessage(commentsQuery.error)
             }
-            onSelect={focusThread}
+            onSelect={(thread) => {
+              focusThread(thread);
+              // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
+              if (window.innerWidth < NARROW_VIEWPORT_WIDTH) {
+                setSidebarOpen(false);
+              }
+            }}
             onExport={() => setDialog("markdown")}
             onCopyLink={() =>
               copyLink(

@@ -32,6 +32,8 @@ describe("resolveShortcut", () => {
     ["/", { type: "focus-search" }],
     ["]", { type: "toggle-sidebar" }],
     ["?", { type: "help" }],
+    ["j", { type: "thread-next" }],
+    ["K", { type: "thread-previous" }],
   ])("[正常系]%s は %o", (k, expected) => {
     expect(key(k)).toStrictEqual(expected);
   });

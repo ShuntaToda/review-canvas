@@ -13,6 +13,16 @@ describe("url-state", () => {
     expect(parseUrlState("?page=..%2Fx&branch=")).toStrictEqual({});
   });
 
+  test("[正常系]一覧の状態のタブ（status）を読み、知らない値は捨てる", () => {
+    expect(parseUrlState("?status=ai-fixed")).toStrictEqual({
+      status: "ai-fixed",
+    });
+    expect(parseUrlState("?status=done")).toStrictEqual({});
+    expect(buildSearch({ page: "shop", status: "all" })).toBe(
+      "?page=shop&status=all",
+    );
+  });
+
   test("[正常系]buildSearchとparseUrlStateは往復で元に戻る", () => {
     const state = {
       branch: "claude/x y",

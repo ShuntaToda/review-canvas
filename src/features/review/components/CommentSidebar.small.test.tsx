@@ -56,7 +56,6 @@ const renderSidebar = ({
       storiesById={new Map()}
       activeThreadId={null}
       missingThreadIds={new Set()}
-      currentCommit={undefined}
       loading={false}
       errorMessage={errorMessage}
       onSelect={() => undefined}
@@ -95,8 +94,10 @@ describe("CommentSidebar", () => {
     renderSidebar({ threads, onStatusChange });
 
     const items = screen.getAllByRole("listitem");
-    expect(items[0]!.textContent).not.toContain("AI 修正済み");
-    expect(items[1]!.textContent).toContain("AI 修正済み（確認待ち）");
+    // 呼び名は「確認待ち」だけ（AI が直したという説明は、吹き出しの帯に書く）
+    expect(items[0]!.textContent).not.toContain("確認待ち");
+    expect(items[1]!.textContent).toContain("確認待ち");
+    expect(items[1]!.textContent).not.toContain("AI 修正済み");
 
     const tab = screen.getByRole("tab", { name: "確認待ち 1" });
     fireEvent.click(tab);

@@ -1,4 +1,20 @@
 /**
+ * 手元（pnpm run dev・serve）・テストのビルドか。手元でだけ役に立つ手順（コマンド・DynamoDB Local など）は、
+ * デプロイ先のビルドでは出さない（レビューする人には打てないため）
+ */
+const LOCAL_BUILD = import.meta.env.MODE !== "deployed";
+
+/** 手元でだけ出す手順（デプロイ先のビルドでは null） */
+export const localHints = {
+  /** API に届かないとき */
+  apiDown: LOCAL_BUILD
+    ? "手元では `pnpm run serve`（開発中は `pnpm run dev`）で起動しているか確かめてください。"
+    : null,
+  /** Storybook のビルド結果が無いとき */
+  buildStorybook: LOCAL_BUILD ? "pnpm run build:storybook" : null,
+} as const;
+
+/**
  * 画面に出す文言のうち、複数の場所で使うもの・API の失敗に対応するもの
  */
 export const messages = {
@@ -22,15 +38,20 @@ export const messages = {
   invalidBranch: (branch: string) =>
     `ブランチ名「${branch}」は開けません。英数字で始まり、英数字と . _ - / だけの名前（.. を含まない・200 文字まで）にしてください`,
   /** コメントの読み込みが失敗し、読み直している（サーバーが落ちている等） */
-  commentsRetrying:
-    "コメントを読めません。10 秒ごとに読み直します（手元では API と DynamoDB Local が動いているか確かめてください）",
+  commentsRetrying: `コメントを読めません。10 秒ごとに読み直します${
+    LOCAL_BUILD
+      ? "（手元では API と DynamoDB Local が動いているか確かめてください）"
+      : ""
+  }`,
   /** コメントの読み込みが 400（読み直しても通らない） */
   commentsInvalid:
     "コメントを読めません（要求を受け付けられませんでした）。URL のブランチを確かめ、ページを開き直してください",
   /** 入力の誤り（400） */
   invalid: "入力を確かめてください",
   /** サーバーにつながらない（fetch そのものの失敗） */
-  network: "サーバーに接続できません。起動しているか確かめてください",
+  network: LOCAL_BUILD
+    ? "サーバーに接続できません。起動しているか確かめてください"
+    : "サーバーに接続できません。少し待ってから、もう一度試してください",
   /** そのほかの失敗 */
   failed: (status: number) => `通信に失敗しました（${status}）`,
 } as const;

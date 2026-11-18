@@ -8,9 +8,10 @@ type PinProps = {
   zoom: number;
   /** スレッドの状態（色で見分ける。置く途中のピンは open） */
   status: ThreadStatus;
-  /** いまと違う幅の表示で書かれた（点線の縁で見分ける） */
-  mismatched?: boolean;
-  /** 指していた要素が見つからない（置いたときの位置に出している。点線の丸の印で見分ける） */
+  /**
+   * 指していた要素が見つからない（置いたときの位置に出している。「?」の印で見分ける）。
+   * ピンに付ける印はこれだけ（幅・コミットの違いは、吹き出しの中の注記で伝える）
+   */
   missing?: boolean;
   active: boolean;
   label: string;
@@ -44,7 +45,6 @@ export const Pin = ({
   y,
   zoom,
   status,
-  mismatched = false,
   missing = false,
   active,
   label,
@@ -56,7 +56,6 @@ export const Pin = ({
     aria-label={label}
     title={label}
     data-pin
-    data-mismatched={mismatched || undefined}
     data-missing={missing || undefined}
     className={[
       "absolute flex size-7 items-center justify-center rounded-full rounded-bl-none border-2 border-white text-xs font-bold text-white shadow-md",
@@ -85,13 +84,6 @@ export const Pin = ({
     }}
   >
     {number ?? "+"}
-    {mismatched && (
-      // 違う幅で書いたピンの印（位置がずれているかもしれない）
-      <span
-        aria-hidden
-        className="absolute -top-1.5 -right-1.5 size-3 rounded-full bg-warn ring-2 ring-white"
-      />
-    )}
     {missing && <MissingMark className="absolute -right-2 -bottom-2" />}
   </button>
 );

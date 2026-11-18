@@ -2,10 +2,14 @@ import {
   buildThreads,
   type Comment,
   countByStatus,
+  countPendingByStory,
   emptyListMessage,
   filterThreads,
   isStaleCommit,
+  isStatusFilter,
   lastActivityAt,
+  navigationOrder,
+  threadNeighbors,
 } from "./threads";
 
 const comment = (props: Partial<Comment> & Pick<Comment, "id">): Comment => ({
@@ -186,4 +190,90 @@ describe("emptyListMessage", () => {
       expect(emptyListMessage(status, counts)).toBe(expected);
     },
   );
+});
+
+describe("countPendingByStory", () => {
+  test("[正常系]画面ごとに、未解決と確認待ちを数える（解決済みは数えない）", () => {
+    const counts = countPendingByStory(
+      buildThreads([
+        comment({ id: "01" }),
+        comment({ id: "02", aiFixedAt: "2026-11-13T11:00:00.000+09:00" }),
+        comment({ id: "03", resolved: true }),
+        comment({ id: "04", storyId: "features-cart--empty" }),
+        comment({
+          id: "05",
+          storyId: "features-done--default",
+          resolved: true,
+        }),
+      ]),
+    );
+
+    expect([...counts]).toStrictEqual([
+      ["features-search--default", { open: 1, aiFixed: 1 }],
+      ["features-cart--empty", { open: 1, aiFixed: 0 }],
+    ]);
+  });
+});
+
+describe("navigationOrder・threadNeighbors", () => {
+  test("[正常系]一覧に出ている並びで巡り、端では前・次が無い", () => {
+    const order = navigationOrder({
+      listed: ["01", "02", "03"],
+      previous: [],
+      activeId: "02",
+    });
+
+    expect(threadNeighbors(order, "02")).toStrictEqual({
+      index: 1,
+      previous: "01",
+      next: "03",
+    });
+    expect(threadNeighbors(order, "03").next).toBeUndefined();
+    expect(threadNeighbors(order, "01").previous).toBeUndefined();
+  });
+
+  test("[正常系]解決にして一覧から外れた直後は、外れる前の並びで次を決める（1 件飛ばさない）", () => {
+    const order = navigationOrder({
+      listed: ["01", "03"],
+      previous: ["01", "02", "03"],
+      activeId: "02",
+    });
+
+    expect(order).toStrictEqual(["01", "02", "03"]);
+    expect(threadNeighbors(order, "02").next).toBe("03");
+  });
+
+  test("[正常系]外れる前の並びのうち、もう一覧に無いスレッドは巡らない", () => {
+    expect(
+      navigationOrder({
+        listed: ["03"],
+        previous: ["01", "02", "03"],
+        activeId: "02",
+      }),
+    ).toStrictEqual(["02", "03"]);
+  });
+
+  test("[正常系]どの並びにも無いスレッド（リンクで開いた等）は先頭に置き、開いていなければ次は先頭・前は末尾", () => {
+    expect(
+      navigationOrder({ listed: ["01", "02"], previous: [], activeId: "09" }),
+    ).toStrictEqual(["09", "01", "02"]);
+    expect(threadNeighbors(["01", "02"], null)).toStrictEqual({
+      index: -1,
+      previous: "02",
+      next: "01",
+    });
+  });
+});
+
+describe("isStatusFilter", () => {
+  test.each([
+    ["open", true],
+    ["ai-fixed", true],
+    ["resolved", true],
+    ["all", true],
+    ["done", false],
+    [null, false],
+  ])("[正常系]%j は %s", (value, expected) => {
+    expect(isStatusFilter(value)).toBe(expected);
+  });
 });

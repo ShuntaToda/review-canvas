@@ -28,12 +28,93 @@ export const isClientReviewerId = (id: string | null): boolean =>
 
 export type StatusFilter = ThreadStatus | "all";
 
-/** 状態の名前（一覧の印・書き出し） */
+/**
+ * 状態の呼び名（一覧のタブと印・吹き出し・段の見出し・書き出し。画面のどこでも同じ呼び名にするため、ここから読む）。
+ * ai-fixed は、AI が直したと知らせ、人が確かめるのを待っている状態
+ */
 export const STATUS_LABELS = {
   open: "未解決",
-  "ai-fixed": "AI 修正済み（確認待ち）",
+  "ai-fixed": "確認待ち",
   resolved: "解決済み",
 } as const satisfies Record<ThreadStatus, string>;
+
+/** 絞り込みの呼び名（状態の呼び名と「すべて」） */
+export const STATUS_FILTER_LABELS = {
+  ...STATUS_LABELS,
+  all: "すべて",
+} as const satisfies Record<StatusFilter, string>;
+
+/** 絞り込みの並び（一覧のタブ・書き出しの対象） */
+export const STATUS_FILTERS = [
+  "open",
+  "ai-fixed",
+  "resolved",
+  "all",
+] as const satisfies ReadonlyArray<StatusFilter>;
+
+/** 絞り込みの値か（URL の ?status= を読むとき） */
+export const isStatusFilter = (value: unknown): value is StatusFilter =>
+  (STATUS_FILTERS as ReadonlyArray<unknown>).includes(value);
+
+/** 画面（ストーリー）ごとの、まだ片付いていないスレッドの数（段の見出しに出す） */
+export type PendingCounts = { open: number; aiFixed: number };
+
+export const countPendingByStory = (
+  threads: ReadonlyArray<Thread>,
+): Map<string, PendingCounts> => {
+  const counts = new Map<string, PendingCounts>();
+  for (const { root } of threads) {
+    if (root.status === "resolved") continue;
+    const current = counts.get(root.storyId) ?? { open: 0, aiFixed: 0 };
+    counts.set(root.storyId, {
+      open: current.open + (root.status === "open" ? 1 : 0),
+      aiFixed: current.aiFixed + (root.status === "ai-fixed" ? 1 : 0),
+    });
+  }
+  return counts;
+};
+
+/**
+ * 前へ・次へで巡る順番。一覧に出ている並び（絞り込みと並び）に従う。
+ * 開いているスレッドが一覧から外れた（解決にした直後など）ときは、外れる前の並び（previous）で決める（次の 1 件を飛ばさない）。
+ * どちらにも無ければ、一覧の並びの先頭に置く
+ */
+export const navigationOrder = ({
+  listed,
+  previous,
+  activeId,
+}: {
+  listed: ReadonlyArray<string>;
+  previous: ReadonlyArray<string>;
+  activeId: string | null;
+}): string[] => {
+  if (activeId === null || listed.includes(activeId)) return [...listed];
+  if (previous.includes(activeId)) {
+    // 外れる前の並びのうち、いまも一覧にあるものと、開いているスレッドだけを残す
+    return previous.filter((id) => id === activeId || listed.includes(id));
+  }
+  return [activeId, ...listed];
+};
+
+/** 並びの中の前後（端では undefined。開いていなければ、次は先頭・前は末尾） */
+export const threadNeighbors = (
+  order: ReadonlyArray<string>,
+  activeId: string | null,
+): {
+  index: number;
+  previous: string | undefined;
+  next: string | undefined;
+} => {
+  const index = activeId === null ? -1 : order.indexOf(activeId);
+  if (index === -1) {
+    return { index, previous: order.at(-1), next: order[0] };
+  }
+  return {
+    index,
+    previous: index === 0 ? undefined : order[index - 1],
+    next: order[index + 1],
+  };
+};
 
 /** 状態ごとの件数（一覧のタブに出す） */
 export const countByStatus = (

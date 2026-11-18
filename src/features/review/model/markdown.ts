@@ -143,8 +143,8 @@ const threadLines = ({
   ];
 };
 
-/** Issue の形で番号の後ろに添える印（名前の中の括弧を・にして、括弧を重ねない）: （AI 修正済み・確認待ち） */
-const AI_FIXED_MARK = `（${STATUS_LABELS["ai-fixed"].replace("（", "・").replace("）", "")}）`;
+/** Issue の形で番号の後ろに添える印: （確認待ち） */
+const AI_FIXED_MARK = `（${STATUS_LABELS["ai-fixed"]}）`;
 
 /**
  * Issue の形で添える、ピンが指している要素の要約（AI・人が画面とコードの場所を特定できる最小限）

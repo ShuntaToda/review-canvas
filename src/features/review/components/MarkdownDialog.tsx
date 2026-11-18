@@ -1,7 +1,12 @@
 import { Copy, Download } from "lucide-react";
 import { useState } from "react";
+import { useSources } from "../hooks/useSources";
 import type { ExportFormat } from "../model/export-json";
-import type { StatusFilter } from "../model/threads";
+import {
+  STATUS_FILTER_LABELS,
+  STATUS_FILTERS,
+  type StatusFilter,
+} from "../model/threads";
 import { Modal } from "./Modal";
 
 type Scope = {
@@ -28,6 +33,8 @@ export const MarkdownDialog = ({
   onClose: () => void;
 }) => {
   const [scope, setScope] = useState(initialScope);
+  // Storybook が 1 つなら、ページをまたぐ選択肢は出さない
+  const multiplePages = useSources().ids.length > 1;
   const text = buildText(scope);
   const json = scope.format === "json";
   return (
@@ -63,22 +70,25 @@ export const MarkdownDialog = ({
                 })
               }
             >
-              <option value="open">未解決</option>
-              <option value="ai-fixed">AI 修正済み（確認待ち）</option>
-              <option value="resolved">解決済み</option>
-              <option value="all">すべて</option>
+              {STATUS_FILTERS.map((value) => (
+                <option key={value} value={value}>
+                  {STATUS_FILTER_LABELS[value]}
+                </option>
+              ))}
             </select>
           </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={scope.allPages}
-              onChange={(event) =>
-                setScope({ ...scope, allPages: event.target.checked })
-              }
-            />
-            すべてのページ
-          </label>
+          {multiplePages && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={scope.allPages}
+                onChange={(event) =>
+                  setScope({ ...scope, allPages: event.target.checked })
+                }
+              />
+              すべてのページ
+            </label>
+          )}
         </div>
         <textarea
           aria-label={json ? "書き出した JSON" : "書き出した Markdown"}

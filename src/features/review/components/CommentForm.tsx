@@ -33,6 +33,8 @@ export const CommentForm = ({
   // 書き直したかは、出したときの本文と比べる（書きかけを外へ預けると initialValue が追って変わるため）
   const [initialBody] = useState(originalValue ?? initialValue);
   const [sending, setSending] = useState(false);
+  // 送れなかった理由。消えるお知らせにせず、送り直すまで入力欄の下に出しておく
+  const [failure, setFailure] = useState<string | null>(null);
   // 出した直後のフォーカスで、カーソルを末尾に置いたか（その後に利用者が動かしたカーソルは動かさない）
   const caretPlacedRef = useRef(false);
   const canSubmit = body.trim() !== "" && !sending;
@@ -40,12 +42,14 @@ export const CommentForm = ({
   const submit = async () => {
     if (!canSubmit) return;
     setSending(true);
+    setFailure(null);
     try {
       await onSubmit(body.trim());
       setBody("");
       onDraftChange?.("");
-    } catch {
-      // 失敗は呼び出し側が通知する。書いた本文は消さずに残し、送り直せるようにする
+    } catch (error) {
+      // 書いた本文は消さずに残し、送り直せるようにする
+      setFailure(error instanceof Error ? error.message : "失敗しました");
     } finally {
       setSending(false);
     }
@@ -105,6 +109,24 @@ export const CommentForm = ({
           }
         }}
       />
+      {failure !== null && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warn-soft px-2 py-1.5 text-xs text-warn"
+        >
+          <p className="min-w-0 flex-1">
+            送れませんでした（{failure}）。書いた文は残っています
+          </p>
+          <button
+            type="button"
+            disabled={!canSubmit}
+            className="shrink-0 rounded border border-warn/40 bg-panel px-1.5 py-0.5 font-medium whitespace-nowrap hover:bg-panel-sub disabled:opacity-50"
+            onClick={() => void submit()}
+          >
+            もう一度送る
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-end gap-2">
         <span className="mr-auto min-w-0 truncate text-xs text-muted">
           Ctrl / ⌘ + Enter で送信

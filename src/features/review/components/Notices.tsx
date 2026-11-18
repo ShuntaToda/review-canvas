@@ -1,6 +1,6 @@
 import { useSources } from "../hooks/useSources";
 import type { StorySource } from "../model/sources";
-import { messages } from "@/constants/messages";
+import { localHints, messages } from "@/constants/messages";
 import { LoginAgainButton } from "@/support/auth";
 
 /**
@@ -12,15 +12,22 @@ export const StorybookMissingNotice = ({ source }: { source: StorySource }) => {
     <div className="flex size-full items-center justify-center p-8">
       <div className="max-w-lg rounded-xl border border-line bg-panel p-6 text-sm shadow-sm">
         <h2 className="mb-2 text-base font-bold">
-          {sources.label(source)}の Storybook がビルドされていません
+          {sources.label(source)}の画面は、まだ用意されていません
         </h2>
-        <p className="mb-3 text-ink-sub">
-          設定ファイル（review-canvas.config.json）の build
-          のコマンドでビルドしてから、このページを開き直してください。このリポジトリのサンプルなら次のコマンドです。
+        <p
+          className="text-ink-sub"
+          title="このページの Storybook のビルド結果（ストーリーの一覧）を読めませんでした。設定ファイル（review-canvas.config.json）の build のコマンドでビルドし、置き直すと並びます"
+        >
+          このブランチの画面を用意した人に知らせてください。コメントは右の一覧で読めます。
         </p>
-        <pre className="rounded-md bg-panel-sub p-3 font-mono text-xs select-text">
-          pnpm run build:storybook
-        </pre>
+        {localHints.buildStorybook !== null && (
+          <pre
+            className="mt-3 rounded-md bg-panel-sub p-3 font-mono text-xs select-text"
+            title="手元で動かしているときは、このコマンドでサンプルをビルドしてから開き直します"
+          >
+            {localHints.buildStorybook}
+          </pre>
+        )}
       </div>
     </div>
   );
@@ -33,13 +40,14 @@ export const BranchNotPublishedNotice = ({ branch }: { branch: string }) => (
   <div className="flex size-full items-center justify-center p-8">
     <div className="max-w-lg rounded-xl border border-line bg-panel p-6 text-sm shadow-sm">
       <h2 className="mb-2 text-base font-bold">
-        <code className="font-mono">{branch}</code> の Storybook
-        は置いていません
+        <code className="font-mono">{branch}</code>{" "}
+        の画面は、まだ置かれていません
       </h2>
-      <p className="text-ink-sub">
-        このブランチのコメントは右の一覧で読めます。画面に並べるには、GitHub
-        Actions
-        の「review-canvas-publish」をこのブランチで実行してください（docs/host-setup.md）。
+      <p
+        className="text-ink-sub"
+        title="画面に並べるには、GitHub Actions の「review-canvas-publish」をこのブランチで実行します（docs/host-setup.md）"
+      >
+        このブランチのコメントは右の一覧で読めます。画面を見たいときは、ブランチを作った人に置いてもらってください。
       </p>
     </div>
   </div>
@@ -93,7 +101,7 @@ export const CanvasErrorFallback = ({ onRetry }: { onRetry: () => void }) => (
         キャンバスを表示できませんでした
       </h2>
       <p className="mb-3 text-ink-sub">
-        ストーリーの読み込みや後片付けで問題が起きました。コメント一覧と書きかけのコメントはそのまま残っています。
+        画面の読み込みで問題が起きました。コメント一覧と書きかけのコメントはそのまま残っています。
       </p>
       <button
         type="button"

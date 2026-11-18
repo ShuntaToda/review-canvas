@@ -349,7 +349,7 @@ describe("ブランチの切り替え", () => {
     expect(requested()).toContain("/sb/main/shop/index.json");
     expect(requested()).toContain("/api/comments?branch=main");
     expect(
-      await screen.findByRole("option", { name: "old/c（ビルドなし）・2件" }),
+      await screen.findByRole("option", { name: "old/c（コメントのみ）・2件" }),
     ).toBeTruthy();
 
     await act(async () => {
@@ -371,7 +371,7 @@ describe("ブランチの切り替え", () => {
     await renderApp("/?branch=old%2Fc");
 
     expect(
-      await screen.findByText(/の Storybook は置いていません/),
+      await screen.findByText(/の画面は、まだ置かれていません/),
     ).toBeTruthy();
     expect(requested()).toContain("/api/comments?branch=old%2Fc");
     expect(requested().some((path) => path.startsWith("/sb/"))).toBe(false);

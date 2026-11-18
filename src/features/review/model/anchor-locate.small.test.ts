@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { captureAnchor } from "./anchor-capture";
-import { describeAnchor } from "./anchor-describe";
+import { describeAnchor, describeTarget } from "./anchor-describe";
 import {
   type LocatedPin,
   locateAnchor,
@@ -291,5 +291,20 @@ describe("describeAnchor", () => {
     [`<div></div>`, "div", "div"],
   ])("[正常系]%s は %s", (html, selector, expected) => {
     expect(describeAnchor(anchorOf(html, selector))).toBe(expected);
+  });
+});
+
+describe("describeTarget", () => {
+  test.each([
+    [`<button>注文する</button>`, "button", "ボタン「注文する」"],
+    [
+      `<label for="n">お名前</label><input id="n">`,
+      "input",
+      "入力欄「お名前」",
+    ],
+    [`<div>ただの文字</div>`, "div", "要素「ただの文字」"],
+    [`<div></div>`, "div", "要素"],
+  ])("[正常系]%s は、レビューする人の言葉で %s", (html, selector, expected) => {
+    expect(describeTarget(anchorOf(html, selector))).toBe(expected);
   });
 });

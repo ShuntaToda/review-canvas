@@ -22,7 +22,11 @@ import { nextLiveFrames, sameFrames } from "../model/live-frames";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
 import type { ShotCatalog } from "../model/story-shots";
-import type { CommentAnchor } from "../model/threads";
+import {
+  type CommentAnchor,
+  type PendingCounts,
+  STATUS_LABELS,
+} from "../model/threads";
 import { Frame, type PinView } from "./Frame";
 import { resetScroll, trackParentFocus } from "./canvas-dom";
 
@@ -65,6 +69,8 @@ type CanvasProps = {
   /** Space を押している間は、どの操作中でもドラッグで動かす */
   spaceHeld: boolean;
   pinsByStory: ReadonlyMap<string, ReadonlyArray<PinView>>;
+  /** 画面（ストーリー）ごとの、未解決・確認待ちのスレッドの数（段の見出しに、段の分を足して出す。一覧の絞り込みには連動させない） */
+  pendingByStory: ReadonlyMap<string, PendingCounts>;
   activeThreadId: string | null;
   draft: {
     storyId: string;
@@ -82,6 +88,8 @@ type CanvasProps = {
   onOpenThread: (threadId: string) => void;
   /** 何も無いところをクリックした（開いているスレッドを閉じる） */
   onBackgroundClick: () => void;
+  /** 移動の道具のまま、画面を（動かさずに）クリックした（コメントの置き方を知らせる） */
+  onFrameClick: () => void;
   /**
    * 見えている範囲の外でも読み込む画面（共有リンク・一覧から移ったピンの画面）。
    * 読み込んで高さを測らないと、長い画面の下の方のピンへ移れないため
@@ -107,6 +115,7 @@ export const Canvas = ({
   tool,
   spaceHeld,
   pinsByStory,
+  pendingByStory,
   activeThreadId,
   draft,
   onMeasure,
@@ -114,6 +123,7 @@ export const Canvas = ({
   onLocate,
   onOpenThread,
   onBackgroundClick,
+  onFrameClick,
   focusStoryId = null,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
@@ -286,6 +296,8 @@ export const Canvas = ({
     const hit = frameAt(rows, world);
     if (hit !== undefined && intersects(hit, { ...world, w: 0, h: 0 })) {
       setPointed({ source, storyId: hit.story.id });
+      // ドラッグ（左ボタン・移動の道具）ではなくクリックしたとき。Space・中ボタンで動かす途中は数えない
+      if (tool === "move" && !spaceHeld && event.button === 0) onFrameClick();
     }
   };
 
@@ -383,6 +395,19 @@ export const Canvas = ({
       >
         {rows.map((row) => {
           const rowWidth = Math.max(...row.frames.map((f) => f.x + f.w));
+          // この段（画面）の、まだ片付いていないスレッドの数
+          const pending = row.frames.reduce(
+            (sum, frame) => {
+              const count = pendingByStory.get(frame.story.id);
+              return count === undefined
+                ? sum
+                : {
+                    open: sum.open + count.open,
+                    aiFixed: sum.aiFixed + count.aiFixed,
+                  };
+            },
+            { open: 0, aiFixed: 0 },
+          );
           const firstFrameTop = row.y + ROW_LABEL_HEIGHT + FRAME_LABEL_HEIGHT;
           // 画面の名前は、最初のフレームの見出しのすぐ上に下端を合わせる。
           // 縮小して前の段に重なる倍率になったら、段の左の外（最初のフレームの上端の高さ）に出す
@@ -431,6 +456,16 @@ export const Canvas = ({
                 <span className="shrink-0 text-xs font-normal text-muted">
                   {row.frames.length} 状態
                 </span>
+                {pending.open > 0 && (
+                  <span className="shrink-0 rounded-full bg-accent-soft px-1.5 text-xs font-bold text-accent">
+                    {STATUS_LABELS.open} {pending.open}
+                  </span>
+                )}
+                {pending.aiFixed > 0 && (
+                  <span className="shrink-0 rounded-full bg-ai-fixed-soft px-1.5 text-xs font-bold text-ai-fixed">
+                    {STATUS_LABELS["ai-fixed"]} {pending.aiFixed}
+                  </span>
+                )}
               </h2>
               {row.frames.map((placement) => (
                 <Frame

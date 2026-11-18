@@ -1,16 +1,18 @@
-import { Check, Link2, RotateCcw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Link2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useRestoreFocus } from "../hooks/useRestoreFocus";
-import { describeAnchor } from "../model/anchor-describe";
+import { describeAnchor, describeTarget } from "../model/anchor-describe";
 import { POPOVER_WIDTH } from "../model/popover";
 import type { Story } from "../model/storybook";
 import {
   type Comment,
   isClientReviewerId,
   isStaleCommit,
+  STATUS_LABELS,
   type Thread,
 } from "../model/threads";
 import { CommentForm } from "./CommentForm";
+import { IconButton } from "./IconButton";
 import { focusCanvas } from "./canvas-dom";
 import { formatDateTime } from "@/utils/time";
 
@@ -27,14 +29,24 @@ type ThreadPopoverProps = {
   /** 書きかけ（返信はスレッドのID、編集は editDraftKey の鍵で持つ。閉じても残す） */
   drafts: Readonly<Record<string, string>>;
   onDraftChange: (key: string, body: string | null) => void;
-  /** 書いたときの幅へ切り替える（切り替えられない幅なら無い） */
-  onSwitchWidth: ((width: number) => void) | undefined;
+  /**
+   * 前へ・次へ（一覧の絞り込みと並びに従う）。position は並びの中の何件目か（1 から。並びに無ければ null）。
+   * 端では onPrevious・onNext が無い
+   */
+  navigation: {
+    position: number | null;
+    total: number;
+    onPrevious: (() => void) | undefined;
+    onNext: (() => void) | undefined;
+  };
+  /** 書いたときの幅で見る（設定にも自分用にも無い幅は、自分用に足して切り替える） */
+  onSwitchWidth: (width: number) => void;
   onClose: () => void;
   onReply: (body: string) => Promise<void>;
   onEdit: (commentId: string, body: string) => Promise<void>;
   onDelete: (comment: Comment) => Promise<void>;
   onToggleResolved: () => Promise<void>;
-  /** 「AI 修正済み（確認待ち）」の印を外し、未解決へ差し戻す（直っていなかったとき） */
+  /** 確認待ちの印を外し、未解決へ差し戻す（直っていなかったとき） */
   onRevertAiFixed: () => Promise<void>;
   onCopyLink: () => void;
 };
@@ -46,14 +58,44 @@ type ThreadPopoverProps = {
 const ClientMark = () => (
   <span
     className="rounded border border-ai-fixed/40 bg-panel px-1.5 py-0.5 text-ai-fixed"
-    title="許可した client（AI・CI）のトークンによるものです"
+    title="人ではなく、許可した AI・CI が書き込んだものです"
   >
-    client
+    AI・CI
   </span>
 );
 
+const errorText = (error: unknown): string =>
+  error instanceof Error ? error.message : "失敗しました";
+
+/** 文字のボタン（解決にする・再開する・差し戻す・次へ）。strong は、いま押してほしい 1 つに使う */
+const TextButton = ({
+  children,
+  onClick,
+  disabled = false,
+  strong = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  strong?: boolean;
+}) => (
+  <button
+    type="button"
+    disabled={disabled}
+    className={[
+      "shrink-0 rounded-md px-2.5 py-1 text-xs font-bold whitespace-nowrap disabled:cursor-wait disabled:opacity-50",
+      strong
+        ? "bg-accent text-white hover:bg-accent-strong"
+        : "border border-line-strong bg-panel text-ink hover:bg-panel-sub",
+    ].join(" ")}
+    onClick={onClick}
+  >
+    {children}
+  </button>
+);
+
 /**
- * ピンの横に出すスレッド。返信・解決／再開・AI 修正済みの差し戻し・自分のコメントの編集と削除ができる
+ * ピンの横に出すスレッド。返信・解決／再開・確認待ちの差し戻し・自分のコメントの編集と削除・前後のスレッドへの移動ができる
  */
 export const ThreadPopover = ({
   thread,
@@ -65,6 +107,7 @@ export const ThreadPopover = ({
   me,
   drafts,
   onDraftChange,
+  navigation,
   onSwitchWidth,
   onClose,
   onReply,
@@ -82,21 +125,41 @@ export const ThreadPopover = ({
   // （続けて押されると表示が変わる前に届くため、印は ref でも持つ）
   const [resolving, setResolving] = useState(false);
   const resolvingRef = useRef(false);
-  const changeStatus = (change: () => Promise<void>) => () => {
-    if (resolvingRef.current) return;
-    resolvingRef.current = true;
-    setResolving(true);
-    change()
-      .catch(() => {
-        // 失敗は呼び出し側が知らせる
-      })
-      .finally(() => {
-        resolvingRef.current = false;
-        setResolving(false);
-      });
-  };
-  const toggleResolved = changeStatus(onToggleResolved);
+  // 解決・再開・差し戻し・削除が失敗した理由（消えるお知らせにせず、次に成功するまで吹き出しの中に出しておく）
+  const [failure, setFailure] = useState<string | null>(null);
+  // この吹き出しで解決にした直後か（次のスレッドへ進む操作を目立たせる。自動では移らない）
+  const [justResolved, setJustResolved] = useState(false);
+  const changeStatus =
+    (change: () => Promise<void>, done: () => void = () => undefined) =>
+    () => {
+      if (resolvingRef.current) return;
+      resolvingRef.current = true;
+      setResolving(true);
+      change()
+        .then(() => {
+          setFailure(null);
+          done();
+        })
+        .catch((error: unknown) => setFailure(errorText(error)))
+        .finally(() => {
+          resolvingRef.current = false;
+          setResolving(false);
+        });
+    };
+  const wasResolved = root.resolved;
+  const toggleResolved = changeStatus(onToggleResolved, () =>
+    setJustResolved(!wasResolved),
+  );
   const revertAiFixed = changeStatus(onRevertAiFixed);
+  // 位置がずれているかもしれない理由（幅・コミットの違い）。色の帯や印にせず、1 行の注記にする
+  // 要素を見つけて追従できているときは、幅が違ってもずれないので幅は書かない
+  const widthNote =
+    root.frameWidth !== null &&
+    root.frameWidth !== currentWidth &&
+    (root.anchor === undefined || targetMissing)
+      ? root.frameWidth
+      : null;
+  const staleCommit = isStaleCommit(root, currentCommit) ? root.commit : null;
   return (
     <section
       ref={ref}
@@ -112,123 +175,156 @@ export const ThreadPopover = ({
         maxHeight: position.maxHeight,
       }}
     >
-      <header className="flex items-center gap-1 border-b border-line px-3 py-2">
-        <h3 id={titleId} className="mr-auto min-w-0 text-sm">
-          <span className="font-bold">#{thread.number}</span>{" "}
-          <span className="text-ink-sub">
-            {story === undefined
-              ? root.storyId
-              : `${story.title} / ${story.name}`}
+      <header className="border-b border-line px-3 pt-1.5 pb-2">
+        <div className="flex items-center gap-0.5">
+          <span className="mr-1 text-sm font-bold">#{thread.number}</span>
+          <IconButton
+            label="前のコメントへ（K）"
+            disabled={navigation.onPrevious === undefined}
+            onClick={() => navigation.onPrevious?.()}
+          >
+            <ChevronLeft aria-hidden className="size-4" />
+          </IconButton>
+          <span
+            className="min-w-10 text-center text-xs text-ink-sub tabular-nums"
+            title="一覧に出ている並びの中の位置"
+          >
+            {navigation.position ?? "–"} / {navigation.total}
           </span>
+          <IconButton
+            label="次のコメントへ（J）"
+            disabled={navigation.onNext === undefined}
+            onClick={() => navigation.onNext?.()}
+          >
+            <ChevronRight aria-hidden className="size-4" />
+          </IconButton>
+          <span className="ml-auto flex">
+            <IconButton
+              label="このスレッドのリンクをコピー"
+              onClick={onCopyLink}
+            >
+              <Link2 aria-hidden className="size-4" />
+            </IconButton>
+            <IconButton label="閉じる" onClick={onClose}>
+              <X aria-hidden className="size-4" />
+            </IconButton>
+          </span>
+        </div>
+        <h3 id={titleId} className="truncate text-xs text-ink-sub">
+          <span className="sr-only">#{thread.number} </span>
+          {story === undefined
+            ? root.storyId
+            : `${story.title} / ${story.name}`}
         </h3>
-        <IconButton
-          label={
-            resolving ? "送信中…" : root.resolved ? "再開する" : "解決にする"
-          }
-          disabled={resolving}
-          onClick={toggleResolved}
-        >
-          {root.resolved ? (
-            <RotateCcw aria-hidden className="size-4" />
-          ) : (
-            <Check aria-hidden className="size-4" />
-          )}
-        </IconButton>
-        <IconButton label="このスレッドのリンクをコピー" onClick={onCopyLink}>
-          <Link2 aria-hidden className="size-4" />
-        </IconButton>
-        <IconButton label="閉じる" onClick={onClose}>
-          <X aria-hidden className="size-4" />
-        </IconButton>
+        {root.anchor !== undefined && (
+          <p
+            className="mt-0.5 text-xs break-words text-ink-sub"
+            title={`${describeAnchor(root.anchor)}\n${root.anchor.selector}`}
+          >
+            対象: {describeTarget(root.anchor)}
+            {targetMissing && (
+              <span className="text-muted">
+                （いまの画面で見つからないので、置いたときの位置に出しています）
+              </span>
+            )}
+          </p>
+        )}
+        {(widthNote !== null || staleCommit !== null) && (
+          <p className="mt-0.5 text-xs text-muted">
+            {[
+              widthNote === null ? null : `幅 ${String(widthNote)}px`,
+              staleCommit === null ? null : `前の版（${staleCommit}）`,
+            ]
+              .filter((part) => part !== null)
+              .join("・")}
+            で書かれたコメントです。位置や見た目が違うかもしれません
+            {widthNote !== null && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="rounded px-1 font-medium whitespace-nowrap text-accent underline hover:bg-panel-sub"
+                  onClick={() => onSwitchWidth(widthNote)}
+                >
+                  {widthNote}px で見る
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </header>
-      {root.anchor !== undefined && (
-        <div className="border-b border-line px-3 py-1.5 text-xs text-ink-sub">
-          {(() => {
-            const target = describeAnchor(root.anchor);
-            return (
-              <p
-                className="break-words"
-                title={`${target}\n${root.anchor.selector}`}
-              >
-                対象: {target}
-              </p>
-            );
-          })()}
-          {targetMissing && (
-            <p className="mt-0.5 text-muted">
-              いまの画面で見つかりません。置いたときの位置に出しています
-            </p>
-          )}
+      {root.status === "open" && (
+        <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-1.5 text-xs text-ink-sub">
+          <p>{STATUS_LABELS.open}</p>
+          <TextButton disabled={resolving} onClick={toggleResolved}>
+            {resolving ? "送信中…" : "解決にする"}
+          </TextButton>
         </div>
       )}
       {root.status === "ai-fixed" && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-ai-fixed-soft px-3 py-1.5 text-xs text-ai-fixed">
+        <div className="flex flex-col gap-1.5 border-b border-line bg-ai-fixed-soft px-3 py-1.5 text-xs text-ai-fixed">
           <p>
-            AI 修正済み・確認待ち（{root.aiFixedBy}
+            {STATUS_LABELS["ai-fixed"]}: {root.aiFixedBy}
+            {isClientReviewerId(root.aiFixedById) && (
+              <>
+                {" "}
+                <ClientMark />
+              </>
+            )}{" "}
+            が「直した」と知らせています
+            {root.aiFixedAt === null
+              ? ""
+              : `（${formatDateTime(root.aiFixedAt)}）`}
+            。確かめて、直っていれば解決に、直っていなければ差し戻してください
+          </p>
+          <div className="flex justify-end gap-2">
+            <TextButton disabled={resolving} onClick={revertAiFixed}>
+              差し戻す
+            </TextButton>
+            <TextButton strong disabled={resolving} onClick={toggleResolved}>
+              {resolving ? "送信中…" : "解決にする"}
+            </TextButton>
+          </div>
+        </div>
+      )}
+      {root.resolved && (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-line bg-panel-sub px-3 py-1.5 text-xs text-ink-sub">
+          <p className="mr-auto min-w-0">
+            {STATUS_LABELS.resolved}（{root.resolvedBy}
+            {root.resolvedAt === null
+              ? ""
+              : `・${formatDateTime(root.resolvedAt)}`}
+            ）{root.aiFixedBy !== null && ` 修正: ${root.aiFixedBy}`}
             {isClientReviewerId(root.aiFixedById) && (
               <>
                 {" "}
                 <ClientMark />
               </>
             )}
-            {root.aiFixedAt === null
-              ? ""
-              : `・${formatDateTime(root.aiFixedAt)}`}
-            ）。直っていれば「解決にする」を押してください
           </p>
-          <button
-            type="button"
-            disabled={resolving}
-            className="shrink-0 rounded border border-ai-fixed/40 bg-panel px-1.5 py-0.5 font-medium whitespace-nowrap hover:bg-panel-sub disabled:cursor-wait disabled:opacity-50"
-            onClick={revertAiFixed}
-          >
-            未解決へ差し戻す
-          </button>
+          <TextButton disabled={resolving} onClick={toggleResolved}>
+            {resolving ? "送信中…" : "再開する"}
+          </TextButton>
+          {justResolved && navigation.onNext !== undefined && (
+            <TextButton strong onClick={navigation.onNext}>
+              次へ
+            </TextButton>
+          )}
         </div>
       )}
-      {root.resolved && (
-        <p className="border-b border-line bg-panel-sub px-3 py-1.5 text-xs text-ink-sub">
-          解決済み（{root.resolvedBy}
-          {root.resolvedAt === null
-            ? ""
-            : `・${formatDateTime(root.resolvedAt)}`}
-          ）{root.aiFixedBy !== null && ` 修正: ${root.aiFixedBy}`}
-          {isClientReviewerId(root.aiFixedById) && (
-            <>
-              {" "}
-              <ClientMark />
-            </>
-          )}
+      {failure !== null && (
+        <p
+          role="alert"
+          className="border-b border-line bg-warn-soft px-3 py-1.5 text-xs text-warn"
+        >
+          できませんでした（{failure}）。もう一度押してください
         </p>
       )}
-      {/* 要素を見つけて追従できているときは、幅が違ってもずれないので知らせない */}
-      {root.frameWidth !== null &&
-        root.frameWidth !== currentWidth &&
-        (root.anchor === undefined || targetMissing) && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-warn-soft px-3 py-1.5 text-xs text-warn">
-            <p>
-              幅 {root.frameWidth}px の表示で書かれたコメントです（いまは{" "}
-              {currentWidth}px）
-            </p>
-            {onSwitchWidth !== undefined && (
-              <button
-                type="button"
-                className="shrink-0 rounded border border-warn/40 bg-panel px-1.5 py-0.5 font-medium whitespace-nowrap hover:bg-panel-sub"
-                onClick={() => {
-                  if (root.frameWidth !== null) onSwitchWidth(root.frameWidth);
-                }}
-              >
-                {root.frameWidth}px に切り替える
-              </button>
-            )}
-          </div>
-        )}
       <ol className="flex min-h-0 flex-col gap-3 overflow-y-auto px-3 py-3">
         {[root, ...thread.replies].map((comment) => (
           <CommentItem
             key={comment.id}
             comment={comment}
-            stale={isStaleCommit(comment, currentCommit)}
             mine={comment.authorId !== "" && comment.authorId === me}
             editDraft={drafts[editDraftKey(comment.id)]}
             onEditDraftChange={(body) =>
@@ -236,6 +332,7 @@ export const ThreadPopover = ({
             }
             onEdit={(body) => onEdit(comment.id, body)}
             onDelete={() => onDelete(comment)}
+            onFailure={setFailure}
           />
         ))}
       </ol>
@@ -258,15 +355,14 @@ export const editDraftKey = (commentId: string): string => `edit:${commentId}`;
 
 const CommentItem = ({
   comment,
-  stale,
   mine,
   editDraft,
   onEditDraftChange,
   onEdit,
   onDelete,
+  onFailure,
 }: {
   comment: Comment;
-  stale: boolean;
   mine: boolean;
   /** 編集の書きかけ（あれば、開いたときに編集の途中から始める） */
   editDraft: string | undefined;
@@ -274,6 +370,8 @@ const CommentItem = ({
   onEditDraftChange: (body: string | null) => void;
   onEdit: (body: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** 削除できなかった理由を吹き出しに出す（できたら null） */
+  onFailure: (message: string | null) => void;
 }) => {
   const [editing, setEditing] = useState(editDraft !== undefined);
   const stopEditing = () => {
@@ -287,9 +385,8 @@ const CommentItem = ({
     deletingRef.current = true;
     setDeleting(true);
     onDelete()
-      .catch(() => {
-        // 失敗は呼び出し側が知らせる
-      })
+      .then(() => onFailure(null))
+      .catch((error: unknown) => onFailure(errorText(error)))
       .finally(() => {
         deletingRef.current = false;
         setDeleting(false);
@@ -303,14 +400,6 @@ const CommentItem = ({
         <time dateTime={comment.createdAt} className="text-muted">
           {formatDateTime(comment.createdAt)}
         </time>
-        {stale && (
-          <span
-            className="rounded bg-warn-soft px-1.5 py-0.5 text-warn"
-            title="いま表示している Storybook とは違うコミットで書かれました。画面が変わっているかもしれません"
-          >
-            古いコミット {comment.commit}
-          </span>
-        )}
         {mine && !editing && (
           <span className="ml-auto flex gap-1">
             <button
@@ -353,32 +442,3 @@ const CommentItem = ({
     </li>
   );
 };
-
-export const IconButton = ({
-  label,
-  onClick,
-  children,
-  pressed,
-  disabled = false,
-}: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  pressed?: boolean;
-  disabled?: boolean;
-}) => (
-  <button
-    type="button"
-    aria-label={label}
-    title={label}
-    aria-pressed={pressed}
-    disabled={disabled}
-    className={[
-      "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-ink-sub hover:bg-panel-sub hover:text-ink disabled:cursor-wait disabled:opacity-50",
-      pressed === true ? "bg-accent-soft text-accent" : "",
-    ].join(" ")}
-    onClick={onClick}
-  >
-    {children}
-  </button>
-);

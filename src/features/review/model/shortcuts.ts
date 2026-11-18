@@ -11,6 +11,9 @@ export type ShortcutAction =
   | { type: "focus-search" }
   | { type: "toggle-sidebar" }
   | { type: "help" }
+  /** 開いているスレッドの次・前へ（一覧の並び） */
+  | { type: "thread-next" }
+  | { type: "thread-previous" }
   /** 見ている所を動かす（画面上の px。右へ動かすと右側が見える） */
   | { type: "pan"; dx: number; dy: number };
 
@@ -78,6 +81,10 @@ export const resolveShortcut = ({
       return { type: "toggle-sidebar" };
     case "?":
       return { type: "help" };
+    case "j":
+      return { type: "thread-next" };
+    case "k":
+      return { type: "thread-previous" };
     default:
       return undefined;
   }
@@ -132,15 +139,18 @@ export const SHORTCUT_HELP: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "V", label: "移動（ドラッグで動かす）" },
   { keys: "C", label: "コメント（画面をクリックしてピンを置く）" },
   { keys: "I", label: "操作（画面の中を触る）" },
-  { keys: "Space + ドラッグ", label: "どの操作中でも動かす" },
-  { keys: "中ボタンでドラッグ", label: "どの操作中でも動かす" },
-  { keys: "ホイール", label: "上下に動かす（Shift で左右）" },
-  { keys: "← ↑ → ↓", label: "動かす（Shift で大きく）" },
-  { keys: "Ctrl / ⌘ + ホイール・ピンチ", label: "拡大・縮小" },
-  { keys: "+ / -", label: "拡大・縮小" },
-  { keys: "Shift + 1", label: "全体を表示" },
-  { keys: "Shift + 0", label: "100% にする" },
+  {
+    keys: "Space + ドラッグ ／ 中ボタンでドラッグ",
+    label: "どの操作中でも動かす",
+  },
+  {
+    keys: "ホイール ／ ← ↑ → ↓",
+    label: "動かす（Shift + ホイールで左右、Shift + 矢印で大きく）",
+  },
+  { keys: "Ctrl / ⌘ + ホイール ／ ピンチ ／ + -", label: "拡大・縮小" },
+  { keys: "Shift + 1 ／ Shift + 0", label: "全体を表示 ／ 100% にする" },
   { keys: "/", label: "画面名で絞り込む" },
+  { keys: "J ／ K", label: "次 ／ 前のコメントへ（一覧の並び）" },
   { keys: "]", label: "コメント一覧を開閉" },
   { keys: "Esc", label: "スレッド・入力を閉じる" },
   { keys: "Ctrl / ⌘ + Enter", label: "コメントを送る" },

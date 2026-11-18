@@ -5,21 +5,14 @@ import type { Story } from "../model/storybook";
 import { storyKey } from "../model/storybook";
 import {
   emptyListMessage,
-  isStaleCommit,
+  STATUS_FILTER_LABELS,
+  STATUS_FILTERS,
   STATUS_LABELS,
   type StatusFilter,
   type Thread,
 } from "../model/threads";
 import { MissingMark, PIN_COLORS } from "./Pin";
 import { formatDateTime } from "@/utils/time";
-
-const STATUS_TABS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
-  { value: "open", label: "未解決" },
-  // AI が直したと知らせたスレッド。人が確かめて解決にする
-  { value: "ai-fixed", label: "確認待ち" },
-  { value: "resolved", label: "解決済み" },
-  { value: "all", label: "すべて" },
-];
 
 /** コメント一覧の要素ID（キャンバスを飛ばして一覧へ移るリンクの行き先） */
 export const COMMENT_LIST_ID = "comment-list";
@@ -39,7 +32,6 @@ export const CommentSidebar = ({
   storiesById,
   activeThreadId,
   missingThreadIds,
-  currentCommit,
   loading,
   errorMessage,
   onSelect,
@@ -59,7 +51,6 @@ export const CommentSidebar = ({
   activeThreadId: string | null;
   /** いまの画面で、指していた要素が見つからないスレッド（ピンと同じ印を付ける） */
   missingThreadIds: ReadonlySet<string>;
-  currentCommit: string | undefined;
   loading: boolean;
   errorMessage: string | undefined;
   onSelect: (thread: Thread) => void;
@@ -71,7 +62,8 @@ export const CommentSidebar = ({
     // 「コメント一覧へ移る」のリンクから、ここへフォーカスを移せるようにする
     tabIndex={-1}
     aria-label="コメント一覧"
-    className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel"
+    // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（並べるとキャンバスが見えなくなるため）
+    className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-l-0"
   >
     <div className="flex items-center gap-2 border-b border-line px-3 py-2">
       <h2 className="mr-auto min-w-0 truncate text-sm font-bold">
@@ -99,7 +91,7 @@ export const CommentSidebar = ({
     </div>
     <div className="flex flex-col gap-2 border-b border-line px-3 py-2">
       <div role="tablist" aria-label="解決の状態" className="flex gap-1">
-        {STATUS_TABS.map(({ value, label }) => (
+        {STATUS_FILTERS.map((value) => (
           <button
             key={value}
             type="button"
@@ -113,7 +105,7 @@ export const CommentSidebar = ({
             ].join(" ")}
             onClick={() => onStatusChange(value)}
           >
-            {label} {counts[value]}
+            {STATUS_FILTER_LABELS[value]} {counts[value]}
           </button>
         ))}
       </div>
@@ -159,7 +151,7 @@ export const CommentSidebar = ({
           <p>
             コメントはまだありません。
             <br />
-            上の「コメント（C）」で画面をクリックしてピンを置けます。
+            上の「コメント」を選び、画面をクリックするとピンを置けます。
           </p>
         </div>
       ) : (
@@ -203,7 +195,9 @@ export const CommentSidebar = ({
                     {thread.replies.length > 0 && (
                       <span>返信 {thread.replies.length}</span>
                     )}
-                    {root.status === "resolved" && <span>解決済み</span>}
+                    {root.status === "resolved" && (
+                      <span>{STATUS_LABELS.resolved}</span>
+                    )}
                     {root.status === "ai-fixed" && (
                       <span className="rounded bg-ai-fixed-soft px-1 text-ai-fixed">
                         {STATUS_LABELS["ai-fixed"]}
@@ -213,11 +207,6 @@ export const CommentSidebar = ({
                       <span className="inline-flex items-center gap-1">
                         <MissingMark />
                         要素が見つかりません
-                      </span>
-                    )}
-                    {isStaleCommit(root, currentCommit) && (
-                      <span className="rounded bg-warn-soft px-1 text-warn">
-                        古いコミット
                       </span>
                     )}
                   </span>
