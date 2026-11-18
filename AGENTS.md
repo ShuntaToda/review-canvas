@@ -10,12 +10,24 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `src/` — 画面（React・vite・Tailwind CSS）。`src/features/review/bridge/` は Storybook の iframe に差し込む橋渡し
 - `infra/` — CDK（コンストラクト `ReviewCanvas`・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト
 - `bin/` — CLI（`review-canvas.mjs`）と、AI がコメントを読んで返すための MCP サーバー（`review-canvas-mcp.mjs`。依存を持たない JavaScript。docs/ai.md）
-- `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形、`check-commit-message.mjs`: コミットメッセージの決まり）
-- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル（使う側に写すもの）。`dev-*` はこのリポジトリ自身の開発用のスキル、`.claude/agents/` はレビュー用のサブエージェント、`.claude/hooks/` は編集のたびに検査を返す hook。`llms.txt` は AI 向けの文書の入口
+- `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形、`check-commit-message.mjs`: コミットメッセージの決まり、`check-issue-text.mjs`: Issue・PR の下書きの検査）
+- `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル（使う側に写すもの）。`dev-*` はこのリポジトリ自身の開発用のスキル、`.claude/agents/` は領域ごとのレビュー用のサブエージェント（読むだけ）、`.claude/hooks/` は編集のたびに検査を返す hook。`llms.txt` は AI 向けの文書の入口
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
 - `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー
+- `.github/ISSUE_TEMPLATE/`・`.github/pull_request_template.md` — 親 Issue・PR 単位の Issue・不具合と、PR の本文のテンプレート
 
 どこに何を置くか・足すときの順番は [docs/architecture.md](docs/architecture.md)、なぜこの形かは [docs/adr/](docs/adr/README.md) にあります。API を 1 本足すときは、雛形（`pnpm run new:api`）から始めます。
+
+## Issue から PR までの流れ
+
+このリポジトリ自身の開発は、次の順に回します（くわしくは [docs/development.md](docs/development.md#issue-から-pr-まで)）。
+
+1. **Issue で決める**（スキル `dev-write-issue`）: 決まっていない点を、選択肢・★推奨・理由の表と注釈つきの画面にして人に選んでもらい、親 Issue → PR 単位の Issue に書き切る。仕様は人が決め、AI は実装しながら決めない
+2. **実装**（スキル `dev-implement-issue`。足すものに合わせて `dev-add-*`）: 人が名指しした PR 単位の Issue だけを実装する。Issue に無い仕様に当たったら止めて、Issue で確かめる
+3. **多視点レビュー**（スキル `dev-multi-perspective-review`）: 変更のあった領域のレビュー役（`.claude/agents/`）を並列に立て、書いた実装役が直す。Medium 以上が 0 件になるまで回す
+4. **PR**（`.github/pull_request_template.md`）: 実際に動かしたこと・テストの表・画面の流れ・レビュー実施記録を書き、人が本文だけでマージを決められるようにする。push・PR の作成・Issue への投稿は人が頼んだときだけ、マージは人がする
+
+Issue・PR に書かないもの: @メンション・人の名前・使う側に固有の値・実在の会社や人の名前（例は架空のもの）。
 
 ## 守ること
 
@@ -66,6 +78,9 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 | 雛形（`new:api`）で作った直後の状態が検査を通る。雛形は、重なるルート・別のルーターのルートと隠し合うルート・`:名前` のパスを作らない                                                                                                                                                                                                                                                                                                        | CI の `scaffold` ジョブ・`scripts/new-api.mjs`                                                              | 上のどれかが落ちる・「… が、すでにあります」                                                                                     |
 | デプロイ先のビルドに擬似ログインを入れない                                                                                                                                                                                                                                                                                                                                                                                                   | `pnpm run check:deployed-bundle`                                                                            | 終了コード 1                                                                                                                     |
 | コミットのメッセージは 1 行・AI の署名なし（マージコミットと、`git revert` の決まった本文を除く）                                                                                                                                                                                                                                                                                                                                            | lefthook `commit-msg`・CI の `commit-messages` ジョブ（`scripts/check-commit-message.mjs`）                 | 「コミットメッセージは 1 行にしてください」                                                                                      |
+| `.claude/skills/*/SKILL.md`・`.claude/agents/*.md` の `name` はディレクトリ名・ファイル名と同じ。`dev-*` のスキルとレビュー役の説明文は【review-canvas 自身の開発用】で始まる。どれも `llms.txt` に載せ、レビュー役は `dev-multi-perspective-review` の表に載せる                                                                                                                                                                            | テスト `scripts/repo-rules.small.test.mjs`                                                                  | テストの題                                                                                                                       |
+| Issue と PR のテンプレート（`.github/`）は決まった見出しを決まった順に持ち、下書きの検査を通る                                                                                                                                                                                                                                                                                                                                               | テスト `scripts/repo-rules.small.test.mjs`                                                                  | テストの題                                                                                                                       |
+| Issue・PR・コメントの下書きに、150 バイト超の空白の無いリンク・@メンション・★が 1 つでない選択肢の行を入れない（投稿の前に AI が動かす）                                                                                                                                                                                                                                                                                                     | `node scripts/check-issue-text.mjs <下書き>`                                                                | 「… リンクを含む空白の無い塊が … バイトあります」「@… は GitHub が相手に知らせます」「… ★ を 1 つだけ付けます」                  |
 
 Claude Code では、編集のたびにそのファイルの eslint・prettier が、手を止める前に変更したファイルの eslint・prettier と tsc が動き、違反が返ります（`.claude/settings.json` の hook。docs/development.md「Claude Code の hook」）。
 

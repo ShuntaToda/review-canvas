@@ -48,8 +48,9 @@ review-canvas/
 ├── bin/                      # CLI（review-canvas.mjs）・MCP サーバー（review-canvas-mcp.mjs）
 ├── eslint-rules/             # このリポジトリだけの ESLint ルール（層ごとのファイルの形など）
 ├── scripts/                  # 開発用のスクリプト（new-api.mjs: API の雛形）・リポジトリの決まりのテスト
-├── .claude/                  # Claude Code の hook・スキル・レビュー用のサブエージェント
+├── .claude/                  # Claude Code の hook・スキル（dev-*: このリポジトリの開発用）・レビュー用のサブエージェント（agents/）
 ├── .github/workflows/        # ci.yml（このリポジトリの CI）・publish.yml（使う側から呼ぶ再利用ワークフロー）
+├── .github/ISSUE_TEMPLATE/   # 親 Issue・PR 単位の Issue・不具合のテンプレート（pull_request_template.md は PR の本文）
 ├── review-canvas.config.json # サンプルの設定（並べる Storybook）。review-canvas.config.schema.json は生成物
 └── openapi.json              # API の契約（生成物）
 ```
@@ -78,6 +79,33 @@ pnpm --dir examples/sample-storybook run validate
 - コミットメッセージの決まりは `scripts/check-commit-message.mjs` にあり、CI のジョブ commit-messages が PR のコミットの範囲にも同じものをかけます（`--no-verify`・GitHub の画面で作ったコミットも見る）。マージコミットは見ません（「Update branch」などで GitHub が作り、文面を選べない）。`git revert` が付ける本文（`This reverts commit …`。件名が `Revert "`・`Reapply "` で始まるもの）だけは 1 行の例外として認めます（戻したコミットを指す決まった形のため）。手元（commit-msg）では、エディタに出る git の案内（`#` だけの行と、`#` の後ろが空白（スペース・タブ）の行。`# On branch …`・`#<TAB>modified: …`・`# Conflicts:`）と、`git commit -v` の切り取り線から後ろを除いてから数えます（コメントの文字を `core.commentChar` で変えていれば、その文字で見る）。`-m "# 本文"` のように案内と同じ形で付けた本文は手元では見分けられないので、CI が見つけます。PR をまとめてマージするときのメッセージは、人が 1 行に直します
 - API を 1 本足すときは `pnpm run new:api`（[architecture.md](architecture.md#api-を-1-本足すとき)）。CI の scaffold ジョブが、雛形で作った直後の状態で `validate` と `test:small` を通します
 
+## Issue から PR まで
+
+このリポジトリ自身の開発は、AI（Claude Code）と次の順に回します。人の手は「Issue で選ぶ」と「PR の本文を読んでマージを決める」の 2 つに絞り、AI は人がすぐ決められる形で書きます。**仕様は人が決め、AI は実装しながら決めません。**
+
+```mermaid
+flowchart LR
+  A["① Issue で決める<br/>dev-write-issue"] --> B["② 人が選ぶ<br/>👍 か a2"]
+  B --> C["③ 実装<br/>dev-implement-issue"]
+  C --> D["④ 多視点レビュー<br/>dev-multi-perspective-review"]
+  D -->|Medium 以上が残る| C
+  D --> E["⑤ PR の本文<br/>pull_request_template.md"]
+  E --> F["⑥ 人が本文を読んでマージ"]
+```
+
+| 段               | 使うもの                                                       | すること                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ① Issue で決める | スキル `dev-write-issue`・`.github/ISSUE_TEMPLATE/`            | 仕様の根拠を読み、決まっていない点を論点ごとの表（選択肢・★推奨・理由）と注釈つきの画面にする。決まったことは本文を書き換えずコメントで残し、親 Issue → PR 単位の Issue の 2 段に書き切る |
+| ③ 実装           | スキル `dev-implement-issue`（足すものに合わせて `dev-add-*`） | 人が名指しした PR 単位の Issue だけを、実装役のサブエージェントに渡す。Issue に無い仕様に当たったら止めて、Issue で人に確かめる                                                           |
+| ④ 多視点レビュー | スキル `dev-multi-perspective-review`・`.claude/agents/`       | 変更のあった領域のレビュー役だけを、worktree を分けて並列に立てる。書いた本人はレビューしない。直しは書いた実装役に送り、Medium 以上が 0 件になるまで回す                                 |
+| ⑤ PR の本文      | `.github/pull_request_template.md`                             | 閉じる Issue・実際に動かしたこと・テストの表・画面の流れ・レビュー実施記録を書く。人がコードを読まずに、本文だけでマージを決められるようにする                                            |
+
+- レビュー役は領域ごとに分けてあります（`api-reviewer`・`ui-reviewer`・`infra-reviewer`・`cli-mcp-reviewer`。どれも読むだけ）。名前・コメント・黙らせ方・文書・公開リポジトリの決まりは、領域をまたぐ `architecture-reviewer` が毎回見ます。レビュー役は、仕様の根拠 → 分け方 → テスト → 入力と出力の順に読み、実測して「確認済み」も書きます
+- Issue・PR・コメントの下書きは、投稿の前に `node scripts/check-issue-text.mjs <下書き>` を通します（リンクを含む 150 バイト超の塊・@メンション・★が 1 つでない選択肢の行を見つける）
+- 注記つきの画面と画面の流れの 1 枚は `pnpm --dir infra run annotate-screen`（`points`・`flow`。Playwright は infra の依存）で作ります。見本は `.claude/skills/dev-write-issue/examples/`
+- 下書き・レビューの記録・画像・レビュー役の worktree は、リポジトリの外の作業フォルダ（既定は `../review-canvas-work/<テーマ>/`）に置き、コミットしません
+- push・PR の作成・Issue への投稿は、人が頼んだときだけ。マージと AWS へ出すのは人がします
+
 ## 道具で縛っている仕組みと理由
 
 決まりは、文章より道具で縛ります（[adr/0007](adr/0007-enforce-by-tools.md)）。決まりの一覧と違反のメッセージは [AGENTS.md](../AGENTS.md#道具で縛っている決まり)、層ごとの置き場は [architecture.md](architecture.md) にあります。ここには、入れている仕組みごとの「防ぐもの」と「引き受けているもの」を残します。
@@ -92,7 +120,8 @@ pnpm --dir examples/sample-storybook run validate
 | `switch-exhaustiveness-check`・`consistent-type-imports`・`no-non-null-assertion`・`no-param-reassign`                                                   | case の書き忘れ・型だけの import による循環・`!` で隠した undefined                                                                                                                                                                                                                        | `!` はテストでは許している                                                                                                                                                                                            |
 | つくりのテスト（`api/architecture.small.test.ts`）                                                                                                       | DI の登録漏れ・ルーターへの足し忘れ・認証を通らないルート・テストの無いユースケースとルート・OpenAPI に載らないルート（アプリに登録されたルートと 1 対 1 で比べる）                                                                                                                        | ファイル名と `describe` の題の決まりに頼る（題を変えると落ちる）                                                                                                                                                      |
 | 契約のテスト（`bin/review-canvas-mcp-contract.small.test.mjs`）・`openapi:check`・`validate:schema`                                                      | API・設定の形と、それを使う側（画面・MCP・JSON Schema）のずれ                                                                                                                                                                                                                              | MCP は正規表現で呼び出しを読む（`call("GET", …)` の形を変えたらテストも直す）                                                                                                                                         |
-| リポジトリの決まりのテスト（`scripts/repo-rules.small.test.mjs`）                                                                                        | タグで指した Action・範囲で書いた依存・一覧に載っていない文書                                                                                                                                                                                                                              | なし（1 秒かからない）                                                                                                                                                                                                |
+| リポジトリの決まりのテスト（`scripts/repo-rules.small.test.mjs`）                                                                                        | タグで指した Action・範囲で書いた依存・一覧に載っていない文書・スキルとレビュー役（name の食い違い、dev-* の説明文の先頭、llms.txt と多視点レビューの表への載せ忘れ）・Issue と PR のテンプレートの見出しの抜け                                                                            | なし（1 秒かからない）                                                                                                                                                                                                |
+| 下書きの検査（`scripts/check-issue-text.mjs`）。テンプレートが通ることは上のテストが見る                                                                 | GitHub でコードの表示に化ける長いリンク・@メンションでの知らせ・★の無い（2 つある）選択肢の行                                                                                                                                                                                              | 投稿の前に AI が動かす（スキル `dev-write-issue`）。CI は Issue・PR の本文を見ない。長い塊はリンクを含むものだけを見る（日本語の文は空白なしで長いのがふつう）                                                        |
 | `knip`                                                                                                                                                   | 使われない export・ファイル・依存が残ること（AI は消し忘れやすい）                                                                                                                                                                                                                         | 2 秒ほど。動的に読むもの・CLI として動かす依存は `knip.jsonc` に理由つきで書く                                                                                                                                        |
 | tsconfig（`@tsconfig/strictest`。infra は添字の確認まで）                                                                                                | undefined の見落とし・省いたプロパティと undefined の混同                                                                                                                                                                                                                                  | infra は `exactOptionalPropertyTypes` を入れていない（aws-cdk-lib の型どうしが合わなくなる）                                                                                                                          |
 | カバレッジの下限（層ごと）                                                                                                                               | テストの無い domain・use-case・infrastructure・presenter・handler・画面の model と support が増えること                                                                                                                                                                                    | テストに 2〜3 秒足す。下限は今の値の少し下で、上げ下げは `vitest.config.ts`                                                                                                                                           |

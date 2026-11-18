@@ -12,6 +12,7 @@ import {
   MAX_SHOT_HEIGHT,
   MAX_SHOT_WIDTH,
 } from "../src/features/review/model/story-shots.ts";
+import { problemsOf as issueTextProblemsOf } from "./check-issue-text.mjs";
 
 /**
  * リポジトリ全体の決まりのうち、lint が見ないファイル（ワークフロー・package.json・文書の一覧）を確かめる。
@@ -198,4 +199,170 @@ describe("ビルドと撮影のジョブの時間の上限（.github/workflows/p
       stepLimits["Screenshots"] * 60_000,
     );
   });
+});
+
+/** Markdown の頭の frontmatter（--- で囲んだ `名前: 値` の行）。無ければ空 */
+const frontmatterOf = (file) => {
+  const block = /^---\n([\s\S]*?)\n---\n/.exec(read(file))?.[1] ?? "";
+  return Object.fromEntries(
+    block.split("\n").flatMap((line) => {
+      const match = /^([\w-]+):\s*(.*)$/.exec(line);
+      return match === null
+        ? []
+        : [[match[1], match[2].replace(/^"(.*)"$/, "$1")]];
+    }),
+  );
+};
+
+/** `## 見出し` の一覧 */
+const headingsOf = (file) =>
+  [...read(file).matchAll(/^## (.+)$/gm)].map(([, heading]) => heading.trim());
+
+describe("Claude Code のスキルとレビュー役（.claude/）", () => {
+  // 説明文の先頭で、Claude Code がこのリポジトリ自身の開発用だと見分け、使う側のリポジトリの作業で選ばないようにする
+  const DEV_PREFIX = "【review-canvas 自身の開発用】";
+  const skills = fs
+    .readdirSync(path.join(root, ".claude/skills"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  const agents = fs
+    .readdirSync(path.join(root, ".claude/agents"))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.replace(/\.md$/, ""));
+
+  test("[正常系]スキルとレビュー役を読み取れている", () => {
+    expect(skills).toContain("fix-review-comments");
+    expect(agents).toContain("architecture-reviewer");
+  });
+
+  test.each(skills)(
+    "[正常系].claude/skills/%s/SKILL.md の name がディレクトリ名と同じで、dev-* なら説明文が【review-canvas 自身の開発用】で始まる",
+    (skill) => {
+      const { name, description = "" } = frontmatterOf(
+        `.claude/skills/${skill}/SKILL.md`,
+      );
+
+      expect(name).toBe(skill);
+      expect(description.length).toBeGreaterThan(0);
+      if (skill.startsWith("dev-")) {
+        expect(description.startsWith(DEV_PREFIX)).toBe(true);
+      }
+    },
+  );
+
+  test.each(agents)(
+    "[正常系].claude/agents/%s.md の name がファイル名と同じで、説明文が【review-canvas 自身の開発用】で始まる",
+    (agent) => {
+      const { name, description = "" } = frontmatterOf(
+        `.claude/agents/${agent}.md`,
+      );
+
+      expect(name).toBe(agent);
+      expect(description.startsWith(DEV_PREFIX)).toBe(true);
+    },
+  );
+
+  test.each([
+    ...skills.map((skill) => `.claude/skills/${skill}/SKILL.md`),
+    ...agents.map((agent) => `.claude/agents/${agent}.md`),
+  ])(
+    "[正常系]%s を llms.txt に載せている（AI がスキル・レビュー役を見つけられるように）",
+    (file) => {
+      expect(read("llms.txt")).toContain(`(${file})`);
+    },
+  );
+
+  test.each(agents)(
+    "[正常系]レビュー役 %s を、スキル dev-multi-perspective-review の「立てるレビュー役を決める」の表に載せている（足した役が呼ばれないままにならないように）",
+    (agent) => {
+      expect(
+        read(".claude/skills/dev-multi-perspective-review/SKILL.md"),
+      ).toContain(`\`${agent}\``);
+    },
+  );
+});
+
+describe("Issue と PR のテンプレート（.github/）", () => {
+  // 見出しは、スキル（dev-write-issue・dev-implement-issue）と AI が本文を組み立てるときの節の名前。変えるならスキルも直す
+  const REQUIRED_HEADINGS = {
+    ".github/ISSUE_TEMPLATE/feature.md": [
+      "何を実現するか",
+      "なぜ",
+      "受け入れ基準",
+      "決まっていること",
+      "決めたいこと",
+      "このIssueで扱わないもの",
+      "PR 単位の Issue",
+    ],
+    ".github/ISSUE_TEMPLATE/pr-unit.md": [
+      "このPRで終わっている状態",
+      "仕様",
+      "テストで確かめること",
+      "このPRで扱わないもの",
+      "実装前に確認したい未決事項",
+    ],
+    ".github/ISSUE_TEMPLATE/bug.md": [
+      "起きること",
+      "期待すること",
+      "再現の手順",
+      "今の画面",
+      "確かめた環境",
+    ],
+    ".github/pull_request_template.md": [
+      "閉じる Issue",
+      "何を・なぜ",
+      "実際に動かしたこと",
+      "テストの表",
+      "画面の流れ",
+      "確かめたこと",
+      "レビュー実施記録",
+      "黙らせた検査・残したこと",
+    ],
+  };
+  const issueTemplates = fs
+    .readdirSync(path.join(root, ".github/ISSUE_TEMPLATE"))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => `.github/ISSUE_TEMPLATE/${name}`);
+
+  test("[正常系]Issue のテンプレートは、どれも決まった見出しの一覧（REQUIRED_HEADINGS）に載っている（足したら見出しも決める）", () => {
+    expect(
+      issueTemplates.filter((file) => !(file in REQUIRED_HEADINGS)),
+    ).toStrictEqual([]);
+  });
+
+  test.each(Object.entries(REQUIRED_HEADINGS))(
+    "[正常系]%s は決まった見出しを、決まった順に持つ",
+    (file, headings) => {
+      expect(
+        headingsOf(file).filter((h) => headings.includes(h)),
+      ).toStrictEqual(headings);
+    },
+  );
+
+  test.each(issueTemplates)(
+    "[正常系]%s は frontmatter に name と about を持つ（GitHub のテンプレートの選び方に出る）",
+    (file) => {
+      const { name = "", about = "" } = frontmatterOf(file);
+
+      expect(name.length).toBeGreaterThan(0);
+      expect(about.length).toBeGreaterThan(0);
+    },
+  );
+
+  test("[正常系]PR のテンプレートの表は、テストの表（区分（追加／更新）｜対象｜確認すること）とレビュー実施記録（回｜視点｜主な指摘（重さ））の列を持つ", () => {
+    const template = read(".github/pull_request_template.md");
+
+    expect(template).toMatch(
+      /\| 区分（追加／更新） \| 対象 \| 確認すること \|/,
+    );
+    expect(template).toMatch(/\| 回 +\| 視点 \| 主な指摘（重さ） \|/);
+    expect(template).toContain("Medium 以上: N → 0 件");
+  });
+
+  test.each(Object.keys(REQUIRED_HEADINGS))(
+    "[正常系]%s は、下書きの検査（scripts/check-issue-text.mjs）を通る（テンプレートから書いた本文が、そのまま投稿できる）",
+    (file) => {
+      expect(issueTextProblemsOf(read(file))).toStrictEqual([]);
+    },
+  );
 });
