@@ -2,7 +2,7 @@
 
 ## 書き出し（Markdown・JSON）
 
-コメントは Markdown・JSON でコピー・保存できます（画面の「書き出し」。`src/features/review/model/markdown.ts`・`export-json.ts`）。対象は状態（未解決・AI 修正済み（確認待ち）・解決済み・すべて）と、「すべてのページ」か、いま見ているページです。ページの名前は設定ファイルの `label` を使います。
+コメントは Markdown・JSON でコピー・保存できます（画面の「書き出し」。`src/features/review/model/markdown.ts`・`export-json.ts`）。対象は状態（未解決・確認待ち・解決済み・すべて）と、「すべてのページ」か、いま見ているページです。ページの名前は設定ファイルの `label` を使います。
 
 - **Issue 向け**: GitHub のチェックリスト。スレッドごとに、キャンバス・Storybook へのリンクと、要素の要約（見出し・区画・ロールと名前）を付けます
 - **AI 向け**: ストーリーのファイル・URL と、要素の手がかりのすべて（HTML の抜き出し・コンポーネント名・セレクタ・祖先・見た目など。下の「要素の手がかり」）を書きます。AI（コーディングエージェント）に渡せば、どのファイルのどこを直すかを特定できる形です
@@ -29,7 +29,7 @@ stateDiagram-v2
   [*] --> open: ピンを置く
   open --> ai_fixed: AI 修正済みの印を付ける（PUT ai-fixed true）
   ai_fixed --> resolved: 人が確かめて解決にする
-  ai_fixed --> open: 直っていない（未解決へ差し戻す）
+  ai_fixed --> open: 直っていない（差し戻す）
   open --> resolved: 解決にする
   resolved --> open: 再開する（印も消える）
 ```

@@ -2,6 +2,15 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import {
+  MAX_BASE_HEIGHT_PX,
+  MAX_WIDTH_PX,
+} from "../api/infrastructure/config/review-canvas-config.ts";
+import { MAX_CUSTOM_WIDTH } from "../src/features/review/model/custom-widths.ts";
+import {
+  MAX_SHOT_HEIGHT,
+  MAX_SHOT_WIDTH,
+} from "../src/features/review/model/story-shots.ts";
 
 /**
  * リポジトリ全体の決まりのうち、lint が見ないファイル（ワークフロー・package.json・文書の一覧）を確かめる。
@@ -134,5 +143,21 @@ describe("ソースの拡張子（api/・src/）", () => {
     expect(
       files.filter((file) => CODE_EXTENSIONS.includes(path.extname(file))),
     ).toStrictEqual([]);
+  });
+});
+
+describe("幅・高さの上限（壊れないためだけの値。場所ごとに食い違わせない）", () => {
+  test("幅の上限は、設定の widths・自分用に足す幅・画像の目録・コメントの API（frameWidth）で同じ", () => {
+    const openapi = JSON.parse(read("openapi.json"));
+    const frameWidth =
+      openapi.components.schemas.CreateCommentRequestBody.properties.frameWidth;
+
+    expect(frameWidth.maximum).toBe(MAX_WIDTH_PX);
+    expect(MAX_CUSTOM_WIDTH).toBe(MAX_WIDTH_PX);
+    expect(MAX_SHOT_WIDTH).toBe(MAX_WIDTH_PX);
+  });
+
+  test("設定の baseHeight の上限は、画像 1 枚（キャンバスの枠）の高さの上限と同じ", () => {
+    expect(MAX_BASE_HEIGHT_PX).toBe(MAX_SHOT_HEIGHT);
   });
 });

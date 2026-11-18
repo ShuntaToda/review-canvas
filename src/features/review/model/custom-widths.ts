@@ -4,9 +4,7 @@
  */
 export type CustomWidths = Readonly<Record<string, ReadonlyArray<number>>>;
 
-/**
- * 足せる幅の上限(px)。好みの範囲ではなく、壊れないためだけのもの（コメントの API が受け付ける frameWidth の上限と同じ）
- */
+/** 足せる幅の上限(px)。好みの範囲ではなく、壊れないためだけのもの */
 export const MAX_CUSTOM_WIDTH = 10_000;
 
 const isWidth = (value: unknown): value is number =>

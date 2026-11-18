@@ -11,7 +11,7 @@ sequenceDiagram
   A->>C: list_open_comments（未解決を読む）
   A->>A: story.importPath と anchor から場所を特定して直す
   A->>C: mark_ai_fixed（何を直したかを返信して、確認待ちにする）
-  R->>C: 確かめて「解決にする」／直っていなければ「未解決へ差し戻す」
+  R->>C: 確かめて「解決にする」／直っていなければ「差し戻す」
 ```
 
 ## MCP サーバー（`bin/review-canvas-mcp.mjs`）

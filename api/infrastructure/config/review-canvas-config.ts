@@ -16,14 +16,18 @@ import { z } from "zod";
 export const SOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 /**
- * 幅・高さ(px)は使う側が決める。このリポジトリは既定の値も、好みの範囲も持たない。
- * 上限は壊れないためだけのもの（コメントの API が受け付ける frameWidth・y の上限と同じ。comment-schema.ts）
+ * 幅・高さ(px)は使う側が決める。このリポジトリは既定の値も、好みの範囲も持たない。上限は壊れないためだけのもの。
+ * 高さは、Chromium が 1 枚として描ける・撮れる大きさに収める（キャンバスの枠と画像の高さの上限。src の story-shots.ts）
  */
-const MAX_WIDTH_PX = 10_000;
-const MAX_BASE_HEIGHT_PX = 20_000;
+export const MAX_WIDTH_PX = 10_000;
+export const MAX_BASE_HEIGHT_PX = 16_000;
 
 /** 幅の数の上限（壊れないためだけのもの。発行のときは幅の数だけ撮り、デプロイ先には環境変数で渡す） */
-const MAX_WIDTHS = 32;
+export const MAX_WIDTHS = 32;
+
+/** 前の版は baseHeight を省けた（既定は 800）。省いた設定を読んだ人に、何を足せばよいかを伝える */
+const BASE_HEIGHT_REQUIRED_MESSAGE =
+  "baseHeight は必須になりました（省いたときの既定の値は無くなりました。前の既定は 800）。storybooks[] のそれぞれに baseHeight（px）を書いてください。移し方は docs/development.md の「移し方: 画面の幅・高さの既定をなくした版へ」にあります";
 
 /** 並べられる Storybook の数の上限 */
 export const MAX_STORYBOOKS = 8;
@@ -63,7 +67,7 @@ const fields = {
     .max(MAX_WIDTHS)
     .meta({
       description:
-        "切り替えられる画面の幅(px。正の整数を 1 個以上。好きな幅を好きなだけ書ける)。発行のときにこの幅のそれぞれでスクリーンショットを撮り、キャンバスに並べる。見る人が画面で自分用の幅を足すこともできる（その幅は iframe で出す）。コメントには書いたときの幅（frameWidth）が残る",
+        "切り替えられる画面の幅(px。1〜10000 の整数を 32 個まで。その中で好きな幅を書ける)。発行のときにこの幅のそれぞれでスクリーンショットを撮り、キャンバスに並べる。見る人が画面で自分用の幅を足すこともできる（その幅は iframe で出す）。コメントには書いたときの幅（frameWidth）が残る",
       examples: [[375, 768, 1000, 1280]],
     }),
   defaultWidth: widthSchema.meta({
@@ -72,13 +76,16 @@ const fields = {
     examples: [375],
   }),
   baseHeight: z
-    .number()
+    .number({
+      error: (issue) =>
+        issue.input === undefined ? BASE_HEIGHT_REQUIRED_MESSAGE : undefined,
+    })
     .int()
     .min(1)
     .max(MAX_BASE_HEIGHT_PX)
     .meta({
       description:
-        "画面の最低の高さ(px。正の整数。省けない)。ストーリーをこの高さの画面で開き、中身がこれより高ければ中身に合わせる（発行のときのスクリーンショットも同じ）。これより低くはしない",
+        "画面の最低の高さ(px。1〜16000 の整数。省けない)。ストーリーをこの高さの画面で開き、中身がこれより高ければ中身に合わせる（発行のときのスクリーンショットも同じ）。これより低くはしない",
       examples: [812],
     }),
 };

@@ -16,7 +16,7 @@ export type Thread = {
   number: number;
 };
 
-/** スレッドの状態（API の契約。open=未解決 / ai-fixed=AI 修正済み・確認待ち / resolved=解決済み） */
+/** スレッドの状態（API の契約。open=未解決 / ai-fixed=確認待ち（AI が直したと知らせ、人が確かめる前）/ resolved=解決済み） */
 export type ThreadStatus = Comment["status"];
 
 /**

@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  MAX_BASE_HEIGHT_PX,
+  MAX_WIDTH_PX,
+  MAX_WIDTHS,
   parseReviewCanvasConfig,
   parseSourcesEnv,
   reviewCanvasConfigJsonSchema,
@@ -42,6 +45,42 @@ describe("parseReviewCanvasConfig", () => {
     });
     expect(config.storybooks[0]?.widths).toStrictEqual(widths);
     expect(config.storybooks[0]?.baseHeight).toBe(96);
+  });
+
+  test("[異常系]baseHeight を省いた設定には、必須になったこと・前の既定・移し方の場所を日本語で伝える", () => {
+    const { baseHeight: _omitted, ...withoutBaseHeight } = entry;
+
+    expect(() =>
+      parseReviewCanvasConfig({ storybooks: [withoutBaseHeight] }, "x.json"),
+    ).toThrow(
+      /storybooks\.0\.baseHeight: baseHeight は必須になりました.*前の既定は 800.*docs\/development\.md/,
+    );
+  });
+
+  test.each([
+    ["幅 10000", { widths: [375, MAX_WIDTH_PX] }],
+    [
+      "幅 32 個",
+      { widths: Array.from({ length: MAX_WIDTHS }, (_, i) => 375 + i) },
+    ],
+    ["baseHeight 16000", { baseHeight: MAX_BASE_HEIGHT_PX }],
+  ])("[境界]%s までは読める", (_, override) => {
+    expect(() =>
+      parseReviewCanvasConfig({ storybooks: [{ ...entry, ...override }] }),
+    ).not.toThrow();
+  });
+
+  test.each([
+    ["幅 10001", { widths: [375, MAX_WIDTH_PX + 1] }],
+    [
+      "幅 33 個",
+      { widths: Array.from({ length: MAX_WIDTHS + 1 }, (_, i) => 375 + i) },
+    ],
+    ["baseHeight 16001", { baseHeight: MAX_BASE_HEIGHT_PX + 1 }],
+  ])("[境界]%s からは例外にする", (_, override) => {
+    expect(() =>
+      parseReviewCanvasConfig({ storybooks: [{ ...entry, ...override }] }),
+    ).toThrow("の形が違います");
   });
 
   test.each([

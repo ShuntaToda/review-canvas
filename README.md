@@ -99,7 +99,7 @@ pnpm dev                    # → http://localhost:4100
 | [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                              |
 | [docs/ai.md](docs/ai.md)                                         | AI に直してもらう（MCP サーバーの道具・環境変数・Claude Code への登録・スキル）                     |
 | [llms.txt](llms.txt)                                             | AI 向けの入口（文書の一覧）                                                                         |
-| [docs/design-screenshots.md](docs/design-screenshots.md)         | 設計メモ: コメントにスクリーンショットを残す（まだ作っていない）                                    |
+| [docs/design-screenshots.md](docs/design-screenshots.md)         | 設計メモ: コメントにスクリーンショットを残す（コメントに結び付ける部分は未実装）                    |
 | [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                                      |
 | [docs/development.md](docs/development.md)                       | 開発・テスト・リリースと互換性                                                                      |
 | [docs/architecture.md](docs/architecture.md)                     | つくりと決まり（層ごとの置き場・やってはいけないこと・API や画面の機能を足すときの順番）            |

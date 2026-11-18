@@ -37,7 +37,7 @@ type BuildMarkdownInput = {
 
 /**
  * スレッドを GitHub の Issue にそのまま貼れる Markdown にする。
- * ページ → 画面（タイトル）→ スレッドの順に並べ、未解決と AI 修正済み（確認待ち。印を添える）は「- [ ]」、解決済みは「- [x]」のチェックリストにする。
+ * ページ → 画面（タイトル）→ スレッドの順に並べ、未解決と確認待ち（印を添える）は「- [ ]」、解決済みは「- [x]」のチェックリストにする。
  * 各スレッドに Storybook とキャンバスのリンクを付け、ピンが指している要素が分かっていれば、その要素の要約を添える
  * （origin はリンクの頭。共有する URL と同じにする）。format が ai のときは buildAiMarkdown の形にする
  */
@@ -124,7 +124,7 @@ const threadLines = ({
           `[Storybook](${storybookUrl(storybookBase, root.source, root.storyId)})`,
         ]),
   ].join(" ");
-  // AI 修正済み（確認待ち）は、まだ人が確かめていないのでチェックを付けず、印だけ添える
+  // 確認待ちは、まだ人が確かめていないのでチェックを付けず、印だけ添える
   const head = `- [${root.resolved ? "x" : " "}] **#${number}**${root.status === "ai-fixed" ? AI_FIXED_MARK : ""} ${inline(story?.name ?? root.anchor?.story.name ?? root.storyId)}（${inline(root.author)}・${formatDateTime(root.createdAt)}）${links}`;
   return [
     head,

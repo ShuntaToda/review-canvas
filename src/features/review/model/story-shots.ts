@@ -46,8 +46,8 @@ export type ShotsManifest = {
  */
 export const MAX_SHOT_HEIGHT = 16_000;
 
-/** 目録の幅の上限(px)。目録は置くブランチが書けるので、壊れた値でキャンバスを崩さないためだけのもの（コメントの API が受け付ける frameWidth の上限と同じ） */
-const MAX_SHOT_WIDTH = 10_000;
+/** 目録の幅の上限(px)。目録は置くブランチが書けるので、壊れた値でキャンバスを崩さないためだけのもの */
+export const MAX_SHOT_WIDTH = 10_000;
 
 /** 画像のファイル名に使える文字（置き場の外・別のオリジンを指させない） */
 const SHOT_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/;
