@@ -44,7 +44,7 @@ stateDiagram-v2
    - `story.importPath` は Storybook の目録（`index.json`）の値そのままです。Storybook をビルドしたディレクトリ（Storybook のプロジェクトの根）からの相対パスで、リポジトリの根からではありません。モノレポでは、設定ファイルの `outDir`・`build` から分かるプロジェクトの場所（例: `apps/shop/`）を前に足して探します
 2. `story.importPath` と `root.anchor`（`data-testid` → ロールと名前 → セレクタ・HTML の抜き出し・コンポーネント名）から直す場所を特定して直す
 3. `POST /api/comments/{commentId}/replies` で何を直したかを返信し、`PUT /api/comments/{commentId}/ai-fixed` に `{"branch": "...", "aiFixed": true}` を送る
-4. 人が画面の「確認待ち」で確かめ、直っていれば「解決にする」、直っていなければ「未解決へ差し戻す」
+4. 人が画面の「確認待ち」で確かめ、直っていれば「解決にする」、直っていなければ「差し戻す」
 
 - 状態は `resolved`（解決の状態）と `aiFixedAt`（印）から決まります。印を持つ前のコメントは、`resolved` のとおり `open` か `resolved` です（データの移し替えは要りません）
 - 印を付けた人は `aiFixedBy`（表示名）と `aiFixedById`（トークンの `sub`）に残ります。解決しても残り（AI が直して人が確かめた、という経緯が分かる）、再開・差し戻しで消えます
