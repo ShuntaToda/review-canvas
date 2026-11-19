@@ -59,15 +59,15 @@ npm パッケージを import してよい場所は `eslint.config.mjs` の `pac
 
 ## 画面（`src/`）
 
-| 置き場                          | 置くもの                                                               | やってはいけないこと（縛っている道具）                                                                                                                           |
-| ------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `features/<名前>/model/`        | 純粋な処理（座標・配置・絞り込み・書き出し）。kebab-case の .ts        | ほかの feature の中を読む（`import/no-restricted-paths`・`no-restricted-imports`。入口は `index.ts`）                                                            |
-| `features/<名前>/api/`          | API の呼び出し（`apiClient` を包む）                                   | `fetch`・`XMLHttpRequest`・`navigator.sendBeacon` を直に呼ぶ（`no-restricted-globals`・`no-restricted-properties`。`src/support/api` を通す）                    |
-| `features/<名前>/hooks/`        | `useXxx.ts`（読み込み・状態）                                          | `use` で始まらないファイル名（`check-file/filename-naming-convention`）                                                                                          |
-| `features/<名前>/components/`   | コンポーネント（`PascalCase.tsx`）                                     | `localStorage`・`sessionStorage`・`indexedDB`・`document.cookie` を直に使う（`no-restricted-globals`・`no-restricted-properties`。`src/support/storage` を通す） |
-| `features/<名前>/pages/`        | ページ（`PascalCase.tsx`）                                             | 同上                                                                                                                                                             |
-| `support/`・`utils/`・`config/` | feature を知らない共有の部品（API クライアント・ログイン・保存・設定） | feature の import（`import/no-restricted-paths`）。サーバー側のパッケージ・`node:*`・`api/` の import（`no-restricted-imports`）                                 |
-| `generated/`                    | `openapi.json` から作る API の型（コミットしない）                     | 手で直す（`pnpm run codegen` が毎回作り直す）                                                                                                                    |
+| 置き場                          | 置くもの                                                                                         | やってはいけないこと（縛っている道具）                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `features/<名前>/model/`        | 純粋な処理（座標・配置・絞り込み・書き出し）。kebab-case の .ts                                  | ほかの feature の中を読む（`import/no-restricted-paths`・`no-restricted-imports`。入口は `index.ts`）                                                            |
+| `features/<名前>/api/`          | API の呼び出し（`apiClient` を包む）                                                             | `fetch`・`XMLHttpRequest`・`navigator.sendBeacon` を直に呼ぶ（`no-restricted-globals`・`no-restricted-properties`。`src/support/api` を通す）                    |
+| `features/<名前>/hooks/`        | `useXxx.ts`（読み込み・状態）                                                                    | `use` で始まらないファイル名（`check-file/filename-naming-convention`）                                                                                          |
+| `features/<名前>/components/`   | コンポーネント（`PascalCase.tsx`）                                                               | `localStorage`・`sessionStorage`・`indexedDB`・`document.cookie` を直に使う（`no-restricted-globals`・`no-restricted-properties`。`src/support/storage` を通す） |
+| `features/<名前>/pages/`        | ページ（`PascalCase.tsx`）                                                                       | 同上                                                                                                                                                             |
+| `support/`・`utils/`・`config/` | feature を知らない共有の部品（API クライアント・ログイン・保存・ページの開き方の読み取り・設定） | feature の import（`import/no-restricted-paths`）。サーバー側のパッケージ・`node:*`・`api/` の import（`no-restricted-imports`）                                 |
+| `generated/`                    | `openapi.json` から作る API の型（コミットしない）                                               | 手で直す（`pnpm run codegen` が毎回作り直す）                                                                                                                    |
 
 ## API を 1 本足すとき
 
