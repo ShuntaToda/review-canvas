@@ -317,11 +317,15 @@ class CaptureTimeoutError extends Error {
   override name = "TimeoutError";
 }
 
-/** 上限の時間で打ち切る（元の処理は止められないので、呼ぶ側がページを作り直す） */
+/**
+ * 上限の時間で打ち切る（元の処理は止められないので、呼ぶ側がページを作り直す）。
+ * 知らせには limitMs の秒数を出す（残りの時間で打ち切るときも、知らせは上限の秒数にする）
+ */
 export const withTimeout = async <T>(
   work: Promise<T>,
   ms: number,
   label: string,
+  limitMs = ms,
 ): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -332,7 +336,7 @@ export const withTimeout = async <T>(
           () =>
             reject(
               new CaptureTimeoutError(
-                `${label}が ${String(Math.round(ms / 1000))} 秒で終わりませんでした`,
+                `${label}が ${String(Math.round(limitMs / 1000))} 秒で終わりませんでした`,
               ),
             ),
           ms,
@@ -519,12 +523,11 @@ const locateTransition = (page: Page, from: TransitionFrom) => {
 
 /**
  * 遷移の行ごとに、いまの画面でボタンの候補を探す（行の index ごと）。
- * 探せない行（知らない role など）は候補なしにする。時間切れと、ページ・ブラウザが閉じたときは投げる（呼ぶ側がページを作り直す・矩形なしで残す）
+ * 探せない行（知らない role など）は候補なしにする。時間切れは投げる（呼ぶ側がページを作り直す）
  */
 const findTransitionCandidates = async (
   page: Page,
   lookups: ReadonlyArray<TransitionLookup>,
-  isGone: () => boolean,
 ): Promise<Map<number, TransitionCandidate[]>> => {
   const found = new Map<number, TransitionCandidate[]>();
   if (lookups.length === 0) return found;
@@ -548,8 +551,8 @@ const findTransitionCandidates = async (
         );
         found.set(index, toTransitionCandidates(raw));
       } catch (error) {
-        // ページ・ブラウザが閉じた（撮影の時間の上限など）ときは、見つからないとせずに投げる（呼ぶ側が矩形なしで残す）
-        if (isTimeout(error) || isGone()) throw error;
+        // ページ・ブラウザが閉じた（撮影の時間の上限など）ときの結果は、呼ぶ側（assertRunning）が捨てる
+        if (isTimeout(error)) throw error;
         found.set(index, []);
       }
     }
@@ -854,16 +857,7 @@ export const captureStorybook = async ({
     /** ページ・ブラウザが閉じたか（撮影の時間の上限でブラウザを閉じたときなど） */
     const isGone = (page: Page): boolean =>
       page.isClosed() || !browser.isConnected();
-    /** 撮った後の同じ画面（play 関数が終わった後）で、遷移の書き方を読む。読めなければ null（ページが閉じたときは投げる） */
-    const readSpecs = async (page: Page): Promise<unknown> => {
-      try {
-        return await page.evaluate<unknown>(TRANSITION_SPECS_SCRIPT);
-      } catch (error) {
-        if (isTimeout(error) || isGone(page)) throw error;
-        return null;
-      }
-    };
-    /** 撮影を止めた後に終わった結果は、途中で切れているかもしれないので使わない */
+    /** 撮影を止めた後（ページ・ブラウザが閉じた後も）に終わった結果は、途中で切れているかもしれないので使わない */
     const assertRunning = (page: Page): void => {
       if (guard.stopReason() !== null || isGone(page)) {
         throw new Error("撮影を止めたので、遷移を読み切れませんでした");
@@ -887,7 +881,6 @@ export const captureStorybook = async ({
       // 撮った後の同じ画面で、遷移を読み、ボタンを探す（読むのと探すのとで、1 枚に transitionTimeoutMs まで）。
       // 時間切れ・失敗でも撮った 1 枚は残す。読めた行き先と幅に依らない書き間違いは残し、矩形とこの幅の書き間違いだけを捨てる
       const page = pages[slot];
-      if (page === undefined) return shot;
       const startedLookUp = Date.now();
       const remaining = () =>
         Math.max(0, transitionTimeoutMs - (Date.now() - startedLookUp));
@@ -901,12 +894,18 @@ export const captureStorybook = async ({
         }
         return shot;
       };
+      const lookUpLabel = "遷移のボタン探し";
+      if (page === undefined) {
+        return giveUp(new Error("撮るページがありません"));
+      }
+      // 読めないときは、このストーリーの行き先を登録しない（ほかの幅で読めれば、そちらを残す）
       let checked: ReturnType<typeof checkTransitionSpecs>;
       try {
         const raw = await withTimeout(
-          readSpecs(page),
+          page.evaluate<unknown>(TRANSITION_SPECS_SCRIPT),
           remaining(),
-          "遷移の読み取り",
+          lookUpLabel,
+          transitionTimeoutMs,
         );
         assertRunning(page);
         checked = checkTransitionSpecs(
@@ -926,9 +925,10 @@ export const captureStorybook = async ({
       if (checked.lookups.length === 0) return shot;
       try {
         const candidates = await withTimeout(
-          findTransitionCandidates(page, checked.lookups, () => isGone(page)),
+          findTransitionCandidates(page, checked.lookups),
           remaining(),
-          "遷移のボタンの読み取り",
+          lookUpLabel,
+          transitionTimeoutMs,
         );
         assertRunning(page);
         const rects: ShotTransition[] = [];

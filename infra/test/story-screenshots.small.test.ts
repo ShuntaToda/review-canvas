@@ -268,6 +268,19 @@ describe("withTimeout", () => {
     ).catch((reason: unknown) => reason);
     expect(error).toMatchObject({ name: "TimeoutError" });
   });
+
+  test("残りの時間で打ち切るときも、知らせには上限の秒数を出す", async () => {
+    const error: unknown = await withTimeout(
+      new Promise(() => undefined),
+      10,
+      "遷移のボタン探し",
+      30_000,
+    ).catch((reason: unknown) => reason);
+    expect(error).toMatchObject({
+      name: "TimeoutError",
+      message: "遷移のボタン探しが 30 秒で終わりませんでした",
+    });
+  });
 });
 
 describe("withContent・SHOT_CONTENT_SCRIPT", () => {
