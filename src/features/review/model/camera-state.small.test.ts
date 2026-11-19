@@ -1,5 +1,5 @@
 import { worldToScreen } from "./camera";
-import { INITIAL_CAMERA, resolveCamera, storyFocusPoint } from "./camera-state";
+import { INITIAL_CAMERA, resolveCamera } from "./camera-state";
 import {
   layoutRows,
   SIDE_TITLE_MAX_ZOOM,
@@ -111,33 +111,5 @@ describe("resolveCamera の全体表示", () => {
 
     expect(camera.zoom).toBeGreaterThanOrEqual(SIDE_TITLE_MAX_ZOOM);
     expect(camera.x).toBeCloseTo((1200 - 1000 * camera.zoom) / 2);
-  });
-});
-
-describe("storyFocusPoint", () => {
-  const wideRows = layoutRows(
-    [{ id: "a--1", title: "A", name: "1", importPath: null, source: "blog" }],
-    { width: 1440, baseHeight: 844, heights: {} },
-  );
-
-  test("[正常系]リンクの幅が既定より広いとき、その幅で並べた画面の横の真ん中に寄る", () => {
-    const frame = wideRows[0]!.frames[0]!;
-    const camera = resolveCamera(
-      {
-        kind: "focus",
-        storyId: "a--1",
-        point: storyFocusPoint(frame.w),
-        zoom: 0.5,
-      },
-      { rows: wideRows, bounds: null, viewport },
-    );
-
-    expect(worldToScreen(camera, { x: frame.x + frame.w / 2, y: 0 }).x).toBe(
-      viewport.width / 2,
-    );
-  });
-
-  test("[正常系]既定の幅のときは、いままでと同じ点（幅の半分・上から 300）", () => {
-    expect(storyFocusPoint(390)).toStrictEqual({ x: 195, y: 300 });
   });
 });

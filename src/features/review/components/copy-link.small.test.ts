@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useCopyLink } from "./useCopyLink";
+import { copyLinkWithToast } from "./copy-link";
 
 const URL = "https://review.example.com/?page=shop&story=a--b&width=375";
 
@@ -8,13 +8,13 @@ const stubClipboard = (writeText: (text: string) => Promise<void>) =>
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("useCopyLink", () => {
+describe("copyLinkWithToast", () => {
   test("[正常系]リンクをコピーできたら「リンクをコピーしました」と知らせる", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     stubClipboard(writeText);
     const notify = vi.fn<(message: string) => void>();
 
-    await useCopyLink(notify)(URL);
+    await copyLinkWithToast(URL, notify);
 
     expect(writeText).toHaveBeenCalledExactlyOnceWith(URL);
     expect(notify).toHaveBeenCalledExactlyOnceWith("リンクをコピーしました");
@@ -24,7 +24,7 @@ describe("useCopyLink", () => {
     stubClipboard(() => Promise.reject(new DOMException("denied")));
     const notify = vi.fn<(message: string) => void>();
 
-    await useCopyLink(notify)(URL);
+    await copyLinkWithToast(URL, notify);
 
     expect(notify).toHaveBeenCalledExactlyOnceWith(
       "リンクをコピーできませんでした",

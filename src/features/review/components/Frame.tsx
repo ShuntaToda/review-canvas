@@ -28,6 +28,7 @@ import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
 import { pinPointFromClick } from "../model/pin-point";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
+import { LINK_HIGHLIGHT_MS, type LinkHighlight } from "../model/story-link";
 import {
   isRenderBusy,
   isRenderPreviewReady,
@@ -108,9 +109,9 @@ type FrameProps = {
   onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
   onOpenThread: (threadId: string) => void;
   /** 見出しの「この画面のリンクをコピー」を押した */
-  onCopyLink: (storyId: string) => void;
-  /** 画面を指すリンクで開いたときの枠（fade: フェードで消す、still: フェードせずに出しておく。出さなければ null） */
-  linkHighlight: "fade" | "still" | null;
+  onCopyStoryLink: (storyId: string) => void;
+  /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
+  linkHighlight: LinkHighlight | null;
 };
 
 /** 外すと決めた画面を about:blank へ移してから、実際に外すまでの待ちの上限(ms) */
@@ -168,7 +169,7 @@ export const Frame = ({
   onPlace,
   onLocate,
   onOpenThread,
-  onCopyLink,
+  onCopyStoryLink,
   linkHighlight,
   onActivate,
   pendingPlace,
@@ -798,7 +799,7 @@ export const Frame = ({
             // 「Storybook で開く」と同じく、キャンバスの中を Tab で巡らせない
             tabIndex={-1}
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onCopyLink(story.id)}
+            onClick={() => onCopyStoryLink(story.id)}
           >
             <Link aria-hidden className="size-3.5" />
           </button>
@@ -891,15 +892,18 @@ export const Frame = ({
           // リンクで開いた画面の枠。クリックは下へ通す（消えるまで待たせない）
           <div
             aria-hidden
-            data-link-highlight={linkHighlight}
+            data-link-highlight={linkHighlight.motion}
             className={[
               "pointer-events-none absolute inset-0 rounded-sm",
-              linkHighlight === "fade" ? "animate-link-highlight" : "",
+              linkHighlight.motion === "fade" ? "animate-link-highlight" : "",
             ].join(" ")}
             style={{
               outline: `${3 / zoom}px solid var(--color-accent)`,
               outlineOffset: 4 / zoom,
               zIndex: 6,
+              ...(linkHighlight.motion === "fade"
+                ? { animationDuration: `${LINK_HIGHLIGHT_MS}ms` }
+                : {}),
             }}
           />
         )}

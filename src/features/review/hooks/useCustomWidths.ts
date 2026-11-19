@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   addCustomWidth,
   type CustomWidths,
@@ -14,13 +15,14 @@ import { useLocalSetting } from "./useLocalSetting";
 
 /**
  * ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）。どちらもブラウザに覚える。
- * linkWidth は開いたリンクの幅（?width=）で、開いたときだけそのページの幅にする（覚えた幅は書き換えない）
+ * linkWidth は開いたリンクの幅（?width=）。開いたページの幅として重ねるだけで、覚えた幅には書かない
+ * （そのページの幅を本人が選んだら、重ねるのをやめる）
  */
 export const useCustomWidths = (
   sources: SourceCatalog,
-  linkWidth?: { source: StorySource; width: number | null | undefined },
+  linkWidth?: { source: string; width: number | null | undefined },
 ): {
-  /** ページのいまの幅（覚えていなければ既定） */
+  /** ページのいまの幅（リンクの幅を重ねていればその幅。覚えていなければ既定） */
   widthOf: (source: StorySource) => number;
   /** 切り替える欄に出す幅（設定の幅と、自分で足した幅） */
   optionsOf: (source: StorySource) => WidthOption[];
@@ -28,6 +30,8 @@ export const useCustomWidths = (
   select: (source: StorySource, width: number) => void;
   /** 自分で足した幅を外す（その幅で見ていたら、既定の幅に戻す） */
   remove: (source: StorySource, width: number) => void;
+  /** 開いたリンクの幅で開いた幅（リンクに幅が無ければ undefined。開いたときの値のまま変わらない） */
+  linkWidth: number | undefined;
 } => {
   const [custom, setCustom] = useLocalSetting<CustomWidths>(
     "review-canvas.customWidths",
@@ -37,36 +41,32 @@ export const useCustomWidths = (
       serialize: (value) => JSON.stringify(value),
     },
   );
-  const opened =
-    linkWidth === undefined
-      ? undefined
-      : resolveLinkWidth(
-          linkWidth.width,
-          widthOptions(
-            sources.get(linkWidth.source).widths,
-            custom[linkWidth.source],
-          ),
-          sources.get(linkWidth.source).defaultWidth,
-        );
-  const withLinkWidth = (
-    value: Record<StorySource, number>,
-  ): Record<StorySource, number> =>
-    linkWidth === undefined || opened === undefined
-      ? value
-      : { ...value, [linkWidth.source]: opened };
   const [widths, setWidths] = useLocalSetting(
     "review-canvas.widths",
-    withLinkWidth(defaultWidths(sources)),
+    defaultWidths(sources),
     {
-      parse: (raw) => {
-        const restored = restoreWidths(sources, custom)(raw);
-        return restored === undefined ? undefined : withLinkWidth(restored);
-      },
+      parse: restoreWidths(sources, custom),
       serialize: (value) => JSON.stringify(value),
     },
   );
+  // 開いたリンクの幅（覚えた幅とは別に持つ）
+  const [opened] = useState(() => {
+    if (linkWidth === undefined || !sources.has(linkWidth.source)) {
+      return undefined;
+    }
+    const config = sources.get(linkWidth.source);
+    const width = resolveLinkWidth(
+      linkWidth.width,
+      widthOptions(config.widths, custom[linkWidth.source]),
+      config.defaultWidth,
+    );
+    return width === undefined ? undefined : { source: config.id, width };
+  });
+  const [override, setOverride] = useState(opened);
   const widthOf = (source: StorySource): number =>
-    widths[source] ?? sources.get(source).defaultWidth;
+    override?.source === source
+      ? override.width
+      : (widths[source] ?? sources.get(source).defaultWidth);
   return {
     widthOf,
     optionsOf: (source) =>
@@ -79,13 +79,20 @@ export const useCustomWidths = (
         sources.get(source).widths,
       );
       if (next !== custom) setCustom(next);
+      if (override?.source === source) setOverride(undefined);
       setWidths({ ...widths, [source]: width });
     },
     remove: (source, width) => {
       setCustom(removeCustomWidth(custom, source, width));
-      if (widthOf(source) === width) {
-        setWidths({ ...widths, [source]: sources.get(source).defaultWidth });
+      if (widthOf(source) !== width) return;
+      const fallback = sources.get(source).defaultWidth;
+      // リンクの幅で見ていたら、重ねる幅だけを既定に戻す（覚えた幅は書き換えない）
+      if (override?.source === source) {
+        setOverride({ source, width: fallback });
+      } else {
+        setWidths({ ...widths, [source]: fallback });
       }
     },
+    linkWidth: opened?.width,
   };
 };

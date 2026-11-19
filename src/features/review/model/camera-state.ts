@@ -30,15 +30,6 @@ export type CameraState =
     }
   | { kind: "fixed"; camera: Camera };
 
-/**
- * 画面（ストーリー）へ寄せるときの点（画面の左上から）。横は、いま並べている幅の真ん中、縦は画面の上の方。
- * 開いたとき（URL の story=）と一覧で選んだときに同じ所へ寄せる
- */
-export const storyFocusPoint = (width: number): { x: number; y: number } => ({
-  x: width / 2,
-  y: 300,
-});
-
 /** 開いたときの見え方。左上から、半分の倍率で */
 export const INITIAL_CAMERA: Camera = { x: 48, y: 48, zoom: 0.5 };
 
