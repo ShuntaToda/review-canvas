@@ -7,6 +7,7 @@ import {
 import {
   APP_STORY_IDS,
   checkStoryIndex,
+  checkStoryTransitions,
   isOutsideDocument,
 } from "./check-app-storybook.mjs";
 
@@ -83,5 +84,78 @@ describe("isOutsideDocument", () => {
     ["https://example.com/iframe.html", true],
   ])("%s → %s", (url, outside) => {
     expect(isOutsideDocument(url, origin)).toBe(outside);
+  });
+});
+
+describe("checkStoryTransitions", () => {
+  const storyIds = ["a--one", "b--two"];
+  const shot = (storyId, width, indexes) => ({
+    storyId,
+    width,
+    transitions: indexes.map((index) => ({
+      index,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    })),
+  });
+  const manifest = {
+    transitions: {
+      "a--one": [
+        { index: 0, to: "b--two" },
+        { index: 1, to: "a--one", label: "戻る" },
+      ],
+    },
+    shots: [shot("a--one", 1280, [0, 1]), shot("a--one", 1440, [0, 1])],
+  };
+
+  it("書いた行がすべて目録に残り、どの幅でもボタンがあり、行き先が一覧にあれば、何も挙げない", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2, "b--two": 0 },
+        manifest,
+        storyIds,
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("目録に残らなかった行（撮影が読まなかった）を、行の数の違いで挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 3 },
+        manifest,
+        storyIds,
+      }),
+    ).toStrictEqual([
+      "a--one: 書いた遷移は 3 行ですが、目録には 2 行しかありません",
+    ]);
+  });
+
+  it("ボタンが見つからない幅と行（書いた順で 1 から）を挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest: {
+          ...manifest,
+          shots: [shot("a--one", 1280, [0, 1]), shot("a--one", 1440, [0])],
+        },
+        storyIds,
+      }),
+    ).toStrictEqual([
+      "a--one（幅 1440）の 2 行目: 遷移のボタンが見つかりません",
+    ]);
+  });
+
+  it("一覧に無い行き先を挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest,
+        storyIds: ["a--one"],
+      }),
+    ).toStrictEqual([
+      "a--one の 1 行目: 行き先のストーリー b--two が一覧にありません",
+    ]);
   });
 });

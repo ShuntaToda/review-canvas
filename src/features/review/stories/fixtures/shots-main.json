@@ -343,13 +343,29 @@
           "heading": "注文フォーム"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--default-375-bfd5ffb6462f45c9-thumb.png"
+      "thumb": "review-canvas-shots/shop-orderform--default-375-bfd5ffb6462f45c9-thumb.png",
+      "transitions": [
+        {
+          "index": 0,
+          "x": 24,
+          "y": 346,
+          "width": 89,
+          "height": 34
+        },
+        {
+          "index": 1,
+          "x": 24,
+          "y": 346,
+          "width": 89,
+          "height": 34
+        }
+      ]
     },
     {
       "storyId": "shop-orderform--filled",
       "width": 375,
       "height": 1319,
-      "path": "review-canvas-shots/shop-orderform--filled-375-0613435bf4963a63.png",
+      "path": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46.png",
       "contentHeight": 1319,
       "elements": [
         {
@@ -423,9 +439,27 @@
           "height": 34,
           "text": "注文する",
           "heading": "注文フォーム"
+        },
+        {
+          "tag": "button",
+          "x": 113,
+          "y": 384,
+          "width": 131,
+          "height": 34,
+          "text": "買い物を続ける",
+          "heading": "注文フォーム"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--filled-375-0613435bf4963a63-thumb.png"
+      "thumb": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46-thumb.png",
+      "transitions": [
+        {
+          "index": 0,
+          "x": 113,
+          "y": 384,
+          "width": 131,
+          "height": 34
+        }
+      ]
     },
     {
       "storyId": "shop-orderform--validation-error",
@@ -598,7 +632,16 @@
           "heading": "手ぬぐい"
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--default-375-050912a568de9a47-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--default-375-050912a568de9a47-thumb.png",
+      "transitions": [
+        {
+          "index": 0,
+          "x": 81,
+          "y": 238,
+          "width": 132,
+          "height": 34
+        }
+      ]
     },
     {
       "storyId": "shop-productlist--empty",
@@ -647,5 +690,33 @@
     "shop-orderform--validation-error": true,
     "shop-orderform--filled": true,
     "components-button--default": false
+  },
+  "transitions": {
+    "shop-orderform--default": [
+      {
+        "index": 0,
+        "to": "shop-orderform--filled",
+        "label": "入力したとき"
+      },
+      {
+        "index": 1,
+        "to": "shop-orderform--validation-error",
+        "label": "入力が足りないとき"
+      }
+    ],
+    "shop-orderform--filled": [
+      {
+        "index": 0,
+        "to": "shop-productlist--default",
+        "label": "注文を受け付けた後"
+      }
+    ],
+    "shop-productlist--default": [
+      {
+        "index": 0,
+        "to": "shop-orderform--default",
+        "label": "在庫があるとき"
+      }
+    ]
   }
 }

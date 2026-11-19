@@ -19,6 +19,10 @@ export const waitForShot = (canvas: Canvas, name: string) =>
 export const waitForText = (canvas: Canvas, text: string | RegExp) =>
   canvas.findByText(text, undefined, { timeout: LOAD_TIMEOUT });
 
+/** ボタン（名前で探す）が出るのを待つ（読み込みの後に出るもの。画面のつながりの札・「戻る」など） */
+export const waitForButton = (canvas: Canvas, name: string | RegExp) =>
+  canvas.findByRole("button", { name }, { timeout: LOAD_TIMEOUT });
+
 /**
  * 置いたコメントの下書きが出るのを待つ。画面の側は、動く画面（置き場に写したサンプルのショップ）の橋渡しがつながってから、
  * 指した要素を手がかりにして置く（手元では 1 秒ほど）。上限は橋渡しを待つ上限まで（つながらないときは、下書きは時間切れの後に出るが、下の waitForLiveFrame が落とす）
@@ -58,6 +62,46 @@ export const waitForLiveFrame = (canvasElement: HTMLElement, storyId: string) =>
         bridge: "ready",
         phase: "finished",
       });
+      await expect(
+        canvasElement.ownerDocument.body.textContent,
+        "橋渡しが使えないという知らせ（一部の機能が使えません）が出ていない",
+      ).not.toContain("一部の機能が使えません");
+    },
+    { timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS },
+  );
+
+/**
+ * 画像の無い幅（自分用に足した幅など）で並べた動く画面のうち、読み込んだもの（読み込む範囲に入った画面。Canvas の LOAD_MARGIN）が、
+ * どれも中の橋渡しとつながり、中のストーリーが描き終えるのを待つ。範囲の外の画面は iframe を付けないので待たない。
+ * 1 つも読み込んでいないうち・つながらない（「一部の機能が使えません」が出る）ときは落ちる
+ */
+export const waitForIframeFrames = (canvasElement: HTMLElement) =>
+  waitFor(
+    async () => {
+      const states = [
+        ...canvasElement.querySelectorAll('[data-frame-mode="iframe"]'),
+      ].flatMap((holder) => {
+        const frame = holder.querySelector("iframe");
+        return frame === null
+          ? []
+          : [
+              {
+                storyId: holder.getAttribute("data-story-frame"),
+                bridge: holder.getAttribute("data-frame-bridge"),
+                phase: readRenderState(frame.contentWindow).phase,
+              },
+            ];
+      });
+      await expect(
+        states.length,
+        "画像の無い幅の画面（iframe）を読み込んでいる",
+      ).toBeGreaterThan(0);
+      await expect(
+        states.filter(
+          (state) => state.bridge !== "ready" || state.phase !== "finished",
+        ),
+        "読み込んだどの画面も、中の橋渡しとつながり、中のストーリーが描き終える",
+      ).toStrictEqual([]);
       await expect(
         canvasElement.ownerDocument.body.textContent,
         "橋渡しが使えないという知らせ（一部の機能が使えません）が出ていない",

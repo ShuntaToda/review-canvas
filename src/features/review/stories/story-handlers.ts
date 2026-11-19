@@ -40,13 +40,16 @@ const bytesOf = (dataUrl: string): Uint8Array<ArrayBuffer> =>
     char.charCodeAt(0),
   );
 
+/** 固定データの目録（遷移は main の目録だけにある） */
+type FixtureManifest = typeof mainShots | typeof featureShots;
+
 /** ブランチごとの目録。既定のブランチに無いストーリー（新しい画面）は、そのブランチの一覧にも載せない */
-const shotsByBranchKey: Record<string, typeof mainShots> = {
+const shotsByBranchKey: Record<string, FixtureManifest> = {
   [storyBranchKey(DEFAULT_BRANCH)]: mainShots,
   [storyBranchKey(FEATURE_BRANCH)]: featureShots,
 };
 
-const indexOf = (manifest: typeof mainShots) => {
+const indexOf = (manifest: FixtureManifest) => {
   const ids = new Set(manifest.shots.map((shot) => shot.storyId));
   return {
     ...shopIndex,

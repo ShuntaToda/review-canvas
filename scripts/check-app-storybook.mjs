@@ -2,11 +2,14 @@
 // review-canvas 自身の画面の Storybook（pnpm run build:storybook:app の storybook-static）を確かめる。
 // - 決めた状態のストーリーが、組み立てた一覧（index.json）にそろって載り、ID が英字のまま
 // - どのストーリーも、描画と play 関数が失敗せずに終わり、play 関数の終わりに settle() を呼んでいる
+// - ストーリーに書いた遷移（parameters.reviewCanvas.transitions）が、撮った目録（review-canvas-shots.json。撮影の後）にすべて残り、
+//   どの幅の画像でもボタンが見つかり、行き先が一覧にある。目録が無ければ確かめない（--require-shots を付けると落とす。CI）
+// - あるストーリーが変えた画面の設定（画面のつながりの出し方など）が、後に開いたストーリーへ移らない
 // - どのストーリーも、Storybook の外（配っているオリジンの外）へ通信せず、MSW に無い道へも出ない（MSW の失敗がコンソールに出ない）。
 //   動く画面（iframe）は、置き場に写したサンプルのショップ（scripts/stage-story-storybooks.mjs）の iframe.html だけ（CSP が止めたものも数える）
 // ビルド結果を自分の端末（127.0.0.1）で配り、ヘッドレスの Chromium（Playwright）で 1 つずつ開く。
 //
-//   pnpm run check:storybook:app [--dir storybook-static] [--shots <撮った画像を書く場所>]
+//   pnpm run check:storybook:app [--dir storybook-static] [--shots <撮った画像を書く場所>] [--require-shots]
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -19,7 +22,7 @@ import {
 } from "../src/features/review/stories/story-branches.ts";
 
 /**
- * そろって載るストーリーの ID（Issue #29 の 10 状態。開けないときは 3 つ）。
+ * そろって載るストーリーの ID（Issue #29 の 10 状態。開けないときは 3 つ。Issue #33 の画面のつながりの 5 つ）。
  * 遷移の行き先にストーリーの ID を使うので、タイトルは日本語でも ID は英字にする（meta の id と export の名前で決まる）
  */
 export const APP_STORY_IDS = [
@@ -31,11 +34,71 @@ export const APP_STORY_IDS = [
   "review-workspace--drafting",
   "review-workspace--scoped",
   "review-compare--compare-with-default",
+  "review-transitions--selected",
+  "review-transitions--all",
+  "review-transitions--jumped",
+  "review-transitions--reachable-only",
+  "review-transitions--unavailable",
   "review-help--opened",
   "review-error--branch-missing",
   "review-error--not-allowed",
   "review-error--session-expired",
 ];
+
+/** 撮影が書く目録（infra/scripts/story-screenshots.ts。ビルド結果の中） */
+const SHOTS_MANIFEST_FILE = "review-canvas-shots.json";
+
+/**
+ * 設定を変えるストーリーと、その後に開いたストーリーで見る既定の値（持ち越さないことを確かめる）。
+ * 「すべて」を選んだ後に開いたほかのストーリーは、既定の出し方（選んだ画面）で始まる
+ */
+export const CARRY_OVER_CHECK = {
+  after: "review-transitions--all",
+  open: "review-workspace--with-comments",
+  pickerText: "画面のつながり: 選んだ画面",
+};
+
+/**
+ * ストーリーごとの、書いた遷移の行の数（開いたストーリーの parameters から読む）と、撮った目録・一覧を比べ、問題の文を返す。
+ * 行は書いた順で 1 から（撮影の書き間違いの一覧と同じ）
+ */
+export const checkStoryTransitions = ({
+  writtenCounts,
+  manifest,
+  storyIds,
+}) => {
+  const problems = [];
+  const rowsOf = manifest?.transitions ?? {};
+  for (const [storyId, written] of Object.entries(writtenCounts)) {
+    const rows = Object.hasOwn(rowsOf, storyId) ? rowsOf[storyId] : [];
+    if (rows.length !== written) {
+      problems.push(
+        `${storyId}: 書いた遷移は ${String(written)} 行ですが、目録には ${String(rows.length)} 行しかありません`,
+      );
+    }
+    const shots = (manifest?.shots ?? []).filter(
+      (shot) => shot.storyId === storyId,
+    );
+    for (const row of rows) {
+      const line = String(row.index + 1);
+      for (const shot of shots) {
+        if (
+          !(shot.transitions ?? []).some((rect) => rect.index === row.index)
+        ) {
+          problems.push(
+            `${storyId}（幅 ${String(shot.width)}）の ${line} 行目: 遷移のボタンが見つかりません`,
+          );
+        }
+      }
+      if (!storyIds.includes(row.to)) {
+        problems.push(
+          `${storyId} の ${line} 行目: 行き先のストーリー ${row.to} が一覧にありません`,
+        );
+      }
+    }
+  }
+  return problems;
+};
 
 /** 英字の ID の形（<meta の id>--<export の名前の kebab>） */
 const STORY_ID_PATTERN = /^[a-z0-9-]+--[a-z0-9-]+$/;
@@ -159,11 +222,40 @@ const serve = async (dir) => {
   };
 };
 
+/**
+ * 設定を変えるストーリー（CARRY_OVER_CHECK.after。上の 1 本ずつの確かめで、同じブラウザの文脈ですでに開いた）の後に、
+ * 別のストーリーを開き、既定の出し方で始まるかを見る（.storybook/preview.tsx の、保存先をストーリーごとに空に替える loaders）
+ */
+const checkCarryOver = async (context, origin) => {
+  const { after, open, pickerText } = CARRY_OVER_CHECK;
+  const page = await context.newPage();
+  try {
+    await page.goto(
+      `${origin}/iframe.html?id=${encodeURIComponent(open)}&viewMode=story`,
+      { timeout: STORY_TIMEOUT_MS },
+    );
+    const text = await page
+      .locator("button[aria-controls]", { hasText: "画面のつながり" })
+      .first()
+      .textContent({ timeout: STORY_TIMEOUT_MS })
+      .then((value) => (value ?? "").replace(/\s+/g, " ").trim())
+      .catch(() => "（読めません）");
+    return text === pickerText
+      ? []
+      : [
+          `${open}: ${after} の後に開くと、画面のつながりが既定の出し方で始まりません（${text}。ストーリーが変えた設定が移っています）`,
+        ];
+  } finally {
+    await page.close();
+  }
+};
+
 const main = async () => {
   const { values } = parseArgs({
     options: {
       dir: { type: "string", default: "storybook-static" },
       shots: { type: "string" },
+      "require-shots": { type: "boolean", default: false },
     },
   });
   const index = JSON.parse(
@@ -191,6 +283,17 @@ const main = async () => {
   ];
   if (values.shots !== undefined)
     fs.mkdirSync(values.shots, { recursive: true });
+  const manifestPath = path.join(values.dir, SHOTS_MANIFEST_FILE);
+  const manifest = fs.existsSync(manifestPath)
+    ? JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    : null;
+  if (manifest === null && values["require-shots"]) {
+    problems.push(
+      `目録（${SHOTS_MANIFEST_FILE}）がありません（撮影の後に動かしてください: pnpm --dir infra run screenshots）`,
+    );
+  }
+  // ストーリーごとの、書いた遷移の行の数（開いたストーリーの parameters から読む）
+  const writtenCounts = {};
 
   const server = await serve(values.dir);
   const browser = await chromium.launch();
@@ -282,6 +385,12 @@ const main = async () => {
       );
       const phase =
         failures.length > 0 ? `errored: ${failures.join(" / ")}` : settled;
+      writtenCounts[id] = await page.evaluate(() => {
+        const list =
+          globalThis.__STORYBOOK_PREVIEW__?.currentRender?.story?.parameters
+            ?.reviewCanvas?.transitions;
+        return Array.isArray(list) ? list.length : 0;
+      });
       // play 関数の終わりに settle()（src/features/review/stories/story-play.ts）を呼んだか。呼ばないと、撮るたびに画素がずれうる
       // play 関数があるかは、一覧（index.json）の tags（play-fn）で見る
       const unsettled =
@@ -314,9 +423,23 @@ const main = async () => {
       );
       await page.close();
     }
+    if (ids.includes(CARRY_OVER_CHECK.after)) {
+      problems.push(...(await checkCarryOver(context, server.origin)));
+    }
   } finally {
     await browser.close();
     server.close();
+  }
+  if (manifest === null) {
+    if (!values["require-shots"]) {
+      console.log(
+        `目録（${SHOTS_MANIFEST_FILE}）が無いので、遷移は確かめていません`,
+      );
+    }
+  } else {
+    problems.push(
+      ...checkStoryTransitions({ writtenCounts, manifest, storyIds: ids }),
+    );
   }
   if (problems.length > 0) {
     console.error(problems.join("\n"));

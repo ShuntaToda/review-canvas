@@ -349,7 +349,7 @@
       "storyId": "shop-orderform--filled",
       "width": 375,
       "height": 1319,
-      "path": "review-canvas-shots/shop-orderform--filled-375-0613435bf4963a63.png",
+      "path": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46.png",
       "contentHeight": 1319,
       "elements": [
         {
@@ -423,9 +423,18 @@
           "height": 34,
           "text": "注文する",
           "heading": "注文フォーム"
+        },
+        {
+          "tag": "button",
+          "x": 113,
+          "y": 384,
+          "width": 131,
+          "height": 34,
+          "text": "買い物を続ける",
+          "heading": "注文フォーム"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--filled-375-0613435bf4963a63-thumb.png"
+      "thumb": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46-thumb.png"
     },
     {
       "storyId": "shop-orderform--validation-error",
