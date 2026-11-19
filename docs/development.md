@@ -89,21 +89,21 @@ pnpm run build:storybook:app    # 組み立てる（storybook-static）。build:
 pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つずつ開いて確かめる（下）
 ```
 
-- 設定は `.storybook/`（`main.ts`・`preview.tsx`）、ストーリーは画面のコードの隣（`src/features/review/pages/*.stories.tsx`）、ストーリーが使う固定のデータ・MSW の handler・描き方は `src/features/review/stories/` に置きます。画面と同じ vite の設定（React Compiler・`@/` の別名）と Tailwind（`src/index.css`）を使います
+- 設定は `.storybook/`（`main.ts`・`preview.tsx`）、ストーリーは画面・部品のコードの隣（`src/features/*/pages/*.stories.tsx`・`src/features/*/components/*.stories.tsx`。置ける場所はこの 2 つだけで、`.storybook/main.ts` の `stories` と eslint の `STORY_GLOB` が同じ）、ストーリーが使う固定のデータ・MSW の handler・描き方は `src/features/review/stories/` に置きます。画面と同じ vite の設定（React Compiler・`@/` の別名）と Tailwind（`src/index.css`）を使います
 - 1 つのストーリーは、画面の入口と同じ `App` を、ストーリー用の偽のログイン（`src/support/auth/fake`。山田 太郎でログイン済み、または未ログイン）で描きます（`stories/ReviewStory.tsx`）。`pnpm dev` の擬似ログイン（`src/support/auth/dev`。名前を入れてログインする）とは別のもので、ストーリーでは使いません。どちらも置く版のビルドには入りません。SWR のキャッシュはストーリーごとに作り直します
 - API（`/api/*`）と、置いてあるブランチの Storybook（ストーリーの一覧・画像の目録・画像）は MSW が返します（`stories/story-handlers.ts`）。置いてあるブランチは `main` と `feature/new-cart`（架空）、キャンバスの中身はサンプルのショップを撮った画像と目録（`stories/fixtures/`。幅 375 だけ）です。画像を撮り直すときは、サンプルの Storybook を組み立ててから `pnpm --dir infra run screenshots --repo-root <根> --config <shop だけの設定>` で撮り、要る画面を写します
 - ストーリーの handler に無い道への通信（Storybook の外・API の知らない道）は、`.storybook/preview.tsx` が最後の handler で止めて失敗にし、コンソールに `[MSW]` で出します。iframe の読み込みは MSW を通らないので、`.storybook/main.ts` の CSP（`frame-src 'none'` など。プレビューの `<head>` に入れる）が止めます。動く画面（操作のモードで開く iframe）は読み込まず、橋渡しを待ちきった見た目（「一部の機能が使えません」）で止まります
 - URL の状態（`?branch=`・`?comment=`・`?scope=` など）は、ストーリーの `parameters.reviewUrl` に書きます。描く前に iframe の URL へ入れ、キャンバスが URL を書き換えても Storybook のクエリ（`?id=`・`?viewMode=`）を残します（`stories/story-url.ts`）
 - 押して開く状態（コメントを書いている・ヘルプを開いた・変わった画面だけ）は、play 関数で押して作ります。置くときの撮影は play 関数の終わりを待ちます
-- play 関数は、終わりに `settle()`（`stories/story-play.ts`）を呼びます。動きが止まるのを待ち、画面を 1 度まるごと描き直して、撮るたびに同じ画素にします（見比べは画像のハッシュで比べるので、角丸のふちが 1 段ずれても「変更」になる）
+- play 関数は、終わりに `settle()`（`stories/story-play.ts`）を呼びます。動きが止まるのを待ち、画面を 1 度まるごと描き直して、撮るたびに同じ画素にします（見比べは画像のハッシュで比べるので、角丸のふちが 1 段ずれても「変更」になる）。Storybook の `afterEach` では呼べません（置くときの撮影は、`afterEach` より前の段階 `completed` で撮る）。呼び忘れは `check:storybook:app` が落とします
 
 ストーリーを足すときの決まり:
 
 - タイトルは画面ごとに日本語で `レビュー/<画面>`、ストーリーの `name` は状態を日本語で書きます。ID は英字に保ちます（遷移の行き先にストーリーの ID を使うため）。meta に英字の `id`（`review-workspace` など）を書き、export の名前を英字にします（ID は `<meta の id>--<export の名前の kebab>`）。並べる順は `.storybook/preview.tsx` の `storySort`
-- 作業の画面全体を主にします。部品のストーリーは、画面で出しにくい状態があるときだけ `Components/` の下に置きます（既定では並ばない）
+- 作業の画面全体を主にします。部品のストーリーは、画面で出しにくい状態があるときだけ、部品の隣（`components/*.stories.tsx`）にタイトル `Components/…` で置きます（設定の `excludeTitlePrefixes` で、既定ではキャンバスに並ばない）
 - 名前・文字は架空のもの（山田 太郎・佐藤 花子・サンプルのショップ・`example.com`）にします
 - 足したら `scripts/check-app-storybook.mjs` の `APP_STORY_IDS` に ID を足します
-- Storybook・MSW・偽のログインを import できるのは、ストーリー（`*.stories.tsx`）と `src/**/stories/` だけです（eslint の `no-restricted-imports`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
+- Storybook・MSW・ストーリー用の偽のログイン（`src/support/auth/fake`）と、ストーリーの置き場（`src/features/*/stories/`・`*.stories.tsx`）を import できるのは、ストーリー（`src/features/*/{pages,components}/*.stories.tsx`）・`src/features/*/stories/`・`.storybook/` だけです（eslint の `no-restricted-imports`。動的 import（`import("msw")`）は `no-restricted-syntax`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
 
 `check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、Storybook の外・MSW に無い道へ通信しないこと（iframe.html の外へのページの移動も含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
 

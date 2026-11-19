@@ -83,6 +83,36 @@ describe("依存（package.json）", () => {
       expect(loose).toStrictEqual([]);
     },
   );
+
+  // 自身の画面の Storybook・サンプルの Storybook・infra の撮影で、同じ版を使う（版がずれると、撮る画面・MSW のサービスワーカーが食い違う）
+  const SHARED_VERSIONS = [
+    "playwright",
+    "msw",
+    "msw-storybook-addon",
+    "storybook",
+    "@storybook/react-vite",
+  ];
+
+  test.each(packageFiles)(
+    `[正常系]%s の ${SHARED_VERSIONS.join("・")} は catalog: で書いている（pnpm-workspace.yaml の catalog）`,
+    (file) => {
+      const manifest = JSON.parse(read(file));
+      const written = [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+      ].flatMap((field) =>
+        Object.entries(manifest[field] ?? {}).filter(([name]) =>
+          SHARED_VERSIONS.includes(name),
+        ),
+      );
+
+      expect(written.length).toBeGreaterThan(0);
+      expect(
+        written.filter(([, version]) => version !== "catalog:"),
+      ).toStrictEqual([]);
+    },
+  );
 });
 
 describe("文書（docs/）", () => {

@@ -115,7 +115,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Screenshots（12 分）と Check app Storybook（8 分）に、組み立ての分を足す
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,7 +146,7 @@ jobs:
           pnpm run build:bridge
           test -s dist-bridge/review-canvas-bridge.js
 
-      # デプロイ先のビルドに擬似ログイン（署名の無いトークンを作る）のコードが入っていないことを確かめる
+      # デプロイ先のビルドに、擬似ログイン（署名の無いトークンを作る）・ストーリー用の偽のログイン・MSW・ストーリーのコードが入っていないことを確かめる
       - name: Build for deploy
         run: |
           pnpm run build:deployed
@@ -183,8 +184,9 @@ jobs:
 
       # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
       # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）
+      # 上限は、スクリプトが 1 本を待つ上限（30 秒）× 12 本に、ブラウザを開く分を足したもの
       - name: Check app Storybook
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: pnpm run check:storybook:app
 
       # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない

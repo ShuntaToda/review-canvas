@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // review-canvas 自身の画面の Storybook（pnpm run build:storybook:app の storybook-static）を確かめる。
 // - 決めた状態のストーリーが、組み立てた一覧（index.json）にそろって載り、ID が英字のまま
-// - どのストーリーも、描画と play 関数が失敗せずに終わる
+// - どのストーリーも、描画と play 関数が失敗せずに終わり、play 関数の終わりに settle() を呼んでいる
 // - どのストーリーも、Storybook の外（配っているオリジンの外）へ通信せず、MSW に無い道へも出ない（MSW の失敗がコンソールに出ない）
 // ビルド結果を自分の端末（127.0.0.1）で配り、ヘッドレスの Chromium（Playwright）で 1 つずつ開く。
 //
@@ -45,6 +45,9 @@ const FAILURE_EVENTS = [
   "storyErrored",
   "unhandledErrorsWhilePlaying",
 ];
+
+/** play 関数の終わりの settle() が付ける印（story-play.ts の SETTLED_MARK を html の属性にした名前） */
+const SETTLED_MARK_ATTRIBUTE = "data-story-settled";
 
 /** 1 つのストーリーを待つ上限(ms)。コメントを書いている状態は、画像の画面から動く画面への切り替えを待つ（最大 8 秒） */
 const STORY_TIMEOUT_MS = 30_000;
@@ -206,10 +209,23 @@ const main = async () => {
       );
       const phase =
         failures.length > 0 ? `errored: ${failures.join(" / ")}` : settled;
+      // play 関数の終わりに settle()（src/features/review/stories/story-play.ts）を呼んだか。呼ばないと、撮るたびに画素がずれうる
+      const unsettled = await page.evaluate(
+        (mark) =>
+          typeof globalThis.__STORYBOOK_PREVIEW__?.currentRender?.story
+            ?.playFunction === "function" &&
+          globalThis.document.documentElement.getAttribute(mark) !== "true",
+        SETTLED_MARK_ATTRIBUTE,
+      );
       // 描き終えた後の読み込み（画像・定期の取り直し）も見る
       await page.waitForTimeout(500);
       if (!SETTLED_PHASES.includes(phase)) {
         problems.push(`${id}: 描画・play 関数が通りません（${phase}）`);
+      }
+      if (SETTLED_PHASES.includes(phase) && unsettled) {
+        problems.push(
+          `${id}: play 関数の終わりに settle() を呼んでいません（撮るたびに画素がずれます）`,
+        );
       }
       for (const url of outside)
         problems.push(`${id}: 外へ通信しました: ${url}`);
@@ -219,7 +235,9 @@ const main = async () => {
       if (values.shots !== undefined) {
         await page.screenshot({ path: path.join(values.shots, `${id}.png`) });
       }
-      console.log(`${SETTLED_PHASES.includes(phase) ? "ok" : "NG"} ${id}`);
+      console.log(
+        `${SETTLED_PHASES.includes(phase) && !unsettled ? "ok" : "NG"} ${id}`,
+      );
       await page.close();
     }
   } finally {

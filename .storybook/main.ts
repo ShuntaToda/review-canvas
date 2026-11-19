@@ -10,10 +10,13 @@ const STORY_CSP = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "worker-src 'self'",
+  "object-src 'none'",
+  "media-src 'self' data: blob:",
 ].join("; ");
 
 const config: StorybookConfig = {
-  stories: ["../src/**/*.stories.@(ts|tsx)"],
+  // ストーリーを置ける場所（eslint.config.mjs の STORY_GLOB と同じ。scripts/eslint-config.small.test.mjs が確かめる）
+  stories: ["../src/features/*/{pages,components}/*.stories.tsx"],
   addons: [],
   framework: { name: "@storybook/react-vite", options: {} },
   // msw のサービスワーカー（mockServiceWorker.js）を出力の直下に置く。画面の public/ には置かない（画面のビルドに入れないため）

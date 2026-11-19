@@ -2,10 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ESLint } from "eslint";
+import { ESLint, Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
 import { SRC_FILES_READ_BY_INFRA } from "../eslint.config.base.mjs";
+import { STORY_GLOB } from "../eslint.config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const eslint = new ESLint({ cwd: root });
@@ -15,6 +16,19 @@ const restrictedSyntaxMessagesOf = async (file) => {
   const config = await eslint.calculateConfigForFile(path.join(root, file));
   const [, ...selectors] = config.rules["no-restricted-syntax"] ?? [];
   return selectors.map((selector) => selector.message).join("\n");
+};
+
+/** そのファイルに掛かる no-restricted-syntax だけで、code を確かめる（型の情報の要るルールを動かさず、速く見る） */
+const restrictedSyntaxHitsOf = async (file, code) => {
+  const config = await eslint.calculateConfigForFile(path.join(root, file));
+  return new Linter({ configType: "flat" })
+    .verify(code, [
+      {
+        languageOptions: { ecmaVersion: "latest", sourceType: "module" },
+        rules: { "no-restricted-syntax": config.rules["no-restricted-syntax"] },
+      },
+    ])
+    .map((message) => message.message);
 };
 
 const DOUBLE_ASSERTION = "二重のアサーション";
@@ -140,6 +154,7 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
 
   it.each([
     "src/features/review/pages/ReviewWorkspace.stories.tsx",
+    "src/features/review/components/Frame.stories.tsx",
     "src/features/review/stories/story-handlers.ts",
     ".storybook/preview.tsx",
   ])("ストーリー（%s）からは読める", async (file) => {
@@ -165,6 +180,54 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
       ).toStrictEqual([]);
     }
   });
+
+  it("ストーリーを置ける場所は、Storybook が読む場所（.storybook/main.ts の stories）と同じ", () => {
+    const main = fs.readFileSync(path.join(root, ".storybook/main.ts"), "utf8");
+    const stories = /stories:\s*\[([^\]]*)\]/u.exec(main)?.[1];
+
+    expect(stories?.match(/"[^"]*"/gu)).toStrictEqual([`"../${STORY_GLOB}"`]);
+  });
+
+  it.each([
+    "src/features/review/pages/ReviewWorkspace.stories.tsx",
+    "src/features/review/components/Frame.stories.tsx",
+  ])(
+    "ストーリー（%s）は default export を持てる（Storybook の決まり）",
+    async (file) => {
+      const config = await eslint.calculateConfigForFile(path.join(root, file));
+
+      expect([config.rules["import/no-default-export"]].flat()[0]).toBe(0);
+    },
+  );
+
+  it.each([
+    'void import("msw");',
+    'void import("../stories/story-handlers");',
+    "void import(`@/support/auth/fake`);",
+  ])("画面のコードからの動的 import（%s）も止める", async (code) => {
+    expect(
+      (
+        await restrictedSyntaxHitsOf(
+          "src/features/review/pages/ReviewPage.tsx",
+          code,
+        )
+      ).join(),
+    ).toContain(STORY_ONLY_MESSAGE);
+  });
+
+  it.each([
+    ["src/features/review/pages/ReviewPage.tsx", 'void import("./storybook");'],
+    [
+      "src/features/review/pages/ReviewWorkspace.stories.tsx",
+      'void import("msw");',
+    ],
+    ["src/features/review/stories/story-handlers.ts", 'void import("msw");'],
+  ])(
+    "%s の %s は止めない（名前の似た画面のファイル・ストーリー）",
+    async (file, code) => {
+      expect(await restrictedSyntaxHitsOf(file, code)).toStrictEqual([]);
+    },
+  );
 
   it("ストーリーの置き場の外（src の直下・ほかの置き場の stories/）は、ストーリーとして扱わない", async () => {
     for (const file of [

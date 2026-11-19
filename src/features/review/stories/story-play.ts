@@ -36,6 +36,9 @@ export const waitForLiveFrameSettled = (canvas: Canvas) =>
     timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS,
   });
 
+/** settle() を呼んだ印（html の data-story-settled）。scripts/check-app-storybook.mjs が同じ名前で見る */
+const SETTLED_MARK = "storySettled";
+
 const nextFrame = () =>
   new Promise((resolve) => requestAnimationFrame(resolve));
 
@@ -44,6 +47,9 @@ const nextFrame = () =>
  * - 動き（CSS の transition・animation）が止まるのを待つ
  * - 画面を 1 度まるごと描き直す。Chromium は変わった所だけを描き直す（partial raster）ので、押した後の角丸のふちのにじみが、
  *   途中に描いた回数で 1〜3 段ずれる（--disable-partial-raster で撮ったときと同じ画素になる）
+ *
+ * Storybook の afterEach では呼べない。afterEach は段階が completed になった後に動き、置くときの撮影は completed で撮るため。
+ * 呼び忘れは、終わりに付ける印（SETTLED_MARK）を scripts/check-app-storybook.mjs が見て落とす
  */
 export const settle = async (): Promise<void> => {
   await Promise.all(
@@ -60,4 +66,5 @@ export const settle = async (): Promise<void> => {
   }
   await nextFrame();
   await nextFrame();
+  document.documentElement.dataset[SETTLED_MARK] = "true";
 };

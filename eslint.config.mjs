@@ -222,6 +222,12 @@ const APP_IMPORT_PATTERNS = [
   },
 ];
 
+/**
+ * ストーリーを置ける場所。画面（pages/）と部品（components/）の隣だけ。.storybook/main.ts の stories と同じにする
+ * （scripts/eslint-config.small.test.mjs が確かめる）
+ */
+export const STORY_GLOB = "src/features/*/{pages,components}/*.stories.tsx";
+
 /** ストーリー（STORY_FILES）だけが import するもの。画面のコードから読むと、置く版のビルドに MSW・偽のログインが入る */
 const STORY_ONLY_IMPORTS = {
   // パッケージの名前（storybook・@storybook/*・msw・msw-storybook-addon）、偽のログインの置き場、
@@ -229,15 +235,18 @@ const STORY_ONLY_IMPORTS = {
   regex:
     "^(storybook|msw|msw-storybook-addon)(/.*)?$|^@storybook/|(^|/)support/auth/fake(/|$)|(^|/)stories(/|$)|\\.stories(\\.tsx?)?$",
   message:
-    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）・ストーリーの置き場（src/features/*/stories/・*.stories.tsx）は、ストーリー（src/features/*/pages/*.stories.tsx）・src/features/*/stories/・.storybook/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
+    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）・ストーリーの置き場（src/features/*/stories/・*.stories.tsx）は、ストーリー（src/features/*/{pages,components}/*.stories.tsx）・src/features/*/stories/・.storybook/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
 };
 
 // ストーリーと、その固定のデータ・MSW の handler・描き方（src/features の下の stories/）と、Storybook の設定
 const STORY_FILES = [
-  "src/features/*/pages/*.stories.tsx",
+  STORY_GLOB,
   "src/features/*/stories/**/*.{ts,tsx}",
   ".storybook/*.{ts,tsx}",
 ];
+
+/** セレクタ（esquery）の正規表現は / を中に書けないので、\x2F にして書く */
+const STORY_ONLY_SELECTOR_REGEX = `/${STORY_ONLY_IMPORTS.regex.replaceAll("/", String.raw`\x2F`)}/`;
 
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
@@ -290,6 +299,17 @@ const restrictedSyntax = [
     files: appFiles,
     ignores: ["src/**/*.test.{ts,tsx}"],
     selectors: [DOUBLE_ASSERTION],
+  },
+  {
+    // ストーリーだけが読むものの動的 import（import("msw")・import("../stories/…")）。no-restricted-imports は動的 import を見ない
+    files: appFiles,
+    ignores: STORY_FILES,
+    selectors: [
+      {
+        selector: `ImportExpression[source.value=${STORY_ONLY_SELECTOR_REGEX}], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=${STORY_ONLY_SELECTOR_REGEX}]`,
+        message: STORY_ONLY_IMPORTS.message,
+      },
+    ],
   },
   {
     // window・document などを別名にすると、通信・保存を「名前で見る」決まりから外れる
@@ -803,7 +823,7 @@ export default tseslint.config(
   },
   // Storybook の設定（.storybook/）とストーリーは、Storybook の決まりで default export を持つ
   {
-    files: ["src/**/*.stories.tsx", ".storybook/*.{ts,tsx}"],
+    files: [STORY_GLOB, ".storybook/*.{ts,tsx}"],
     rules: { "import/no-default-export": "off" },
   },
   // infra（置くスクリプト）からも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように）
