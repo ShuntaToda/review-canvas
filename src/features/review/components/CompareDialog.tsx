@@ -12,79 +12,97 @@ const COMPARE_DIALOG_WIDTH = 1200;
 
 /** 比べられないときの文言（比べる画面の中だけで使う） */
 const compareMessages = {
-  noBaseManifest:
-    "既定のブランチに画像が無いため、比べられません。既定のブランチを置き直すと比べられます",
+  noBaseManifest: (base: string) =>
+    `${base} に画像が無いため、比べられません。${base} を置き直すと比べられます`,
   noHeadManifest:
     "このブランチに画像が無いため、比べられません。このブランチを置き直すと比べられます",
-  notInBase: "既定のブランチにこの画面はありません",
+  notInBase: (base: string) => `${base} にこの画面はありません`,
   missingWidth: (width: number) =>
     `${String(width)}px の画像がありません。設定の幅のどれかに切り替えると比べられます`,
   /** 新しい画面（比べる相手が無い）で、今の幅の画像も無い。幅を替えても比べられないので、切り替えは勧めない */
   missingWidthOnly: (width: number) => `${String(width)}px の画像がありません`,
   loadFailed: "画像を読み込めませんでした",
+  loading: "読み込み中…",
 } as const;
 
-/** 画像の読み込みの様子（読み込み直すたびに attempt を増やして img を作り直す） */
+/**
+ * 画像ごと（URL ごと）の読み込みの様子（読み込み直すたびに attempt を増やして img を作り直す）。
+ * 開いているあいだに目録を読み直して（ブランチを置き直したなど）同じ側の画像の URL が替わったら、別の画像として数え、前の画像の失敗を持ち越さない
+ */
 type LoadState = { failed: boolean; attempt: number };
 const INITIAL_LOAD: LoadState = { failed: false, attempt: 0 };
 
 /**
- * 1 つの画面を既定のブランチと比べる大きなダイアログ。「並べる」（はじめ）と「重ねる」（色の差だけ。画素は読まず、CSS の
+ * 1 つの画面をほかのブランチ（比べる相手。上の帯の「比較するブランチ」で選ぶ）と比べる大きなダイアログ。左が比べる相手、右が今のブランチ。「並べる」（はじめ）と「重ねる」（色の差だけ。画素は読まず、CSS の
  * mix-blend-mode: difference で重ねる）を切り替える。コメントは置けず、ピンも出さない。
- * 画像は撮った幅より大きくしない（狭い画面では縮める）。比べられないとき（目録が無い・今の幅の画像が無い）は、その理由を出す
+ * 画像は撮った幅より大きくしない（狭い画面では縮める）。比べられないとき（目録が無い・今の幅の画像が無い）は、その理由を出す。比べる相手の目録を読み直しているあいだは、左右に「読み込み中…」を出す
  */
 export const CompareDialog = ({
   story,
   view,
-  defaultBranch,
+  compareBase,
   branch,
   onClose,
 }: {
   story: Pick<Story, "title" | "name">;
   view: CompareView;
-  defaultBranch: string;
+  /** 比べる相手（左） */
+  compareBase: string;
+  /** 今のブランチ（右） */
   branch: string;
   onClose: () => void;
 }) => {
   const [mode, setMode] = useState<CompareMode>("side");
-  const [load, setLoad] = useState<Record<Side, LoadState>>({
-    base: INITIAL_LOAD,
-    head: INITIAL_LOAD,
-  });
-  const fail = (side: Side) =>
-    setLoad((previous) => ({
+  const [loads, setLoads] = useState<Readonly<Record<string, LoadState>>>({});
+  const loadOf = (shot: ShotView): LoadState => loads[shot.url] ?? INITIAL_LOAD;
+  const fail = (shot: ShotView) =>
+    setLoads((previous) => ({
       ...previous,
-      [side]: { ...previous[side], failed: true },
+      [shot.url]: { ...(previous[shot.url] ?? INITIAL_LOAD), failed: true },
     }));
-  const reload = (side: Side) =>
-    setLoad((previous) => ({
+  const reload = (shot: ShotView) =>
+    setLoads((previous) => ({
       ...previous,
-      [side]: { failed: false, attempt: previous[side].attempt + 1 },
+      [shot.url]: {
+        failed: false,
+        attempt: (previous[shot.url] ?? INITIAL_LOAD).attempt + 1,
+      },
     }));
   const labels: Record<Side, string> = {
-    base: `既定のブランチ（${defaultBranch}）`,
+    base: `比べる相手（${compareBase}）`,
     head: `このブランチ（${branch}）`,
   };
 
   /** 1 枚の画像（撮った幅まで）。読み込めなければ、その旨と「読み込み直す」 */
   const shotOrFailure = (side: Side, shot: ShotView, width: number) =>
-    load[side].failed ? (
-      <LoadFailed onReload={() => reload(side)} />
+    loadOf(shot).failed ? (
+      <LoadFailed onReload={() => reload(shot)} />
     ) : (
       <img
-        key={load[side].attempt}
+        key={`${shot.url}#${String(loadOf(shot).attempt)}`}
         src={shot.url}
         alt={labels[side]}
         className="block h-auto w-full"
         style={{ maxWidth: width }}
-        onError={() => fail(side)}
+        onError={() => fail(shot)}
       />
     );
 
   const body = (() => {
     switch (view.kind) {
+      case "loading":
+        // 読み込み中であることを読み上げにも伝える（読み終えると中身が画像に替わる）
+        return (
+          <div role="status">
+            <SideBySide
+              labels={labels}
+              base={<Message>{compareMessages.loading}</Message>}
+              head={<Message>{compareMessages.loading}</Message>}
+            />
+          </div>
+        );
       case "no-base-manifest":
-        return <Message>{compareMessages.noBaseManifest}</Message>;
+        return <Message>{compareMessages.noBaseManifest(compareBase)}</Message>;
       case "no-head-manifest":
         return <Message>{compareMessages.noHeadManifest}</Message>;
       case "missing-width":
@@ -93,7 +111,7 @@ export const CompareDialog = ({
         return (
           <SideBySide
             labels={labels}
-            base={<Message>{compareMessages.notInBase}</Message>}
+            base={<Message>{compareMessages.notInBase(compareBase)}</Message>}
             head={
               view.head === undefined ? (
                 <Message>
@@ -107,7 +125,9 @@ export const CompareDialog = ({
         );
       case "ready":
         // 重ねる 2 枚のどちらかを読み込めないときは、重ねずに並べる形で、読み込めなかった方に知らせを出す
-        return mode === "side" || load.base.failed || load.head.failed ? (
+        return mode === "side" ||
+          loadOf(view.base).failed ||
+          loadOf(view.head).failed ? (
           <SideBySide
             labels={labels}
             base={shotOrFailure("base", view.base, view.width)}
@@ -125,18 +145,18 @@ export const CompareDialog = ({
               style={{ maxWidth: view.width }}
             >
               <img
-                key={`base-${String(load.base.attempt)}`}
+                key={`${view.base.url}#${String(loadOf(view.base).attempt)}`}
                 src={view.base.url}
                 alt={labels.base}
                 className="col-start-1 row-start-1 block h-auto w-full self-start"
-                onError={() => fail("base")}
+                onError={() => fail(view.base)}
               />
               <img
-                key={`head-${String(load.head.attempt)}`}
+                key={`${view.head.url}#${String(loadOf(view.head).attempt)}`}
                 src={view.head.url}
                 alt={labels.head}
                 className="col-start-1 row-start-1 block h-auto w-full self-start mix-blend-difference"
-                onError={() => fail("head")}
+                onError={() => fail(view.head)}
               />
             </div>
           </div>
@@ -147,7 +167,7 @@ export const CompareDialog = ({
   const switchable = view.kind === "ready" || view.kind === "new";
   return (
     <Modal
-      title={`${story.title} / ${story.name} を既定のブランチと比べる`}
+      title={`${story.title} / ${story.name} をほかのブランチと比べる`}
       onClose={onClose}
       width={COMPARE_DIALOG_WIDTH}
     >
@@ -166,7 +186,7 @@ export const CompareDialog = ({
             </ModeButton>
             <ModeButton
               pressed={mode === "overlay"}
-              // 既定のブランチにこの画面が無いと、重ねる相手が無い
+              // 比べる相手にこの画面が無いと、重ねる相手が無い
               disabled={view.kind === "new"}
               onClick={() => setMode("overlay")}
             >
@@ -208,7 +228,7 @@ const ModeButton = ({
 );
 
 /**
- * 左に既定のブランチ、右に今のブランチ。それぞれの高さのまま、上をそろえる
+ * 左に比べる相手、右に今のブランチ。それぞれの高さのまま、上をそろえる
  * （見出しを 1 行目、中身を 2 行目に置き、見出しの折り返しの行数が左右で違っても、中身の上端をそろえる）
  */
 const SideBySide = ({

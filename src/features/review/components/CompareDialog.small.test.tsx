@@ -35,7 +35,7 @@ const renderDialog = (view: CompareView) =>
     <CompareDialog
       story={story}
       view={view}
-      defaultBranch="main"
+      compareBase="main"
       branch="feature/a"
       onClose={() => undefined}
     />,
@@ -45,22 +45,24 @@ const modeButton = (name: string) =>
   screen.getByRole<HTMLButtonElement>("button", { name });
 
 describe("CompareDialog", () => {
-  test("[正常系]見出しに画面名を出し、はじめは「並べる」で、左に既定のブランチ・右にこのブランチを出す", () => {
+  test("[正常系]見出しに画面名を出し、はじめは「並べる」で、左に比べる相手・右にこのブランチを出す", () => {
     renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
     expect(
       screen.getByRole("dialog", {
-        name: "Shop/List / Default を既定のブランチと比べる",
+        name: "Shop/List / Default をほかのブランチと比べる",
       }),
     ).not.toBeNull();
     expect(modeButton("並べる").getAttribute("aria-pressed")).toBe("true");
     expect(modeButton("重ねる").getAttribute("aria-pressed")).toBe("false");
     const images = screen.getAllByRole<HTMLImageElement>("img");
     expect(images.map((image) => [image.alt, image.src])).toStrictEqual([
-      ["既定のブランチ（main）", BASE.url],
+      ["比べる相手（main）", BASE.url],
       ["このブランチ（feature/a）", HEAD.url],
     ]);
     expect(screen.queryByText("同じ所は黒く、違う所が明るく出ます")).toBeNull();
+    // 相手を選ぶ場所は置かない（上の帯で選ぶ）
+    expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   test("[正常系]「重ねる」に切り替えると、2 枚を重ねて上の 1 枚を difference で混ぜ、説明を出す。「並べる」に戻せる", () => {
@@ -77,7 +79,7 @@ describe("CompareDialog", () => {
     });
     expect(head.className).toContain("mix-blend-difference");
     expect(
-      screen.getByRole("img", { name: "既定のブランチ（main）" }).className,
+      screen.getByRole("img", { name: "比べる相手（main）" }).className,
     ).not.toContain("mix-blend-difference");
 
     fireEvent.click(modeButton("並べる"));
@@ -109,9 +111,7 @@ describe("CompareDialog", () => {
     renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
     fireEvent.click(modeButton("重ねる"));
 
-    fireEvent.error(
-      screen.getByRole("img", { name: "既定のブランチ（main）" }),
-    );
+    fireEvent.error(screen.getByRole("img", { name: "比べる相手（main）" }));
 
     expect(screen.queryByText("同じ所は黒く、違う所が明るく出ます")).toBeNull();
     expect(screen.getByText("画像を読み込めませんでした")).not.toBeNull();
@@ -127,12 +127,10 @@ describe("CompareDialog", () => {
     ).not.toBeNull();
   });
 
-  test("[正常系]新しい画面は、左に「既定のブランチにこの画面はありません」、右に画像を出し、「重ねる」は押せない", () => {
+  test("[正常系]新しい画面は、左に「<相手> にこの画面はありません」、右に画像を出し、「重ねる」は押せない", () => {
     renderDialog({ kind: "new", head: HEAD, width: 375 });
 
-    expect(
-      screen.getByText("既定のブランチにこの画面はありません"),
-    ).not.toBeNull();
+    expect(screen.getByText("main にこの画面はありません")).not.toBeNull();
     expect(
       screen.getAllByRole<HTMLImageElement>("img").map((image) => image.src),
     ).toStrictEqual([HEAD.url]);
@@ -141,9 +139,9 @@ describe("CompareDialog", () => {
 
   test.each<[string, CompareView, string]>([
     [
-      "既定のブランチに目録が無い",
+      "比べる相手に目録が無い",
       { kind: "no-base-manifest" },
-      "既定のブランチに画像が無いため、比べられません。既定のブランチを置き直すと比べられます",
+      "main に画像が無いため、比べられません。main を置き直すと比べられます",
     ],
     [
       "このブランチに目録が無い",
@@ -166,6 +164,17 @@ describe("CompareDialog", () => {
     },
   );
 
+  test("[正常系]相手の目録を読み直しているあいだは、左右に「読み込み中…」を出し、比べ方の切り替えは出さない", () => {
+    renderDialog({ kind: "loading" });
+
+    expect(screen.getAllByText("読み込み中…")).toHaveLength(2);
+    // 読み上げにも伝わる
+    expect(screen.getByRole("status").textContent).toContain("読み込み中…");
+    expect(screen.getByText("比べる相手（main）")).not.toBeNull();
+    expect(screen.queryAllByRole("img")).toStrictEqual([]);
+    expect(screen.queryByRole("button", { name: "重ねる" })).toBeNull();
+  });
+
   test("[異常系]画像を読み込めない側に、その旨と「読み込み直す」を出し、押すと読み込み直す", () => {
     renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
@@ -175,7 +184,7 @@ describe("CompareDialog", () => {
 
     expect(screen.getByText("画像を読み込めませんでした")).not.toBeNull();
     expect(
-      screen.getByRole("img", { name: "既定のブランチ（main）" }),
+      screen.getByRole("img", { name: "比べる相手（main）" }),
     ).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "読み込み直す" }));
@@ -198,7 +207,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
           <CompareDialog
             story={story}
             view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
-            defaultBranch="main"
+            compareBase="main"
             branch="feature/a"
             onClose={() => {
               flushSync(() => setOpen(false));
@@ -214,16 +223,16 @@ describe("CompareButton と閉じたときのフォーカス", () => {
     render(<Harness />);
 
     const button = screen.getByRole("button", {
-      name: "Shop/List / Default を既定のブランチと比べる",
+      name: "Shop/List / Default をほかのブランチと比べる",
     });
-    expect(button.getAttribute("title")).toBe("既定のブランチと比べる");
+    expect(button.getAttribute("title")).toBe("ほかのブランチと比べる");
     expect(button.tabIndex).toBe(-1);
   });
 
   test("[正常系]押すと比べる画面を開き、Esc で閉じるとボタンにフォーカスが戻る", () => {
     render(<Harness />);
     const button = screen.getByRole("button", {
-      name: "Shop/List / Default を既定のブランチと比べる",
+      name: "Shop/List / Default をほかのブランチと比べる",
     });
 
     fireEvent.click(button);
@@ -242,7 +251,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
   test("[正常系]閉じるボタンで閉じても、ボタンにフォーカスが戻る", () => {
     render(<Harness />);
     const button = screen.getByRole("button", {
-      name: "Shop/List / Default を既定のブランチと比べる",
+      name: "Shop/List / Default をほかのブランチと比べる",
     });
 
     fireEvent.click(button);
@@ -263,7 +272,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
             <CompareDialog
               story={story}
               view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
-              defaultBranch="main"
+              compareBase="main"
               branch="feature/a"
               onClose={() => {
                 flushSync(() => setOpen(false));

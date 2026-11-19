@@ -1,5 +1,6 @@
 import { LogOut, UserRound } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useDismissiblePopover } from "../hooks/useDismissiblePopover";
 
 /**
  * 右端のアカウントのボタン。押すと、ログインしている人の名前とログアウトを出す（めったに押さないので、常には並べない）
@@ -16,38 +17,12 @@ export const AccountMenu = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
-  // 開いている間だけ、外を押した・外へフォーカスが移った・Esc で閉じる。
-  // ボタンを押してもフォーカスを移さないブラウザ（Safari など）があるので、ボタンの blur・keydown には頼らない
-  useEffect(() => {
-    if (!open) return;
-    const isOutside = (target: EventTarget | null) =>
-      !(
-        target instanceof Node &&
-        containerRef.current?.contains(target) === true
-      );
-    const handlePointerDown = (event: PointerEvent) => {
-      if (isOutside(event.target)) setOpen(false);
-    };
-    const handleFocusIn = (event: FocusEvent) => {
-      if (isOutside(event.target)) setOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // キャンバスの Esc（スレッドを閉じる・道具を戻す）まで届かせない
-      event.stopImmediatePropagation();
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("focusin", handleFocusIn);
-    // キャンバスのショートカットは window で受けるので、その前（取り込みの段階）で受ける
-    window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("focusin", handleFocusIn);
-      window.removeEventListener("keydown", handleKeyDown, { capture: true });
-    };
-  }, [open]);
+  useDismissiblePopover({
+    open,
+    containerRef,
+    buttonRef,
+    onClose: () => setOpen(false),
+  });
 
   return (
     <div ref={containerRef} className="relative">

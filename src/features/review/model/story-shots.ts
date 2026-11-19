@@ -750,7 +750,7 @@ export type ShotCatalog = {
   hasPlayFunction: (storyId: string) => boolean | undefined;
   /** 画像の枚数 */
   size: number;
-  /** 目録を読めたか（無い・形が違うときは false。既定のブランチと比べられるかに使う） */
+  /** 目録を読めたか（無い・形が違うときは false。ほかのブランチと比べられるかに使う） */
   hasManifest: boolean;
   /** そのストーリーの画像を、どれかの幅で 1 枚でも持つか */
   hasStory: (storyId: string) => boolean;

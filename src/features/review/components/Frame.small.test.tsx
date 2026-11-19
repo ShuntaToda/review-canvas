@@ -524,7 +524,7 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
   });
 });
 
-describe("Frame の見出しの「既定のブランチと比べる」", () => {
+describe("Frame の見出しの「ほかのブランチと比べる」", () => {
   const sample: Story = {
     id: "shop-compare--default",
     title: "Shop/Compare",
@@ -582,7 +582,7 @@ describe("Frame の見出しの「既定のブランチと比べる」", () => {
       name: "Shop/Compare / Default を Storybook で開く",
     });
     const button = screen.getByRole("button", {
-      name: "Shop/Compare / Default を既定のブランチと比べる",
+      name: "Shop/Compare / Default をほかのブランチと比べる",
     });
     const copy = screen.getByRole("button", {
       name: "Shop/Compare / Default のリンクをコピー",
@@ -595,11 +595,11 @@ describe("Frame の見出しの「既定のブランチと比べる」", () => {
     expect(onCompare).toHaveBeenCalledExactlyOnceWith(sample);
   });
 
-  test("[正常系]既定のブランチ（onCompare を渡さない）では出さない", () => {
+  test("[正常系]比べられないとき（onCompare を渡さない）は出さない", () => {
     render(frameWith());
 
     expect(
-      screen.queryByRole("button", { name: /既定のブランチと比べる/ }),
+      screen.queryByRole("button", { name: /ほかのブランチと比べる/ }),
     ).toBeNull();
   });
 });

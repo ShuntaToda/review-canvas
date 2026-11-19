@@ -2,7 +2,8 @@ import type { Size } from "./camera";
 
 export const POPOVER_WIDTH = 340;
 const GAP = 16;
-const EDGE = 8;
+/** 画面の端から空ける幅(px。吹き出し・ボタンの下に開くパネルで同じにする) */
+export const SCREEN_EDGE = 8;
 /** ピンの画面上の大きさ(px。Pin.tsx が読む)。ピンは、指している位置から右上へ出る */
 export const PIN_SCREEN_SIZE = 28;
 /** 吹き出しの高さの下限(px) */
@@ -41,8 +42,8 @@ export const popoverPosition = (
   frame: ScreenRect | null = null,
 ): PopoverPosition => {
   const fitsRight = (from: number) =>
-    from + GAP + POPOVER_WIDTH <= viewport.width - EDGE;
-  const fitsLeft = (to: number) => to - GAP - POPOVER_WIDTH >= EDGE;
+    from + GAP + POPOVER_WIDTH <= viewport.width - SCREEN_EDGE;
+  const fitsLeft = (to: number) => to - GAP - POPOVER_WIDTH >= SCREEN_EDGE;
   const pinRight = anchor.x + PIN_SCREEN_SIZE;
   const avoidRight =
     avoid === null ? pinRight : Math.max(pinRight, avoid.right);
@@ -70,13 +71,13 @@ export const popoverPosition = (
             : undefined);
   if (left === undefined) return besideVertically(anchor, viewport, avoid);
   const top = Math.min(
-    Math.max(EDGE, anchor.y - 48),
-    Math.max(EDGE, viewport.height - 240),
+    Math.max(SCREEN_EDGE, anchor.y - 48),
+    Math.max(SCREEN_EDGE, viewport.height - 240),
   );
   return {
     left,
     top,
-    maxHeight: Math.max(MIN_HEIGHT, viewport.height - top - EDGE),
+    maxHeight: Math.max(MIN_HEIGHT, viewport.height - top - SCREEN_EDGE),
   };
 };
 
@@ -87,28 +88,28 @@ const besideVertically = (
   avoid: ScreenRect | null,
 ): PopoverPosition => {
   const left = Math.max(
-    EDGE,
+    SCREEN_EDGE,
     Math.min(
       anchor.x - POPOVER_WIDTH / 2,
-      viewport.width - EDGE - POPOVER_WIDTH,
+      viewport.width - SCREEN_EDGE - POPOVER_WIDTH,
     ),
   );
   const pinTop = anchor.y - PIN_SCREEN_SIZE;
   const above = (avoid === null ? pinTop : Math.min(pinTop, avoid.top)) - GAP;
   const below =
     (avoid === null ? anchor.y : Math.max(anchor.y, avoid.bottom)) + GAP;
-  const spaceAbove = above - EDGE;
-  const spaceBelow = viewport.height - EDGE - below;
+  const spaceAbove = above - SCREEN_EDGE;
+  const spaceBelow = viewport.height - SCREEN_EDGE - below;
   if (spaceBelow >= spaceAbove || spaceAbove < MIN_HEIGHT) {
     // 下にも上にも入らないとき（要素が表示より大きい）は、表示の下の方に収める
     const top = Math.max(
-      EDGE,
-      Math.min(below, viewport.height - EDGE - MIN_HEIGHT),
+      SCREEN_EDGE,
+      Math.min(below, viewport.height - SCREEN_EDGE - MIN_HEIGHT),
     );
     return {
       left,
       top,
-      maxHeight: Math.max(MIN_HEIGHT, viewport.height - top - EDGE),
+      maxHeight: Math.max(MIN_HEIGHT, viewport.height - top - SCREEN_EDGE),
     };
   }
   return { left, bottom: viewport.height - above, maxHeight: spaceAbove };
@@ -128,7 +129,7 @@ export const popoverStyle = ({
   maxHeight: number;
 } => ({
   left,
-  ...(bottom === undefined ? { top: top ?? EDGE } : { bottom }),
+  ...(bottom === undefined ? { top: top ?? SCREEN_EDGE } : { bottom }),
   width: POPOVER_WIDTH,
   maxHeight,
 });

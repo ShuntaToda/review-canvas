@@ -9,7 +9,8 @@ import { isStatusFilter, type StatusFilter } from "./threads";
  * - story: その画面（ストーリー）へ移る
  * - comment: そのスレッドを開く
  * - status: 一覧の状態のタブ（無ければ未解決。知らない値は捨てる）
- * - compare: その画面（ストーリー）を既定のブランチと比べる画面を開く（既定のブランチ・知らない ID は開くときに捨てる）
+ * - compare: その画面（ストーリー）をほかのブランチと比べる画面を開く（比べる相手が無いとき・知らない ID は開くときに捨てる）
+ * - base: 比べる相手のブランチ（branch-compare の NO_COMPARE（-）は比較しない。無ければ初めの状態。置いていない・今のブランチと同じなら開くときに捨てる）
  * - width: 画面の幅（見出しの「この画面のリンクをコピー」が載せる。数として読めない値は null。選べる幅かは開くときに見る）
  */
 export type UrlState = {
@@ -20,6 +21,7 @@ export type UrlState = {
   comment?: string;
   status?: StatusFilter;
   compare?: string;
+  base?: string;
   width?: number | null;
 };
 
@@ -52,6 +54,8 @@ export const parseUrlState = (search: string): UrlState => {
   if (isStatusFilter(status)) state.status = status;
   const compare = params.get("compare");
   if (compare !== null && compare !== "") state.compare = compare;
+  const base = params.get("base");
+  if (base !== null && base !== "") state.base = base;
   const width = params.get("width");
   if (width !== null && width !== "") {
     state.width = /^\d+$/.test(width) ? Number(width) : null;
@@ -69,6 +73,7 @@ export const buildSearch = (state: UrlState): string => {
   if (state.comment !== undefined) params.set("comment", state.comment);
   if (state.status !== undefined) params.set("status", state.status);
   if (state.compare !== undefined) params.set("compare", state.compare);
+  if (state.base !== undefined) params.set("base", state.base);
   if (typeof state.width === "number") {
     params.set("width", String(state.width));
   }
