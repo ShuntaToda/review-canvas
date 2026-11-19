@@ -76,4 +76,13 @@ describe("useSidebarWidth", () => {
 
     expect(result.current.width).toBe(240);
   });
+
+  test("[正常系]上限まで縮めて出しているとき、出している幅と同じ幅に変えても覚えた幅は変えない", () => {
+    window.localStorage.setItem(LEFT_KEY, "480");
+    const { result } = renderHook(() => useSidebarWidth("left", 1000));
+    act(() => result.current.change(450));
+
+    expect(result.current.width).toBe(400);
+    expect(window.localStorage.getItem(LEFT_KEY)).toBe("480");
+  });
 });

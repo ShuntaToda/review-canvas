@@ -8,7 +8,7 @@ import {
 } from "./sidebar-width";
 
 describe("maxSidebarWidth", () => {
-  test("[正常系]画面の幅の 40% を上限にする", () => {
+  test("[正常系]窓の幅の 40% を上限にする", () => {
     expect(maxSidebarWidth(1280)).toBe(512);
     expect(maxSidebarWidth(1001)).toBe(400);
   });

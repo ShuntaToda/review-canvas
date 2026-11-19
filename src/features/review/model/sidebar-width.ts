@@ -10,13 +10,13 @@ export const DEFAULT_SIDEBAR_WIDTHS: Record<SidebarSide, number> = {
 /** 幅の下限（px） */
 export const MIN_SIDEBAR_WIDTH = 200;
 
-/** 幅の上限の、画面の幅に対する割合 */
+/** 幅の上限の、窓の幅に対する割合 */
 const MAX_SIDEBAR_RATIO = 0.4;
 
 /** 矢印キー 1 回で変える幅（px） */
-export const SIDEBAR_KEY_STEP = 16;
+const SIDEBAR_KEY_STEP = 16;
 
-/** 画面の幅から決まる上限。下限を下回るほど狭いときは下限にそろえる */
+/** 窓の幅から決まる上限。下限を下回るほど狭いときは下限にそろえる */
 export const maxSidebarWidth = (viewportWidth: number): number =>
   Math.max(MIN_SIDEBAR_WIDTH, Math.floor(viewportWidth * MAX_SIDEBAR_RATIO));
 
@@ -54,7 +54,7 @@ export const keyMoveOf = (key: string): number | undefined =>
       ? SIDEBAR_KEY_STEP
       : undefined;
 
-/** 覚えた幅を読む。数でない・下限より狭いものは読めない（undefined）。上限は開くたびに画面の幅で収める */
+/** 覚えた幅を読む。数でない・下限より狭いものは読めない（undefined）。上限は開くたびに窓の幅で収める */
 export const parseSidebarWidth = (raw: string): number | undefined => {
   if (!/^\d+$/.test(raw)) return undefined;
   const width = Number(raw);

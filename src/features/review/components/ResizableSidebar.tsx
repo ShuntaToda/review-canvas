@@ -29,64 +29,78 @@ export const ResizableSidebar = ({
   // ドラッグを始めたときの指の位置と幅
   const dragRef = useRef<{ x: number; width: number } | null>(null);
 
-  if (!sidebar.resizable) {
-    // 包みを消さずに残す（消すと中のサイドバーが作り直され、スクロールの位置などが失われる）
-    return <div className="contents">{children}</div>;
-  }
+  // 境目は hr（もともと separator の役割を持つ）。eslint.config.mjs で、フォーカスと矢印キーを許しているのは、このファイルの hr だけ（jsx-a11y の許可は role ではなく要素の名前で引くため）
+  const handle = (
+    <hr
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuenow={sidebar.width}
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={sidebar.max}
+      tabIndex={0}
+      className={[
+        "absolute inset-y-0 z-30 m-0 h-auto w-2 cursor-col-resize touch-none border-0 outline-none",
+        "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:bg-transparent",
+        "hover:after:bg-accent focus-visible:after:bg-accent",
+        side === "left" ? "-right-1" : "-left-1",
+      ].join(" ")}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        // 文字が選ばれないようにする
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = { x: event.clientX, width: sidebar.width };
+      }}
+      onPointerMove={(event) => {
+        const start = dragRef.current;
+        if (start === null) return;
+        // 離したのを取りこぼしたとき（窓の外で離した など）は、動かさずにやめる
+        if (event.buttons === 0) {
+          dragRef.current = null;
+          return;
+        }
+        sidebar.change(
+          resizeSidebarWidth(
+            side,
+            start.width,
+            event.clientX - start.x,
+            viewportWidth,
+          ),
+        );
+      }}
+      onPointerUp={() => {
+        dragRef.current = null;
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
+      }}
+      // 境目が消えた（窓を狭めた）ときなど、指を離さないまま捕まえていたのが外れたら、やめる
+      onLostPointerCapture={() => {
+        dragRef.current = null;
+      }}
+      onDoubleClick={sidebar.reset}
+      onKeyDown={(event) => {
+        const move = keyMoveOf(event.key);
+        if (move === undefined) return;
+        event.preventDefault();
+        sidebar.change(
+          resizeSidebarWidth(side, sidebar.width, move, viewportWidth),
+        );
+      }}
+    />
+  );
 
+  const resizable = sidebar.resizable;
   return (
-    <div className="relative flex shrink-0" style={{ width: sidebar.width }}>
+    // 狭い幅では包みを無いもの（contents）として扱う。包みと中の並びは変えない（変えると中のサイドバーが作り直され、スクロールの位置などが失われる）
+    <div
+      className={resizable ? "relative flex shrink-0" : "contents"}
+      style={resizable ? { width: sidebar.width } : undefined}
+    >
+      {/* 境目は見た目の位置と Tab の順をそろえる（右の一覧では、境目が一覧の左端にある） */}
+      {resizable && side === "right" && handle}
       {children}
-      {/* hr はもともと separator の役割を持つ（role を書くと重複になる） */}
-      <hr
-        aria-orientation="vertical"
-        aria-label={label}
-        aria-valuenow={sidebar.width}
-        aria-valuemin={MIN_SIDEBAR_WIDTH}
-        aria-valuemax={sidebar.max}
-        // 境目は、矢印キーで幅を変えるためにフォーカスを受ける
-        tabIndex={0}
-        className={[
-          "absolute inset-y-0 z-30 m-0 h-auto w-2 cursor-col-resize touch-none border-0 outline-none",
-          "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:bg-transparent",
-          "hover:after:bg-accent focus-visible:after:bg-accent",
-          side === "left" ? "-right-1" : "-left-1",
-        ].join(" ")}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          // 文字が選ばれないようにする
-          event.preventDefault();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          dragRef.current = { x: event.clientX, width: sidebar.width };
-        }}
-        onPointerMove={(event) => {
-          const start = dragRef.current;
-          if (start === null) return;
-          sidebar.change(
-            resizeSidebarWidth(
-              side,
-              start.width,
-              event.clientX - start.x,
-              viewportWidth,
-            ),
-          );
-        }}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
-        onDoubleClick={sidebar.reset}
-        onKeyDown={(event) => {
-          const move = keyMoveOf(event.key);
-          if (move === undefined) return;
-          event.preventDefault();
-          sidebar.change(
-            resizeSidebarWidth(side, sidebar.width, move, viewportWidth),
-          );
-        }}
-      />
+      {resizable && side === "left" && handle}
     </div>
   );
 };

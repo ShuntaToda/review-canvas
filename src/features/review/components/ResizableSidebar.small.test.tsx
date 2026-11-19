@@ -50,7 +50,7 @@ afterEach(() => cleanup());
 
 const drag = (target: HTMLElement, from: number, to: number) => {
   fireEvent.pointerDown(target, { button: 0, pointerId: 1, clientX: from });
-  fireEvent.pointerMove(target, { pointerId: 1, clientX: to });
+  fireEvent.pointerMove(target, { pointerId: 1, buttons: 1, clientX: to });
   fireEvent.pointerUp(target, { pointerId: 1, clientX: to });
 };
 
@@ -98,7 +98,7 @@ describe("ResizableSidebar", () => {
     const handle = separator("画面の一覧の幅");
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 400 });
     fireEvent.pointerDown(handle, { button: 2, pointerId: 1, clientX: 240 });
-    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 400 });
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 2, clientX: 400 });
 
     expect(shownWidth()).toBe("240px");
   });
@@ -167,5 +167,68 @@ describe("ResizableSidebar", () => {
     setViewport(1280);
     expect(separator("画面の一覧の幅").isConnected).toBe(true);
     expect(shownWidth()).toBe("300px");
+  });
+
+  test.each([
+    ["離す", "pointerUp"],
+    ["取り消される", "pointerCancel"],
+    ["捕まえていたのが外れる", "lostPointerCapture"],
+  ] as const)(
+    "[正常系]%sと、そのあと指を動かしても幅は変わらない",
+    (_, stop) => {
+      render(<Harness side="left" />);
+      const handle = separator("画面の一覧の幅");
+      fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 240 });
+      fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientX: 280 });
+      fireEvent[stop](handle, { pointerId: 1, clientX: 280 });
+      fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientX: 400 });
+
+      expect(shownWidth()).toBe("280px");
+      expect(window.localStorage.getItem(LEFT_KEY)).toBe("280");
+    },
+  );
+
+  test("[異常系]離したのを取りこぼしても、ボタンを押していない動きでは変えず、ドラッグをやめる", () => {
+    render(<Harness side="left" />);
+    const handle = separator("画面の一覧の幅");
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 240 });
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 0, clientX: 400 });
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientX: 420 });
+
+    expect(shownWidth()).toBe("240px");
+    expect(window.localStorage.getItem(LEFT_KEY)).toBeNull();
+  });
+
+  test("[正常系]窓を狭めて上限まで縮めているとき、上限の向きに → を押しても、1px ずれて離しても、覚えた幅は変わらない", () => {
+    window.localStorage.setItem(LEFT_KEY, "480");
+    render(<Harness side="left" />);
+    setViewport(1000);
+    const handle = separator("画面の一覧の幅");
+    expect(shownWidth()).toBe("400px");
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    drag(handle, 400, 401);
+
+    expect(shownWidth()).toBe("400px");
+    expect(window.localStorage.getItem(LEFT_KEY)).toBe("480");
+    setViewport(1280);
+    expect(shownWidth()).toBe("480px");
+  });
+
+  test("[正常系]境目は、見た目の位置と同じ順で Tab が止まる（左は一覧の後、右は一覧の前）", () => {
+    const left = render(<Harness side="left" />);
+    const leftAside = screen.getByRole("complementary");
+    expect(
+      leftAside.compareDocumentPosition(separator("画面の一覧の幅")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    left.unmount();
+
+    render(<Harness side="right" />);
+    const rightAside = screen.getByRole("complementary");
+    expect(
+      rightAside.compareDocumentPosition(separator("コメント一覧の幅")) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
   });
 });

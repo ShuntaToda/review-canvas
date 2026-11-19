@@ -20,7 +20,7 @@ export type SidebarWidth = {
   max: number;
   /** 幅を変えられるか（狭い幅ではキャンバスに重ねて全体に出すので変えない） */
   resizable: boolean;
-  /** 幅を変えて覚える（下限・上限に収める） */
+  /** 幅を変えて覚える（下限・上限に収める。出している幅と変わらなければ覚えない） */
   change: (width: number) => void;
   /** はじめの幅に戻して覚える */
   reset: () => void;
@@ -38,11 +38,16 @@ export const useSidebarWidth = (
     DEFAULT_SIDEBAR_WIDTHS[side],
     { parse: parseSidebarWidth, serialize: String },
   );
+  const width = clampSidebarWidth(remembered, viewportWidth);
   return {
-    width: clampSidebarWidth(remembered, viewportWidth),
+    width,
     max: maxSidebarWidth(viewportWidth),
     resizable: !isNarrowViewport(viewportWidth),
-    change: (width) => remember(clampSidebarWidth(width, viewportWidth)),
+    change: (next) => {
+      const clamped = clampSidebarWidth(next, viewportWidth);
+      // 見た目が変わらない操作（上限まで縮めて出しているときに上限の向きへ動かす など）では、覚えた幅を書き換えない
+      if (clamped !== width) remember(clamped);
+    },
     reset: () => remember(DEFAULT_SIDEBAR_WIDTHS[side]),
   };
 };
