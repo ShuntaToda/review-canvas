@@ -12,7 +12,7 @@
 
 /** 画面の中で測った値 */
 export type Measurement = {
-  /** 中身の高さ（scrollHeight） */
+  /** 中身の高さ（model/story-shots.ts の measureContentHeight で測ったもの） */
   height: number;
   /** 画面の幅（innerWidth） */
   width: number;

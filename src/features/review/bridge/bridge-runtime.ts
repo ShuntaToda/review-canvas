@@ -6,7 +6,7 @@ import {
   resolveShortcut,
 } from "../model/shortcuts";
 import { readRenderState } from "../model/story-render";
-import { measureContentHeight } from "../model/story-shots";
+import { MAX_MEASURED_NODES, measureContentHeight } from "../model/story-shots";
 import { decideSize, type MeasureState } from "./measure";
 import {
   acceptParentEvent,
@@ -65,7 +65,7 @@ export const installBridge = ({
     win.parent.postMessage(toBridgeEnvelope(message), parentOrigin);
   };
 
-  const heightOf = (): number => measureContentHeight(doc);
+  const heightOf = (): number => measureContentHeight(doc, MAX_MEASURED_NODES);
 
   // 画面の高さに引きずられた伸びを知らせないあいだは、iframe の中に縦のスクロールバーを出さない（はみ出した分は見せない）
   const root = doc.documentElement;
