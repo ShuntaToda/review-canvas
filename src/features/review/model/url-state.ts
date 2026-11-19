@@ -8,6 +8,7 @@ import { isStatusFilter, type StatusFilter } from "./threads";
  * - story: その画面（ストーリー）へ移る
  * - comment: そのスレッドを開く
  * - status: 一覧の状態のタブ（無ければ未解決。知らない値は捨てる）
+ * - compare: その画面（ストーリー）を既定のブランチと比べる画面を開く（既定のブランチ・知らない ID は開くときに捨てる）
  */
 export type UrlState = {
   branch?: string;
@@ -15,6 +16,7 @@ export type UrlState = {
   story?: string;
   comment?: string;
   status?: StatusFilter;
+  compare?: string;
 };
 
 /** ブランチ名の長さの上限（API の branch と同じ） */
@@ -42,6 +44,8 @@ export const parseUrlState = (search: string): UrlState => {
   if (comment !== null && comment !== "") state.comment = comment;
   const status = params.get("status");
   if (isStatusFilter(status)) state.status = status;
+  const compare = params.get("compare");
+  if (compare !== null && compare !== "") state.compare = compare;
   return state;
 };
 
@@ -53,6 +57,7 @@ export const buildSearch = (state: UrlState): string => {
   if (state.story !== undefined) params.set("story", state.story);
   if (state.comment !== undefined) params.set("comment", state.comment);
   if (state.status !== undefined) params.set("status", state.status);
+  if (state.compare !== undefined) params.set("compare", state.compare);
   const query = params.toString();
   return query === "" ? "" : `?${query}`;
 };

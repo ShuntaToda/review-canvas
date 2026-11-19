@@ -23,6 +23,20 @@ describe("url-state", () => {
     );
   });
 
+  test("[正常系]比べる画面（compare）を載せて読み、空の値は捨てる", () => {
+    expect(
+      buildSearch({
+        branch: "feature/a",
+        page: "shop",
+        compare: "shop-list--default",
+      }),
+    ).toBe("?branch=feature%2Fa&page=shop&compare=shop-list--default");
+    expect(
+      parseUrlState("?branch=feature%2Fa&compare=shop-list--default"),
+    ).toStrictEqual({ branch: "feature/a", compare: "shop-list--default" });
+    expect(parseUrlState("?compare=")).toStrictEqual({});
+  });
+
   test("[正常系]buildSearchとparseUrlStateは往復で元に戻る", () => {
     const state = {
       branch: "claude/x y",
