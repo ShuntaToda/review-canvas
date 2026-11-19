@@ -1,8 +1,10 @@
 import { Search } from "lucide-react";
 import type { ReactNode, Ref } from "react";
+import { COMPARE_MARK_LABELS, type CompareMark } from "../model/branch-compare";
 import type { RowPlacement } from "../model/layout";
 import type { Story } from "../model/storybook";
 import { focusCanvas } from "./canvas-dom";
+import { messages } from "@/constants/messages";
 
 /**
  * 左の画面の一覧。上に絞り込みと、キャンバスと同じ並びの画面（タイトル）・状態（ストーリー）、下に表示の設定（children）。
@@ -15,6 +17,8 @@ export const StorySidebar = ({
   onQueryChange,
   searchRef,
   onSelectStory,
+  marks,
+  changedOnly,
   children,
 }: {
   /** キャンバスに並べている行（絞り込んだあと。並びもキャンバスと同じ） */
@@ -25,6 +29,10 @@ export const StorySidebar = ({
   onQueryChange: (query: string) => void;
   searchRef: Ref<HTMLInputElement>;
   onSelectStory: (story: Story) => void;
+  /** 既定のブランチと比べた印（印のある状態だけ。既定のブランチ・目録が無いときは渡さない） */
+  marks?: ReadonlyMap<string, CompareMark>;
+  /** 「変わった画面だけ」の絞り込み（出せないときは渡さない） */
+  changedOnly?: { checked: boolean; onChange: (checked: boolean) => void };
   /** 下に出す表示の設定 */
   children: ReactNode;
 }) => (
@@ -52,12 +60,24 @@ export const StorySidebar = ({
           }}
         />
       </label>
+      {changedOnly !== undefined && (
+        <label className="flex items-center gap-2 text-sm text-ink-sub">
+          <input
+            type="checkbox"
+            checked={changedOnly.checked}
+            onChange={(event) => changedOnly.onChange(event.target.checked)}
+          />
+          変わった画面だけ
+        </label>
+      )}
     </div>
 
     <nav className="min-h-0 flex-1 overflow-y-auto py-1">
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-center text-sm text-muted">
-          絞り込みに合う画面はありません
+          {changedOnly?.checked === true
+            ? messages.noChangedStories(query.trim())
+            : "絞り込みに合う画面はありません"}
         </p>
       ) : (
         <ul>
@@ -70,26 +90,42 @@ export const StorySidebar = ({
                 {row.title}
               </h3>
               <ul>
-                {row.frames.map(({ story }) => (
-                  <li key={story.id}>
-                    <button
-                      type="button"
-                      aria-current={
-                        story.id === currentStoryId ? "true" : undefined
-                      }
-                      className={[
-                        "block w-full truncate py-1 pr-3 pl-6 text-left text-sm",
-                        story.id === currentStoryId
-                          ? "bg-accent-soft text-accent"
-                          : "text-ink-sub hover:bg-panel-sub hover:text-ink",
-                      ].join(" ")}
-                      title={`${row.title} / ${story.name}`}
-                      onClick={() => onSelectStory(story)}
-                    >
-                      {story.name}
-                    </button>
-                  </li>
-                ))}
+                {row.frames.map(({ story }) => {
+                  const mark = marks?.get(story.id);
+                  return (
+                    <li key={story.id}>
+                      <button
+                        type="button"
+                        aria-current={
+                          story.id === currentStoryId ? "true" : undefined
+                        }
+                        className={[
+                          "flex w-full items-center gap-2 py-1 pr-3 pl-6 text-left text-sm",
+                          story.id === currentStoryId
+                            ? "bg-accent-soft text-accent"
+                            : "text-ink-sub hover:bg-panel-sub hover:text-ink",
+                        ].join(" ")}
+                        title={`${row.title} / ${story.name}`}
+                        // 印を読み上げで名前とつなげない（「Default変更」ではなく「Default（変更）」）
+                        aria-label={
+                          mark === undefined
+                            ? undefined
+                            : `${story.name}（${COMPARE_MARK_LABELS[mark]}）`
+                        }
+                        onClick={() => onSelectStory(story)}
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {story.name}
+                        </span>
+                        {mark !== undefined && (
+                          <span className="shrink-0 rounded border border-line px-1 text-xs text-ink-sub">
+                            {COMPARE_MARK_LABELS[mark]}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </li>
           ))}
