@@ -13,6 +13,7 @@ import type { Camera } from "../model/camera";
 import type { RowPlacement } from "../model/layout";
 import type { LinkHighlight } from "../model/story-link";
 import type { Story } from "../model/storybook";
+import type { Comment } from "../model/threads";
 import { ReviewPage } from "./ReviewPage";
 import type * as Auth from "@/support/auth";
 
@@ -107,7 +108,34 @@ const fixtures = vi.hoisted(() => {
           ...(state.manifest === "transitions" ? { transitions } : {}),
         };
   const blogStories: Story[] = [{ ...story("Blog/Entry"), source: "blog" }];
-  return { stories, blogStories, meta, state, manifest };
+  const comment = (id: string, storyId: string, body: string): Comment => ({
+    id,
+    branch: "main",
+    parentId: null,
+    source: "shop",
+    storyId,
+    x: 10,
+    y: 10,
+    frameWidth: 1280,
+    body,
+    author: "山田 太郎",
+    authorId: "auth0|yamada",
+    commit: "abc1234",
+    resolved: false,
+    resolvedBy: null,
+    resolvedAt: null,
+    aiFixedBy: null,
+    aiFixedById: null,
+    aiFixedAt: null,
+    status: "open",
+    createdAt: "2026-11-13T10:00:00.000+09:00",
+    updatedAt: "2026-11-13T10:00:00.000+09:00",
+  });
+  const comments = [
+    comment("01", "shop-admin--default", "管理画面の指摘"),
+    comment("02", "shop-done--default", "完了画面の指摘"),
+  ];
+  return { stories, blogStories, meta, state, manifest, comments };
 });
 
 vi.mock("../hooks/useReviewData", async (importOriginal) => {
@@ -150,7 +178,7 @@ vi.mock("../hooks/useReviewData", async (importOriginal) => {
       }),
     useComments: () =>
       loaded({
-        comments: [],
+        comments: fixtures.comments,
         asOf: "2026-11-13T10:00:00.000+09:00",
         diffsSinceFull: 0,
       }),
@@ -241,6 +269,11 @@ const queryLabel = (name: string | RegExp) =>
 const lineRoles = () =>
   [...document.querySelectorAll("[data-transition-line]")].map((line) =>
     line.getAttribute("data-transition-line"),
+  );
+const threadButton = (body: string) =>
+  within(screen.getByRole("complementary", { name: "コメント一覧" })).getByRole(
+    "button",
+    { name: new RegExp(body) },
   );
 const openPicker = () =>
   fireEvent.click(screen.getByRole("button", { name: /画面のつながり/ }));
@@ -562,5 +595,30 @@ describe("ReviewPage の画面のつながり", () => {
       "Shop/Done",
       "Guide/Top",
     ]);
+  });
+
+  test("[正常系]つながる画面だけ: たどれない画面のスレッドを開くと、「つながる画面だけ」を切ってその画面を並べる", () => {
+    open(LIST);
+    openPicker();
+    fireEvent.click(reachableOnly());
+    expect(canvasTitles()).not.toContain("Shop/Admin");
+
+    fireEvent.click(threadButton("管理画面の指摘"));
+
+    expect(canvasTitles()).toContain("Shop/Admin");
+    expect(reachableOnly().checked).toBe(false);
+  });
+
+  test("[正常系]つながる画面だけ: たどれる画面のスレッドを開くと、起点を残す", () => {
+    open(LIST);
+    openPicker();
+    fireEvent.click(reachableOnly());
+    const reachable = ["Shop/List", "Shop/Form", "Shop/Done", "Guide/Top"];
+    expect(canvasTitles()).toStrictEqual(reachable);
+
+    fireEvent.click(threadButton("完了画面の指摘"));
+
+    expect(canvasTitles()).toStrictEqual(reachable);
+    expect(reachableOnly().checked).toBe(true);
   });
 });

@@ -164,15 +164,15 @@ describe("fetchShots（useShots が読む、スクリーンショットの目録
   );
 
   test.each([
-    ["目録が無い（404）", new Response("", { status: 404 }), false],
-    ["置き場が 403 で返す", new Response("", { status: 403 }), false],
-    ["サーバーの誤り（500）", new Response("", { status: 500 }), true],
-    ["通信に失敗した", new TypeError("Failed to fetch"), true],
-    ["JSON として読めない", new Response("<html>", { status: 200 }), true],
-    ["目録の形が違う", Response.json({ version: 2, shots: [shot] }), true],
+    ["目録が無い（404）", false, new Response("", { status: 404 })],
+    ["置き場が 403 で返す", false, new Response("", { status: 403 })],
+    ["サーバーの誤り（500）", true, new Response("", { status: 500 })],
+    ["通信に失敗した", true, new TypeError("Failed to fetch")],
+    ["JSON として読めない", true, new Response("<html>", { status: 200 })],
+    ["目録の形が違う", true, Response.json({ version: 2, shots: [shot] })],
   ])(
     "[異常系]%s ときの、読めなかったかの印は %s（読めなければ「画像を撮っていない」と言わない）",
-    async (_, response, failed) => {
+    async (_, failed, response) => {
       respond(response);
 
       const catalog = await fetchShots(base, "shop", "public");

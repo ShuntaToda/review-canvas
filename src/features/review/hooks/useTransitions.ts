@@ -117,7 +117,13 @@ export const useTransitions = ({
      * スレッドの画面へ移るときの起点を決めて置き、その起点を返す（null は切った）。
      * いまのページで、いまの起点からたどれる画面なら起点を残し、そうでなければ切る（隠れた画面のスレッドも選べるように）
      */
-    rootForThread: (storyId: string, samePage: boolean): string | null => {
+    keepRootForThread: ({
+      storyId,
+      samePage,
+    }: {
+      storyId: string;
+      samePage: boolean;
+    }): string | null => {
       const next =
         samePage && reachable?.has(storyId) === true ? reachableRoot : null;
       setReachableRoot(next);

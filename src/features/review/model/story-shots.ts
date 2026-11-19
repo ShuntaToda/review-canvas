@@ -816,7 +816,10 @@ export const buildShotCatalog = (
   };
 };
 
-/** 画像の無い Storybook（目録が無い・読めない） */
+/**
+ * 目録が無い（撮っていない）Storybook。読めなかったときは FAILED_SHOT_CATALOG。
+ * 読み込み中は使わない（作業の画面は目録を読み終えてから出す）
+ */
 export const EMPTY_SHOT_CATALOG = buildShotCatalog(null, "");
 
 /** 目録を読めなかった Storybook（画像は無いものとして並べる） */

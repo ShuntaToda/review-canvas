@@ -718,10 +718,10 @@ export const ReviewWorkspace = ({
       // 「変わった画面だけ」で隠れているときも外す
       const revealed = branchCompare.reveal(root.source, story.id);
       // 「つながる画面だけ」で隠れているときも外す（コメント一覧は絞らないので、隠れた画面のスレッドも選べる）
-      const nextReachableRoot = transitions.rootForThread(
-        story.id,
-        root.source === page,
-      );
+      const nextReachableRoot = transitions.keepRootForThread({
+        storyId: story.id,
+        samePage: root.source === page,
+      });
       setShowComponents(next.showComponents);
       setQuery(next.query);
       setStoryScope(next.scope);
