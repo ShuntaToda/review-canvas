@@ -7,7 +7,7 @@
 //   （infra/scripts/branch-storybooks.ts）と同じ印・同じ script の src と属性を、開いたときに書く（inject.ts の injectRuntimeBridge）。
 //   つないでよいオリジンは、写しを開いた所（app の Storybook）のオリジンで、どこで開くかは組み立てのときに分からないので、開いたときの location.origin を入れる
 //
-//   node --experimental-strip-types scripts/stage-story-storybooks.mjs   （先に build:storybook:shop と build:bridge）
+//   pnpm run stage:storybook:app   （先に build:storybook:shop と build:bridge）
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

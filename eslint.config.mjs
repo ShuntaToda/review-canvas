@@ -264,8 +264,8 @@ const SRC_FILE_WITHOUT_IMPORTS_MESSAGE =
 const SCRIPT_SRC_IMPORT_MESSAGE =
   "スクリプト（scripts/*.mjs）から読める画面（src/）のファイルは、eslint.config.base.mjs の SRC_FILES_READ_BY_SCRIPTS に挙げたもの（何も import しないファイル。拡張子 .ts まで書く）だけです。Node は別名（@/）・拡張子の無い import を解けません。ほかの処理が要るなら、そのファイルへ移すか、一覧に足して import 無しにしてください。";
 
-/** スクリプトから読んでよくない画面（src/）のファイル（一覧の外。相対パスで ../src/…） */
-const SCRIPT_SRC_IMPORT_REGEX = `^\\.\\./src/(?!(${SRC_FILES_READ_BY_SCRIPTS.map(
+/** スクリプトから読んでよくない画面（src/）のファイル（一覧の外。../src/…・./../src/… のどちらでも。infra/eslint.config.mjs と同じ形） */
+const SCRIPT_SRC_IMPORT_REGEX = `(^|/)src/(?!(${SRC_FILES_READ_BY_SCRIPTS.map(
   (file) => file.replace(/^src\//, "").replaceAll(".", "\\."),
 ).join("|")})$)`;
 

@@ -29,7 +29,7 @@ const published = (branch: string, commit: string, builtAt: string) => ({
   storybooks: [{ source: STORY_SOURCE, available: true }],
 });
 
-/** /api/meta の応答。並べるのはサンプルのショップ 1 つ（撮った幅は 375 だけ。部品も外さない） */
+/** /api/meta の応答。並べるのはサンプルのショップ 1 つ（撮った幅は 375 だけ）。部品（Components/）は本物の設定と同じく既定では外す */
 export const storyMeta: ReviewMeta = {
   defaultBranch: DEFAULT_BRANCH,
   branches: [
@@ -46,8 +46,7 @@ export const storyMeta: ReviewMeta = {
         baseHeight: 812,
       },
     ],
-    // 部品（Components/Button）も並べる（「見せる範囲を絞った」で、範囲の外の画面が消えるのを見せるため）
-    excludeTitlePrefixes: [],
+    excludeTitlePrefixes: ["Components/"],
   },
 };
 

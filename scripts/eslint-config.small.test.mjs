@@ -298,13 +298,13 @@ describe("infra・スクリプトからも読む画面（src/）のファイル"
     for (const allowed of [
       ...SRC_FILES_READ_BY_SCRIPTS.map((srcFile) => `../${srcFile}`),
       "./check-issue-text.mjs",
-      "../api/infrastructure/config/review-canvas-config.ts",
     ]) {
       expect(await refused(allowed)).toStrictEqual([]);
       expect(await dynamic(allowed)).toStrictEqual([]);
     }
     for (const other of [
       "../src/features/review/model/layout.ts",
+      "./../src/features/review/model/layout.ts",
       "../src/features/review/stories/story-branches",
       "../src/features/review/stories/story-branches.tsx",
       "../src/main.tsx",

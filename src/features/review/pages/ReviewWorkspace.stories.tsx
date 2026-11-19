@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { ReviewStory } from "../stories/ReviewStory";
 import {
@@ -15,8 +15,16 @@ import {
   waitForText,
 } from "../stories/story-play";
 
-/** 範囲（Shop）の外の、部品の画面の画像の名前 */
+/** 部品の画面（設定の excludeTitlePrefixes の Components/ で、既定では並ばない。範囲 Shop の外） */
 const COMPONENT_SHOT = "Components/Button / Default";
+
+/** 部品の画面が、一覧（画面の名前の title）にもキャンバス（画像）にも並んでいない */
+const expectNoComponent = async (canvas: StoryContext["canvas"]) => {
+  await expect(
+    canvas.queryByRole("img", { name: COMPONENT_SHOT }),
+  ).not.toBeInTheDocument();
+  await expect(canvas.queryByTitle(COMPONENT_SHOT)).not.toBeInTheDocument();
+};
 
 const withComments = {
   msw: {
@@ -36,7 +44,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** コメントが 0 件 */
+/** コメントが 0 件。部品（Components/Button）は既定では並ばない */
 export const Empty: Story = {
   name: "コメントなし",
   parameters: { msw: { handlers: reviewHandlers() } },
@@ -45,17 +53,18 @@ export const Empty: Story = {
     await expect(
       await waitForText(canvas, /コメントはまだありません/),
     ).toBeVisible();
+    await expectNoComponent(canvas);
     await settle();
   },
 };
 
-/** 未解決・確認待ち・解決済みが混ざる（返信のあるスレッドを 1 つ含む）。範囲を絞らないので、部品（Components/Button）も並ぶ */
+/** 未解決・確認待ち・解決済みが混ざる（返信のあるスレッドを 1 つ含む）。部品（Components/Button）は既定では並ばない */
 export const WithComments: Story = {
   name: "コメントあり",
   play: async ({ canvas }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
-    await waitForShot(canvas, COMPONENT_SHOT);
     await waitForText(canvas, "ボタンの文言を「カートに追加」にそろえたいです");
+    await expectNoComponent(canvas);
     await settle();
   },
 };
@@ -97,18 +106,20 @@ export const Drafting: Story = {
 };
 
 /**
- * 見せる範囲を URL（?scope=）でフォルダ Shop に絞って開く。範囲はタイトルより上のフォルダだけ（model/story-tree.ts の isTitleInScope）。
- * Shop の下の画面（Shop/<画面>）だけが並び、範囲の外の部品（Components/Button）は並ばず、範囲の印（「表示: Shop」）が出る
+ * 見せる範囲を URL（?scope=）でフォルダ Shop に絞って開き、「部品も表示」に入れたところ。範囲はタイトルより上のフォルダだけ（model/story-tree.ts の isTitleInScope）。
+ * 部品を出す設定にしても、範囲の外の部品（Components/Button）は一覧にもキャンバスにも並ばず、Shop の下の画面（Shop/<画面>）だけが並び、範囲の印（「表示: Shop」）が出る
  */
 export const Scoped: Story = {
   name: "見せる範囲を絞った",
   parameters: { reviewUrl: "?scope=Shop" },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, userEvent }) => {
     await waitForShot(canvas, "Shop/AdminOrders / Default");
     await expect(await waitForText(canvas, "表示: Shop")).toBeVisible();
-    await expect(
-      canvas.queryByRole("img", { name: COMPONENT_SHOT }),
-    ).not.toBeInTheDocument();
+    const showComponents = canvas.getByRole("checkbox", { name: "部品も表示" });
+    await userEvent.click(showComponents);
+    await expect(showComponents).toBeChecked();
+    await waitForShot(canvas, "Shop/ProductList / Default");
+    await expectNoComponent(canvas);
     await settle();
   },
 };

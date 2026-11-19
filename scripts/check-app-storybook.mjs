@@ -6,7 +6,7 @@
 //   動く画面（iframe）は、置き場に写したサンプルのショップ（scripts/stage-story-storybooks.mjs）の iframe.html だけ（CSP が止めたものも数える）
 // ビルド結果を自分の端末（127.0.0.1）で配り、ヘッドレスの Chromium（Playwright）で 1 つずつ開く。
 //
-//   node scripts/check-app-storybook.mjs [--dir storybook-static] [--shots <撮った画像を書く場所>]
+//   pnpm run check:storybook:app [--dir storybook-static] [--shots <撮った画像を書く場所>]
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
