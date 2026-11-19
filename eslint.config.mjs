@@ -200,6 +200,12 @@ const featureZones = dirNamesIn("src/features").map((name) => ({
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
+/** jsx-a11y の recommended が渡しているルールのオプション（上書きするときに既定を保つ） */
+const jsxA11yRecommendedOptions = (rule) => {
+  const [, options] = jsxA11y.flatConfigs.recommended.rules[`jsx-a11y/${rule}`];
+  return options;
+};
+
 const APP_GLOBAL_ALIAS_MESSAGE =
   "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。";
 
@@ -663,6 +669,32 @@ export default tseslint.config(
   forApp(react.configs.flat["jsx-runtime"]),
   forApp(jsxA11y.flatConfigs.recommended),
   forApp(reactHooks.configs.flat["recommended-latest"]),
+  // フォーカスできる separator はウィジェット（WAI-ARIA 1.2 https://www.w3.org/TR/wai-aria-1.2/#separator ・window splitter のパターン）。
+  // jsx-a11y は操作しない要素として扱うので、サイドバーの境目（<hr>）にだけ、フォーカスと矢印キーを許す（要素ごとの許可は role ではなく要素の名前で引く）
+  {
+    files: ["src/features/review/components/ResizableSidebar.tsx"],
+    rules: {
+      "jsx-a11y/no-noninteractive-tabindex": [
+        "error",
+        {
+          ...jsxA11yRecommendedOptions("no-noninteractive-tabindex"),
+          tags: [
+            ...jsxA11yRecommendedOptions("no-noninteractive-tabindex").tags,
+            "hr",
+          ],
+        },
+      ],
+      "jsx-a11y/no-noninteractive-element-interactions": [
+        "error",
+        {
+          ...jsxA11yRecommendedOptions(
+            "no-noninteractive-element-interactions",
+          ),
+          hr: ["onKeyDown"],
+        },
+      ],
+    },
+  },
   {
     files: appFiles,
     plugins: { tailwindcss },
@@ -678,38 +710,6 @@ export default tseslint.config(
       "react/self-closing-comp": ["error", { component: true, html: true }],
       "react/jsx-curly-brace-presence": "error",
       "react/prop-types": "off",
-      // フォーカスできる separator はウィジェット（WAI-ARIA 1.2 https://www.w3.org/TR/wai-aria-1.2/#separator ・window splitter のパターン）。
-      // jsx-a11y は操作しない要素として扱う。recommended の既定を保ったまま、境目の <hr>（もともと separator）にだけ、フォーカスと矢印キーを許す
-      // （no-noninteractive-element-interactions の個別の許可は role ではなく要素の名前で引くので、role="separator" の div ではなく hr にする）
-      "jsx-a11y/no-noninteractive-tabindex": [
-        "error",
-        {
-          tags: ["hr"],
-          roles: ["tabpanel"],
-          allowExpressionValues: true,
-        },
-      ],
-      "jsx-a11y/no-noninteractive-element-interactions": [
-        "error",
-        {
-          handlers: [
-            "onClick",
-            "onError",
-            "onLoad",
-            "onMouseDown",
-            "onMouseUp",
-            "onKeyPress",
-            "onKeyDown",
-            "onKeyUp",
-          ],
-          alert: ["onKeyUp", "onKeyDown", "onKeyPress"],
-          body: ["onError", "onLoad"],
-          dialog: ["onKeyUp", "onKeyDown", "onKeyPress"],
-          iframe: ["onError", "onLoad"],
-          img: ["onError", "onLoad"],
-          hr: ["onKeyDown"],
-        },
-      ],
       "@typescript-eslint/no-misused-promises": "off",
       "import/no-restricted-paths": [
         "error",
