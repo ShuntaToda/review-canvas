@@ -73,11 +73,11 @@ const fixtures = vi.hoisted(() => {
     },
   };
   const rect = { index: 0, x: 20, y: 100, width: 120, height: 40 };
-  const shotOf = (id: string, width: number) => ({
+  const shotOf = (id: string, width: number, changed: boolean) => ({
     storyId: id,
     width,
     height: 800,
-    path: `review-canvas-shots/${id}-${String(width)}-0123456789abcdef.png`,
+    path: `review-canvas-shots/${id}-${String(width)}-${changed ? "fedcba9876543210" : "0123456789abcdef"}.png`,
     transitions: [rect],
   });
   const transitions = {
@@ -95,14 +95,15 @@ const fixtures = vi.hoisted(() => {
   const state = {
     manifest: "transitions" as "transitions" | "old" | "none" | "failed",
   };
-  const manifest = () =>
+  /** changed: 画像の名前（中身のハッシュ）が既定のブランチと違う画面 */
+  const manifest = (changed: ReadonlyArray<string> = []) =>
     state.manifest === "none" || state.manifest === "failed"
       ? null
       : {
           version: 1,
           shots: stories.flatMap((s) => [
-            shotOf(s.id, 375),
-            shotOf(s.id, 1280),
+            shotOf(s.id, 375, changed.includes(s.id)),
+            shotOf(s.id, 1280, changed.includes(s.id)),
           ]),
           playFunctions: {},
           ...(state.manifest === "transitions" ? { transitions } : {}),
@@ -134,6 +135,7 @@ const fixtures = vi.hoisted(() => {
   const comments = [
     comment("01", "shop-admin--default", "管理画面の指摘"),
     comment("02", "shop-done--default", "完了画面の指摘"),
+    comment("03", "shop-list--default", "一覧の指摘"),
   ];
   return { stories, blogStories, meta, state, manifest, comments };
 });
@@ -162,13 +164,20 @@ vi.mock("../hooks/useReviewData", async (importOriginal) => {
         shop: { kind: "ok" as const, stories: fixtures.stories },
         blog: { kind: "ok" as const, stories: fixtures.blogStories },
       }),
-    useShots: () =>
+    // feature/cart では Shop/List の画像だけが既定のブランチ（main）と違う
+    useShots: (base: string) =>
       loaded({
         shop:
           fixtures.state.manifest === "failed"
             ? shots.FAILED_SHOT_CATALOG
             : shots.buildShotCatalog(
-                shots.parseShotsManifest(fixtures.manifest()),
+                shots.parseShotsManifest(
+                  fixtures.manifest(
+                    base.includes("/sb/feature/cart/")
+                      ? ["shop-list--default"]
+                      : [],
+                  ),
+                ),
                 "https://sb.example.com/sb/main/shop/",
               ),
         blog: shots.buildShotCatalog(
@@ -211,7 +220,13 @@ vi.mock(
         linkHighlight,
         containerRef,
         onCameraChange,
+        onPlace,
       }: {
+        onPlace: (
+          storyId: string,
+          point: { x: number; y: number },
+          anchor: null,
+        ) => void;
         rows: ReadonlyArray<RowPlacement>;
         camera: Camera;
         linkHighlight: LinkHighlight | null;
@@ -223,6 +238,16 @@ vi.mock(
           data-testid="canvas"
           data-camera={JSON.stringify(camera)}
           data-highlight={linkHighlight?.storyId ?? ""}
+          data-frames={JSON.stringify(
+            Object.fromEntries(
+              rows.flatMap((row) =>
+                row.frames.map((frame) => [
+                  frame.story.id,
+                  { x: frame.x, y: frame.y },
+                ]),
+              ),
+            ),
+          )}
         >
           <ul aria-label="キャンバスの画面">
             {rows.map((row) => (
@@ -240,6 +265,26 @@ vi.mock(
             }
           >
             キャンバスを動かす
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onCameraChange((current) => ({
+                ...current,
+                x: current.x - 10,
+                y: current.y - 10,
+              }))
+            }
+          >
+            キャンバスを少し動かす
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onPlace("shop-list--default", { x: 10, y: 10 }, null)
+            }
+          >
+            一覧にピンを置く
           </button>
         </div>
       ),
@@ -270,6 +315,20 @@ const lineRoles = () =>
   [...document.querySelectorAll("[data-transition-line]")].map((line) =>
     line.getAttribute("data-transition-line"),
   );
+/** 画面の左上の、キャンバスの上での位置（画面上） */
+const screenPositionOf = (storyId: string) => {
+  const camera = JSON.parse(canvas().dataset["camera"] ?? "{}") as Camera;
+  const frames = JSON.parse(canvas().dataset["frames"] ?? "{}") as Record<
+    string,
+    { x: number; y: number } | undefined
+  >;
+  const frame = frames[storyId];
+  if (frame === undefined) throw new Error(`${storyId} が並んでいません`);
+  return {
+    x: frame.x * camera.zoom + camera.x,
+    y: frame.y * camera.zoom + camera.y,
+  };
+};
 const threadButton = (body: string) =>
   within(screen.getByRole("complementary", { name: "コメント一覧" })).getByRole(
     "button",
@@ -620,5 +679,70 @@ describe("ReviewPage の画面のつながり", () => {
 
     expect(canvasTitles()).toStrictEqual(reachable);
     expect(reachableOnly().checked).toBe(true);
+  });
+
+  test("[正常系]札で飛ぶと、開いているスレッドを閉じる", () => {
+    open(LIST);
+    fireEvent.click(threadButton("一覧の指摘"));
+    expect(urlParams().get("comment")).toBe("03");
+    expect(screen.queryByRole("dialog", { name: /#\d/ })).not.toBeNull();
+
+    fireEvent.click(label("在庫があるとき → Shop/Form／Default"));
+
+    expect(urlParams().has("comment")).toBe(false);
+    expect(screen.queryByRole("dialog", { name: /#\d/ })).toBeNull();
+  });
+
+  test("[正常系]札で飛ぶと、書きかけの新しいコメントを閉じる", () => {
+    open(LIST);
+    fireEvent.click(screen.getByRole("button", { name: "一覧にピンを置く" }));
+    expect(
+      screen.queryByRole("dialog", { name: "新しいコメント" }),
+    ).not.toBeNull();
+
+    fireEvent.click(label("在庫があるとき → Shop/Form／Default"));
+
+    expect(screen.queryByRole("dialog", { name: "新しいコメント" })).toBeNull();
+  });
+
+  test("[正常系]「変わった画面だけ」で隠れた行き先は、押すとそれを外して飛び、戻っても外したまま", () => {
+    open(`?branch=feature/cart&page=shop&story=shop-list--default`);
+    const changedOnly = screen.getByRole<HTMLInputElement>("checkbox", {
+      name: "変わった画面だけ",
+    });
+    fireEvent.click(changedOnly);
+    expect(canvasTitles()).toStrictEqual(["Shop/List"]);
+
+    fireEvent.click(
+      label("在庫があるとき → Shop/Form／Default（この表示にありません）"),
+    );
+    expect(changedOnly.checked).toBe(false);
+    expect(canvasTitles()).toContain("Shop/Form");
+    expect(urlParams().get("story")).toBe("shop-form--default");
+
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
+    expect(changedOnly.checked).toBe(false);
+    expect(canvasTitles()).toContain("Shop/Form");
+  });
+
+  test("[正常系]「つながる画面だけ」を入れても切っても、選んだ画面は画面の上の同じ位置にとどまる", () => {
+    open("?page=shop&story=shop-done--default");
+    // 開いたときの寄せ方から外し、手で動かした見え方にする
+    fireEvent.click(
+      screen.getByRole("button", { name: "キャンバスを少し動かす" }),
+    );
+    const before = screenPositionOf("shop-done--default");
+    // 並びの 3 段目（Shop/List・Shop/Form の下）
+    expect(canvasTitles().indexOf("Shop/Done")).toBe(2);
+
+    openPicker();
+    fireEvent.click(reachableOnly());
+    // Shop/Done は行き止まりなので、Shop/Done だけが 1 段目に並ぶ
+    expect(canvasTitles()).toStrictEqual(["Shop/Done"]);
+    expect(screenPositionOf("shop-done--default")).toStrictEqual(before);
+
+    fireEvent.click(reachableOnly());
+    expect(canvasTitles().indexOf("Shop/Done")).toBe(2);
+    expect(screenPositionOf("shop-done--default")).toStrictEqual(before);
   });
 });
