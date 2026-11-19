@@ -61,8 +61,6 @@ export const compareMarksOf = (
 
 /** 比べる画面に出すもの */
 export type CompareView =
-  /** 比べる相手の目録を読んでいる（相手を替えた直後） */
-  | { kind: "loading" }
   /** 比べる相手に画像の目録が無い */
   | { kind: "no-base-manifest" }
   /** 今のブランチに画像の目録が無い */
@@ -138,13 +136,15 @@ export const compareBaseOptions = ({
 /** URL の base= で「比較しない」を表す値（git のブランチ名は「-」で始められないので、ブランチと取り違えない） */
 export const NO_COMPARE = "-";
 
-/** 初めの相手。既定のブランチ以外を見ているときは既定のブランチ（置いていなければ選べるものの先頭）、既定のブランチを見ているときは比べない（undefined） */
+/** 初めの相手。既定のブランチ以外を見ていて既定のブランチを置いていれば既定のブランチ、それ以外（既定のブランチを見ている・置いていない）は比べない（undefined） */
 const initialCompareBase = ({
   current,
   defaultBranch,
   options,
 }: CompareBaseContext): string | undefined =>
-  current === defaultBranch ? undefined : options[0];
+  current !== defaultBranch && options.includes(defaultBranch)
+    ? defaultBranch
+    : undefined;
 
 type CompareBaseContext = {
   current: string;

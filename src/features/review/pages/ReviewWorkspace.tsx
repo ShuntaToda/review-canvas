@@ -173,7 +173,7 @@ type ReviewWorkspaceProps = {
   /** 比べる相手に選べるブランチ（置いてあるブランチから今のブランチを除いたもの） */
   compareBaseOptions: ReadonlyArray<string>;
   /** 比べる相手を選んだ（「比較しない」は NO_COMPARE） */
-  onCompareBaseChange: (base: string) => void;
+  onCompareChoiceChange: (base: string) => void;
   /** ページごとの、比べる相手の画像（見比べる。比べないとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
@@ -200,7 +200,7 @@ export const ReviewWorkspace = ({
   compareBase,
   compareBaseParam,
   compareBaseOptions,
-  onCompareBaseChange,
+  onCompareChoiceChange,
   baseShots,
   initialUrl,
   openedBy,
@@ -1058,7 +1058,7 @@ export const ReviewWorkspace = ({
         branchOptions={branchOptions}
         compareBase={compareBase}
         compareBaseOptions={compareBaseOptions}
-        onCompareBaseChange={onCompareBaseChange}
+        onCompareChoiceChange={onCompareChoiceChange}
         onBranchChange={(next) => {
           if (next !== branch) {
             onBranchChange(next, page, centerStoryId, storyScope);

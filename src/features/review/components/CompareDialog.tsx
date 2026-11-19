@@ -22,7 +22,6 @@ const compareMessages = {
   /** 新しい画面（比べる相手が無い）で、今の幅の画像も無い。幅を替えても比べられないので、切り替えは勧めない */
   missingWidthOnly: (width: number) => `${String(width)}px の画像がありません`,
   loadFailed: "画像を読み込めませんでした",
-  loading: "読み込み中…",
 } as const;
 
 /** 画像ごと（URL ごと）の読み込みの様子（読み込み直すたびに attempt を増やして img を作り直す。相手を替えたら別の画像として数える） */
@@ -87,14 +86,6 @@ export const CompareDialog = ({
 
   const body = (() => {
     switch (view.kind) {
-      case "loading":
-        return (
-          <SideBySide
-            labels={labels}
-            base={<Message>{compareMessages.loading}</Message>}
-            head={<Message>{compareMessages.loading}</Message>}
-          />
-        );
       case "no-base-manifest":
         return <Message>{compareMessages.noBaseManifest(baseBranch)}</Message>;
       case "no-head-manifest":

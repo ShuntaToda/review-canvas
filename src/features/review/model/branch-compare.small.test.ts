@@ -247,13 +247,13 @@ describe("compareBaseOptions・resolveCompareBase", () => {
         published: [{ branch: "main" }],
       }),
     ).toStrictEqual([]);
-    const none = { current: "main", defaultBranch: "main", options: [] };
-    expect(resolveCompareBase(undefined, none)).toBeUndefined();
-    expect(resolveCompareBase("feature/a", none)).toBeUndefined();
+    const noOptions = { current: "main", defaultBranch: "main", options: [] };
+    expect(resolveCompareBase(undefined, noOptions)).toBeUndefined();
+    expect(resolveCompareBase("feature/a", noOptions)).toBeUndefined();
     expect(
-      resolveCompareBase(undefined, { ...none, current: "feature/a" }),
+      resolveCompareBase(undefined, { ...noOptions, current: "feature/a" }),
     ).toBeUndefined();
-    expect(compareBaseParam(undefined, none)).toBeUndefined();
+    expect(compareBaseParam(undefined, noOptions)).toBeUndefined();
   });
 
   const onFeature = {
@@ -272,10 +272,12 @@ describe("compareBaseOptions・resolveCompareBase", () => {
     expect(resolveCompareBase(undefined, onDefault)).toBeUndefined();
   });
 
-  test("[境界値]既定のブランチを置いていなければ、初めは選べるものの先頭", () => {
-    expect(
-      resolveCompareBase(undefined, { ...onFeature, options: ["feature/b"] }),
-    ).toBe("feature/b");
+  test("[境界値]既定のブランチを置いていなければ、既定のブランチ以外を見ていても初めは比べない", () => {
+    const withoutDefault = { ...onFeature, options: ["feature/b"] };
+    expect(resolveCompareBase(undefined, withoutDefault)).toBeUndefined();
+    expect(resolveCompareBase("main", withoutDefault)).toBeUndefined();
+    expect(compareBaseParam(undefined, withoutDefault)).toBeUndefined();
+    expect(compareBaseParam("feature/b", withoutDefault)).toBe("feature/b");
   });
 
   test("[正常系]選んだ相手が選べるものにあればそれ、「比較しない」なら比べず、無ければ（知らない・今のブランチと同じ）初めの状態", () => {
@@ -287,7 +289,7 @@ describe("compareBaseOptions・resolveCompareBase", () => {
     expect(resolveCompareBase("main", onDefault)).toBeUndefined();
   });
 
-  test("[正常系]URL の base= は初めの状態と違うときだけ載せ、初めは比べるのに比べないときは none", () => {
+  test("[正常系]URL の base= は初めの状態と違うときだけ載せ、初めは比べるのに比べないときは NO_COMPARE（-）", () => {
     expect(compareBaseParam("main", onFeature)).toBeUndefined();
     expect(compareBaseParam("feature/b", onFeature)).toBe("feature/b");
     expect(compareBaseParam(undefined, onFeature)).toBe(NO_COMPARE);

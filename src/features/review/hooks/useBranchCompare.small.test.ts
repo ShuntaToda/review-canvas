@@ -239,7 +239,7 @@ describe("useBranchCompare", () => {
     expect(result.current.openStoryId).toBe(order.id);
   });
 
-  test("[正常系]相手を替えて読み直すあいだは、印と「変わった画面だけ」を出さず、比べる画面は開いたまま読み込み中にし、読み終えると出す", () => {
+  test("[正常系]相手を替えて読み直すあいだは、印と「変わった画面だけ」を出さず、比べるボタンは出したまま比べる画面は開かず、読み終えると出す", () => {
     const { result, rerender } = renderCompare({
       baseBranch: "main",
       initialStoryId: list.id,
@@ -251,8 +251,8 @@ describe("useBranchCompare", () => {
     expect(result.current.available).toBe(false);
     expect(result.current.marksOf([list.id, order.id]).size).toBe(0);
     expect(result.current.canOpen).toBe(true);
-    expect(result.current.openStoryId).toBe(list.id);
-    expect(result.current.viewOf(list.id)).toStrictEqual({ kind: "loading" });
+    expect(result.current.openStoryId).toBeUndefined();
+    expect(result.current.urlStoryId).toBe(list.id);
 
     // feature/b は一覧も同じ（375 の名前が z）なので、一覧は変わっていない
     const featureB = {
@@ -268,6 +268,18 @@ describe("useBranchCompare", () => {
     expect([...result.current.marksOf(stories.map((s) => s.id))]).toStrictEqual(
       [[order.id, "new"]],
     );
+    expect(result.current.openStoryId).toBe(list.id);
     expect(result.current.viewOf(list.id).kind).toBe("ready");
+  });
+
+  test("[正常系]相手を替えたら「変わった画面だけ」を外し、元の相手に戻しても外れたまま", () => {
+    const { result, rerender } = renderCompare({ baseBranch: "main" });
+    act(() => result.current.setChangedOnly(true));
+
+    rerender({ baseBranch: "feature/b" });
+    expect(result.current.changedOnly).toBe(false);
+
+    rerender({ baseBranch: "main" });
+    expect(result.current.changedOnly).toBe(false);
   });
 });

@@ -16,10 +16,10 @@ const NO_MARKS: ReadonlyMap<string, CompareMark> = new Map();
 
 /**
  * 比べる相手のブランチとの見比べ（一覧の印・「変わった画面だけ」・比べる画面を開いている画面）。
- * 「変わった画面だけ」は覚えず、ブランチ・ページ・幅を替えたら外す（入れたときの組み合わせと今が違えば、その場で外す。戻しても入り直さない）。
+ * 「変わった画面だけ」は覚えず、ブランチ・ページ・幅・比べる相手を替えたら外す（入れたときの組み合わせと今が違えば、その場で外す。戻しても入り直さない）。
  * 比べる相手の目録を読み終えるまで（base が null）は、印・「変わった画面だけ」を出さない。
  * はじめて読み終えるまでは、比べるボタン・比べる画面も出さない（URL の compare= は捨てずに持ち、読み終えたら開く）。
- * 一度読み終えたあとに相手を替えたときは、比べる画面は開いたまま「読み込み中…」を出す
+ * 一度読み終えたあとに相手を替えて読み直すあいだは、比べるボタンは出したまま、比べる画面は開かない（相手はヘッダーで替え、比べる画面はモーダルなので、開いたまま替わることは無い）
  */
 export const useBranchCompare = ({
   baseBranch,
@@ -49,9 +49,9 @@ export const useBranchCompare = ({
   const [loadedOnce, setLoadedOnce] = useState(loaded);
   if (loaded && !loadedOnce) setLoadedOnce(true);
   const ready = enabled && (loaded || loadedOnce);
-  const key = JSON.stringify([branch, page, width]);
+  const key = JSON.stringify([branch, page, width, baseBranch]);
   const [changedOnlyKey, setChangedOnlyKey] = useState<string | null>(null);
-  // ブランチ・ページ・幅を替えたら外す（描画の中で合わせる。React の「前の値から state を合わせる」形）
+  // ブランチ・ページ・幅・相手を替えたら外す（描画の中で合わせる。React の「前の値から state を合わせる」形）
   if (changedOnlyKey !== null && changedOnlyKey !== key) {
     setChangedOnlyKey(null);
   }
@@ -97,13 +97,13 @@ export const useBranchCompare = ({
       setChangedOnlyKey(null);
       return true;
     },
-    /** 比べる画面に出すもの（いまのページ・幅。相手の目録を読んでいるあいだは読み込み中） */
+    /** 比べる画面に出すもの（いまのページ・幅） */
     viewOf: (storyId: string): CompareView =>
-      loaded ? compareViewOf(pair, storyId, width) : { kind: "loading" },
+      compareViewOf(pair, storyId, width),
     /** URL に載せる比べる画面（読み終える前も載せたまま。比べる相手が無ければ載せない） */
     urlStoryId: enabled ? storyId : undefined,
-    /** 比べる画面を開いている画面（比べる相手が無い・はじめて読み終える前は開かない） */
-    openStoryId: ready ? storyId : undefined,
+    /** 比べる画面を開いている画面（比べる相手が無い・相手の目録を読み終える前は開かない） */
+    openStoryId: enabled && loaded ? storyId : undefined,
     open: (next: string) => setStoryId(next),
     close: () => setStoryId(undefined),
   };

@@ -74,7 +74,7 @@ export const ReviewPage = ({
   const published =
     meta.data?.branches.find((b) => b.branch === branch) ?? null;
   // iframe・リンク・ストーリーの一覧は Storybook のオリジンから読む（キャンバスのオリジンでは配らない）
-  const base = `${storybookOrigin}${published?.basePath ?? DEFAULT_STORYBOOK_BASE}`;
+  const storybookBase = `${storybookOrigin}${published?.basePath ?? DEFAULT_STORYBOOK_BASE}`;
   const available = (source: StorySource): boolean =>
     published?.storybooks.find((s) => s.source === source)?.available ?? false;
   // 並べるページ（設定ファイルの Storybook）。置いてあるページだけストーリーの一覧を読む
@@ -85,13 +85,13 @@ export const ReviewPage = ({
   const availableIds = catalog.ids.filter(available);
   // ログイン連動のときは、Storybook の配信を読むためのクッキーをもらってから、一覧・目録・iframe・画像を読む
   const session = useStorybookSession(storybookAccess);
-  const stories = useStories(base, availableIds, session);
+  const stories = useStories(storybookBase, availableIds, session);
   // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
-  const shots = useShots(base, availableIds, session);
+  const shots = useShots(storybookBase, availableIds, session);
   const comments = useComments(branch);
-  // 比べる相手の選び方（URL の ?base=。none は比較しない。選べるもの（置いてあるブランチから今のブランチを除いたもの）に無ければ初めの状態）。
+  // 比べる相手の選び方（URL の ?base=。NO_COMPARE（-）は比較しない。選べるもの（置いてあるブランチから今のブランチを除いたもの）に無ければ初めの状態）。
   // ブランチを切り替えても作業の画面の外で持ち、新しいブランチでも選べれば保つ
-  const [baseChoice, setBaseChoice] = useState(urlState.base);
+  const [compareChoice, setCompareChoice] = useState(urlState.base);
   const baseOptionsOf = (current: string | undefined) =>
     meta.data === undefined || current === undefined
       ? []
@@ -107,7 +107,7 @@ export const ReviewPage = ({
     defaultBranch: meta.data?.defaultBranch ?? "",
     options: baseOptions,
   };
-  const compareBase = resolveCompareBase(baseChoice, baseContext);
+  const compareBase = resolveCompareBase(compareChoice, baseContext);
   const basePublished =
     meta.data?.branches.find((b) => b.branch === compareBase) ?? null;
   // 比べる相手の画像の目録（相手を替えたら読み直す）
@@ -209,7 +209,7 @@ export const ReviewPage = ({
 
   return (
     <SourcesContext value={catalog}>
-      <StorybookBaseContext value={base}>
+      <StorybookBaseContext value={storybookBase}>
         <ReviewWorkspace
           // ブランチを切り替えたら作り直す（カメラ・開いているスレッド・書きかけを持ち越さない）
           key={branch}
@@ -221,7 +221,9 @@ export const ReviewPage = ({
           onBranchChange={(next, page, story, storyScope) => {
             setSwitchedBranch(true);
             // 選んだ相手が新しいブランチでも選べれば保ち、選べなければ（同じブランチになった等）初めの状態に戻す
-            setBaseChoice(keepCompareChoice(baseChoice, baseOptionsOf(next)));
+            setCompareChoice(
+              keepCompareChoice(compareChoice, baseOptionsOf(next)),
+            );
             setUrlState({
               branch: next,
               page,
@@ -247,7 +249,7 @@ export const ReviewPage = ({
           compareBase={compareBase}
           compareBaseParam={compareBaseParam(compareBase, baseContext)}
           compareBaseOptions={baseOptions}
-          onCompareBaseChange={setBaseChoice}
+          onCompareChoiceChange={setCompareChoice}
           // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）
           baseShots={
             basePublished !== null && baseShots.data === undefined

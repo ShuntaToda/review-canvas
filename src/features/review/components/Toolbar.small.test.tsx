@@ -68,7 +68,7 @@ const renderToolbar = ({
         onBranchChange={() => undefined}
         compareBase={compareBaseOptions[0]}
         compareBaseOptions={compareBaseOptions}
-        onCompareBaseChange={() => undefined}
+        onCompareChoiceChange={() => undefined}
         userName="山田 太郎"
         onLogout={onLogout}
         onHelp={() => undefined}
@@ -83,17 +83,17 @@ const renderToolbar = ({
 describe("Toolbar", () => {
   test("[正常系]比べる相手を選べるときは「ブランチ」の左に「比較するブランチ」を出し、選べない（置いてあるブランチが 1 つだけ）ときは出さない", () => {
     renderToolbar({ compareBaseOptions: ["feature/a"] });
-    const picker = screen.getByRole("button", { name: "比較するブランチ" });
+    const picker = screen.getByRole("button", { name: /^比較するブランチ/ });
     const branch = screen.getByRole("combobox", { name: "ブランチ" });
     expect(
       picker.compareDocumentPosition(branch) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(picker.textContent).toBe("比較:feature/a");
+    expect(picker.textContent).toBe("比較するブランチ 比較: feature/a");
     cleanup();
 
     renderToolbar();
     expect(
-      screen.queryByRole("button", { name: "比較するブランチ" }),
+      screen.queryByRole("button", { name: /^比較するブランチ/ }),
     ).toBeNull();
   });
 

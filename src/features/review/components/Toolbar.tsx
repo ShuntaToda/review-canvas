@@ -42,7 +42,7 @@ type ToolbarProps = {
   /** 比べる相手に選べるブランチ（無ければ「比較するブランチ」を出さない） */
   compareBaseOptions: ReadonlyArray<string>;
   /** 比べる相手を選んだ（「比較しない」は NO_COMPARE） */
-  onCompareBaseChange: (choice: string) => void;
+  onCompareChoiceChange: (choice: string) => void;
   /** ログインしている人の表示名 */
   userName: string;
   onLogout: () => void;
@@ -69,7 +69,7 @@ export const Toolbar = ({
   onBranchChange,
   compareBase,
   compareBaseOptions,
-  onCompareBaseChange,
+  onCompareChoiceChange,
   userName,
   onLogout,
   onHelp,
@@ -141,9 +141,9 @@ export const Toolbar = ({
         {/* 置いてあるブランチが 1 つだけ（比べる相手が無い）なら出さない */}
         {compareBaseOptions.length > 0 && (
           <CompareBranchPicker
-            value={compareBase}
+            compareBase={compareBase}
             options={compareBaseOptions}
-            onChange={onCompareBaseChange}
+            onCompareChoiceChange={onCompareChoiceChange}
           />
         )}
         <label className="mr-1 flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:mr-0">
