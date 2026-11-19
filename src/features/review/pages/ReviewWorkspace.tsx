@@ -520,13 +520,14 @@ export const ReviewWorkspace = ({
     })}`;
   const copyLink = (state: UrlState) =>
     void copyLinkWithToast(shareUrl(state), showToast);
-  /** 画面の見出しの「この画面のリンクをコピー」（いまの幅も載せる） */
+  /** 画面の見出しの「この画面のリンクをコピー」（いまの幅と、見せる範囲も載せる） */
   const copyStoryLink = (storyId: string) =>
     void copyLinkWithToast(
       storyLinkUrl(window.location, {
         branch,
         defaultBranch,
         page,
+        scope: storyScope,
         story: storyId,
         width,
         status,

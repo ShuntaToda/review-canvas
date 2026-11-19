@@ -155,10 +155,26 @@ vi.mock(
   "../components/Canvas",
   () =>
     ({
-      Canvas: ({ rows }: { rows: ReadonlyArray<RowPlacement> }) => (
+      Canvas: ({
+        rows,
+        onCopyStoryLink,
+      }: {
+        rows: ReadonlyArray<RowPlacement>;
+        onCopyStoryLink: (storyId: string) => void;
+      }) => (
         <ul aria-label="キャンバスの画面">
           {rows.map((row) => (
-            <li key={row.title}>{row.title}</li>
+            <li key={row.title}>
+              {row.title}
+              <button
+                type="button"
+                aria-label={`${row.title} のリンクをコピー`}
+                onClick={() => {
+                  const [first] = row.frames;
+                  if (first !== undefined) onCopyStoryLink(first.story.id);
+                }}
+              />
+            </li>
           ))}
         </ul>
       ),
@@ -389,5 +405,26 @@ describe("ReviewPage の見せる範囲（scope）", () => {
       }).value,
     ).toBe("");
     expect(within(commentList()).queryByText("カートの指摘")).not.toBeNull();
+  });
+
+  test("[正常系]画面の見出しの「この画面のリンクをコピー」にも、絞っている範囲を載せる（「リンク」と同じ）", async () => {
+    const writeText = vi.fn((_text: string) => Promise.resolve());
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    try {
+      open("?page=shop&scope=Shop");
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Shop/Cart のリンクをコピー" }),
+        );
+        await Promise.resolve();
+      });
+
+      const copied = new URL(writeText.mock.calls[0]?.[0] ?? "");
+      expect(copied.searchParams.get("scope")).toBe("Shop");
+      expect(copied.searchParams.get("story")).toBe("shop-cart--default");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

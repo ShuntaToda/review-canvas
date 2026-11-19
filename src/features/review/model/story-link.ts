@@ -11,12 +11,14 @@ export type LinkHighlight = { storyId: string; motion: "fade" | "still" };
 
 /**
  * 見出しの「この画面のリンクをコピー」が載せる状態。
- * 既定のブランチと、はじめの「未解決」のタブは載せない（URL の欄に合わせる。開く側の既定と同じなので）
+ * 既定のブランチと、はじめの「未解決」のタブは載せない（URL の欄に合わせる。開く側の既定と同じなので）。
+ * 見せる範囲（scope）は、絞っていれば載せる（スレッド・コメント一覧の「リンク」と同じ）
  */
 export const storyLinkState = ({
   branch,
   defaultBranch,
   page,
+  scope,
   story,
   width,
   status,
@@ -24,12 +26,14 @@ export const storyLinkState = ({
   branch: string;
   defaultBranch: string;
   page: StorySource;
+  scope: string | undefined;
   story: string;
   width: number;
   status: StatusFilter;
 }): UrlState => ({
   ...(branch === defaultBranch ? {} : { branch }),
   page,
+  ...(scope === undefined ? {} : { scope }),
   story,
   width,
   ...(status === "open" ? {} : { status }),
