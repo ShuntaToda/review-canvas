@@ -60,7 +60,7 @@ jobs:
       - name: Disable auto-merge
         if: steps.decide.outputs.only_claude != 'true' && env.SAME_REPO == 'true'
         run: |
-          enabled_by=$(gh pr view "${PR_NUMBER}" --json autoMergeRequest --jq '.autoMergeRequest.enabledBy.login // ""')
-          if [[ "${enabled_by}" == "github-actions" ]]; then
+          enabled_by=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" --jq '.auto_merge.enabled_by.login // ""')
+          if [[ "${enabled_by}" == "github-actions[bot]" ]]; then
             gh pr merge "${PR_NUMBER}" --disable-auto
           fi
