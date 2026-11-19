@@ -19,15 +19,15 @@ describe("NoMatchNotice", () => {
     [
       "「変わった画面だけ」だけ",
       "",
-      true,
+      "feature/b",
       false,
-      "既定のブランチから変わった画面はありません。",
+      "feature/b から変わった画面はありません。",
       "「変わった画面だけ」を外す",
     ],
     [
       "「変わった画面だけ」と文字",
       " Cart ",
-      true,
+      "feature/b",
       false,
       "「Cart」に当たる、変わった画面はありません。",
       "絞り込みを外す",
@@ -35,7 +35,7 @@ describe("NoMatchNotice", () => {
     [
       "文字だけ",
       "Cart",
-      false,
+      undefined,
       false,
       "「Cart」に当たる画面はありません。",
       "絞り込みを外す",
@@ -43,7 +43,7 @@ describe("NoMatchNotice", () => {
     [
       "部品だけのページ",
       "",
-      false,
+      undefined,
       true,
       "表示する画面がありません（部品だけのページです）。",
       "部品も表示する",
@@ -52,20 +52,20 @@ describe("NoMatchNotice", () => {
     [
       "部品だけの範囲",
       "",
-      false,
+      undefined,
       false,
       "絞り込みに合う画面はありません。",
       "部品も表示する",
     ],
   ])(
     "[境界値]%s で 0 件のときの知らせと、外すボタン",
-    (_, query, changedOnly, componentsOnly, text, action) => {
+    (_, query, changedOnlyBase, componentsOnly, text, action) => {
       const onClear = vi.fn();
       render(
         <NoMatchNotice
           query={query}
           componentsOnly={componentsOnly}
-          changedOnly={changedOnly}
+          {...(changedOnlyBase === undefined ? {} : { changedOnlyBase })}
           onClear={onClear}
         />,
       );

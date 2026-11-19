@@ -58,8 +58,8 @@ export const messages = {
    * 「変わった画面だけ」で並べる画面が無い（画面の一覧とキャンバス。文字の絞り込みと重ねたときは、その語を添える）。
    * 文の終わりの「。」は、出す場所の書き方に合わせて付ける
    */
-  noChangedStories: (query: string) =>
+  noChangedStories: (query: string, baseBranch: string) =>
     query === ""
-      ? "既定のブランチから変わった画面はありません"
+      ? `${baseBranch} から変わった画面はありません`
       : `「${query}」に当たる、変わった画面はありません`,
 } as const;

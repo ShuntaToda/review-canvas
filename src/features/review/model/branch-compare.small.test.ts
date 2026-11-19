@@ -1,9 +1,14 @@
 import {
   canCompareBranches,
+  compareBaseOptions,
+  compareBaseParam,
   compareMarkOf,
   compareMarksOf,
   compareViewOf,
   filterChangedStories,
+  keepCompareChoice,
+  NO_COMPARE,
+  resolveCompareBase,
   resolveCompareStoryId,
 } from "./branch-compare";
 import {
@@ -25,7 +30,7 @@ const shot = (storyId: string, width: number, hash: string): StoryShot => ({
 const catalog = (url: string, shots: StoryShot[]) =>
   buildShotCatalog({ version: 1, shots, playFunctions: {} }, url);
 
-// 既定のブランチ: 一覧（375・1280）・カート（375 だけ）
+// 比べる相手: 一覧（375・1280）・カート（375 だけ）
 const base = catalog(BASE_URL, [
   shot("shop-list--default", 375, "aaaa"),
   shot("shop-list--default", 1280, "bbbb"),
@@ -52,7 +57,7 @@ describe("compareMarkOf", () => {
     expect(compareMarkOf(pair, "shop-cart--empty", 375)).toBeUndefined();
   });
 
-  test("[正常系]既定のブランチの目録にそのストーリーが 1 枚も無ければ「新しい」（幅によらない）", () => {
+  test("[正常系]比べる相手の目録にそのストーリーが 1 枚も無ければ「新しい」（幅によらない）", () => {
     expect(compareMarkOf(pair, "shop-order--default", 375)).toBe("new");
     expect(compareMarkOf(pair, "shop-order--default", 1280)).toBe("new");
   });
@@ -60,7 +65,7 @@ describe("compareMarkOf", () => {
   test("[境界値]今の幅の画像が片方だけにあるときは、比べる名前が片方に無いので印を付けない", () => {
     // このブランチにだけ 1280 がある
     expect(compareMarkOf(pair, "shop-cart--empty", 1280)).toBeUndefined();
-    // 既定のブランチにだけある（このブランチで撮れなかった）
+    // 比べる相手にだけある（このブランチで撮れなかった）
     expect(compareMarkOf(pair, "shop-cart--filled", 375)).toBeUndefined();
     // どちらにも無い幅（自分で足した幅）
     expect(compareMarkOf(pair, "shop-list--default", 999)).toBeUndefined();
@@ -130,7 +135,7 @@ describe("compareViewOf", () => {
     });
   });
 
-  test("[異常系]既定のブランチの目録が無ければ、それを先に知らせる（両方無くても）", () => {
+  test("[異常系]比べる相手の目録が無ければ、それを先に知らせる（両方無くても）", () => {
     expect(
       compareViewOf(
         { base: EMPTY_SHOT_CATALOG, head: EMPTY_SHOT_CATALOG },
@@ -150,7 +155,7 @@ describe("compareViewOf", () => {
     ).toStrictEqual({ kind: "no-head-manifest" });
   });
 
-  test("[正常系]既定のブランチにこの画面が無ければ「新しい」で、右の画像だけを返す", () => {
+  test("[正常系]比べる相手にこの画面が無ければ「新しい」で、右の画像だけを返す", () => {
     expect(compareViewOf(pair, "shop-order--default", 375)).toStrictEqual({
       kind: "new",
       head: head.find("shop-order--default", 375),
@@ -178,29 +183,126 @@ describe("compareViewOf", () => {
 describe("resolveCompareStoryId", () => {
   const exists = (id: string) => id === "shop-list--default";
 
-  test("[正常系]既定のブランチ以外で、いまのページにある画面なら開く", () => {
+  test("[正常系]比べる相手があり、いまのページにある画面なら開く", () => {
     expect(
       resolveCompareStoryId({
         compare: "shop-list--default",
-        branch: "feature/a",
-        defaultBranch: "main",
+        comparable: true,
         exists,
       }),
     ).toBe("shop-list--default");
   });
 
   test.each([
-    ["既定のブランチ", "shop-list--default", "main"],
-    ["知らない ID", "shop-unknown--x", "feature/a"],
-    ["指定なし", undefined, "feature/a"],
-  ])("[異常系]%s の compare は捨てる", (_, compare, branch) => {
+    [
+      "比べる相手が無い（置いてあるブランチが 1 つだけ）",
+      "shop-list--default",
+      false,
+    ],
+    ["知らない ID", "shop-unknown--x", true],
+    ["指定なし", undefined, true],
+  ])("[異常系]%s の compare は捨てる", (_, compare, comparable) => {
     expect(
-      resolveCompareStoryId({
-        compare,
-        branch,
-        defaultBranch: "main",
-        exists,
-      }),
+      resolveCompareStoryId({ compare, comparable, exists }),
     ).toBeUndefined();
+  });
+});
+
+describe("compareBaseOptions・resolveCompareBase", () => {
+  // ブランチを切り替える欄と同じ並び（既定のブランチが先頭、続いて置いてあるブランチの並び）
+  const published = [
+    { branch: "feature/b" },
+    { branch: "main" },
+    { branch: "feature/a" },
+  ];
+
+  test("[正常系]選べるのは置いてあるブランチから今のブランチを除いたもので、既定のブランチが先頭", () => {
+    expect(
+      compareBaseOptions({
+        current: "feature/a",
+        defaultBranch: "main",
+        published,
+      }),
+    ).toStrictEqual(["main", "feature/b"]);
+    expect(
+      compareBaseOptions({ current: "main", defaultBranch: "main", published }),
+    ).toStrictEqual(["feature/b", "feature/a"]);
+  });
+
+  test("[正常系]既定のブランチを置いていなければ、選べるものに入れない", () => {
+    expect(
+      compareBaseOptions({
+        current: "feature/a",
+        defaultBranch: "main",
+        published: [{ branch: "feature/a" }, { branch: "feature/b" }],
+      }),
+    ).toStrictEqual(["feature/b"]);
+  });
+
+  test("[境界値]置いてあるブランチが 1 つだけなら、選べるものは無い", () => {
+    expect(
+      compareBaseOptions({
+        current: "main",
+        defaultBranch: "main",
+        published: [{ branch: "main" }],
+      }),
+    ).toStrictEqual([]);
+    const none = { current: "main", defaultBranch: "main", options: [] };
+    expect(resolveCompareBase(undefined, none)).toBeUndefined();
+    expect(resolveCompareBase("feature/a", none)).toBeUndefined();
+    expect(
+      resolveCompareBase(undefined, { ...none, current: "feature/a" }),
+    ).toBeUndefined();
+    expect(compareBaseParam(undefined, none)).toBeUndefined();
+  });
+
+  const onFeature = {
+    current: "feature/a",
+    defaultBranch: "main",
+    options: ["main", "feature/b"],
+  };
+  const onDefault = {
+    current: "main",
+    defaultBranch: "main",
+    options: ["feature/b", "feature/a"],
+  };
+
+  test("[正常系]初めは、既定のブランチ以外を見ているときは既定のブランチ、既定のブランチを見ているときは比べない", () => {
+    expect(resolveCompareBase(undefined, onFeature)).toBe("main");
+    expect(resolveCompareBase(undefined, onDefault)).toBeUndefined();
+  });
+
+  test("[境界値]既定のブランチを置いていなければ、初めは選べるものの先頭", () => {
+    expect(
+      resolveCompareBase(undefined, { ...onFeature, options: ["feature/b"] }),
+    ).toBe("feature/b");
+  });
+
+  test("[正常系]選んだ相手が選べるものにあればそれ、「比較しない」なら比べず、無ければ（知らない・今のブランチと同じ）初めの状態", () => {
+    expect(resolveCompareBase("feature/b", onFeature)).toBe("feature/b");
+    expect(resolveCompareBase(NO_COMPARE, onFeature)).toBeUndefined();
+    expect(resolveCompareBase("unknown/x", onFeature)).toBe("main");
+    expect(resolveCompareBase("feature/a", onFeature)).toBe("main");
+    expect(resolveCompareBase("feature/a", onDefault)).toBe("feature/a");
+    expect(resolveCompareBase("main", onDefault)).toBeUndefined();
+  });
+
+  test("[正常系]URL の base= は初めの状態と違うときだけ載せ、初めは比べるのに比べないときは none", () => {
+    expect(compareBaseParam("main", onFeature)).toBeUndefined();
+    expect(compareBaseParam("feature/b", onFeature)).toBe("feature/b");
+    expect(compareBaseParam(undefined, onFeature)).toBe(NO_COMPARE);
+    expect(compareBaseParam(undefined, onDefault)).toBeUndefined();
+    expect(compareBaseParam("feature/b", onDefault)).toBe("feature/b");
+  });
+
+  test("[正常系]ブランチを切り替えたら、選んだ相手（「比較しない」を含む）が切り替えた先でも選べれば保ち、選べなければ・選んでいなければ初めの状態", () => {
+    expect(keepCompareChoice("feature/b", ["main", "feature/b"])).toBe(
+      "feature/b",
+    );
+    expect(keepCompareChoice("feature/b", ["main", "feature/a"])).toBe(
+      undefined,
+    );
+    expect(keepCompareChoice(NO_COMPARE, ["main"])).toBe(NO_COMPARE);
+    expect(keepCompareChoice(undefined, ["main"])).toBeUndefined();
   });
 });

@@ -58,7 +58,7 @@ import {
   mergeLocatedPins,
   isUnlocatedPin,
 } from "../model/anchor-locate";
-import { compareViewOf, resolveCompareStoryId } from "../model/branch-compare";
+import { resolveCompareStoryId } from "../model/branch-compare";
 import { buildBranchOptions } from "../model/branch-options";
 import {
   type Camera,
@@ -166,7 +166,15 @@ type ReviewWorkspaceProps = {
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
   /** ページごとの、発行のときに撮った画像（無いページは空） */
   shots: Readonly<Record<StorySource, ShotCatalog>>;
-  /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空。読み終えるまでは null） */
+  /** 比べる相手のブランチ（「比較しない」・選べるものが無ければ undefined。比べない） */
+  compareBase: string | undefined;
+  /** URL に載せる base=（初めの状態なら undefined） */
+  compareBaseParam: string | undefined;
+  /** 比べる相手に選べるブランチ（置いてあるブランチから今のブランチを除いたもの） */
+  compareBaseOptions: ReadonlyArray<string>;
+  /** 比べる相手を選んだ（「比較しない」は NO_COMPARE） */
+  onCompareBaseChange: (base: string) => void;
+  /** ページごとの、比べる相手の画像（見比べる。比べないとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
   /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
@@ -189,6 +197,10 @@ export const ReviewWorkspace = ({
   stories,
   storyErrors,
   shots,
+  compareBase,
+  compareBaseParam,
+  compareBaseOptions,
+  onCompareBaseChange,
   baseShots,
   initialUrl,
   openedBy,
@@ -227,11 +239,10 @@ export const ReviewWorkspace = ({
       wanted !== undefined && sources.has(wanted)
         ? wanted
         : (sources.ids[0] ?? "");
-    // 比べる画面へのリンク（?compare=）は、その画面に寄せてから開く。既定のブランチ・知らない ID は捨てる
+    // 比べる画面へのリンク（?compare=）は、その画面に寄せてから開く。比べる相手が無いとき・知らない ID は捨てる
     const compareStoryId = resolveCompareStoryId({
       compare: initialUrl.compare,
-      branch,
-      defaultBranch,
+      comparable: compareBase !== undefined,
       exists: (id) => storiesByKey.has(storyKey(page, id)),
     });
     const storyId = thread?.root.storyId ?? compareStoryId ?? initialUrl.story;
@@ -349,10 +360,10 @@ export const ReviewWorkspace = ({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const focusedByPointer = useFocusedByPointer();
   const canvas = useElementSize<HTMLDivElement>();
-  // 既定のブランチとの見比べ（印・「変わった画面だけ」・比べる画面）
+  // 比べる相手との見比べ（印・「変わった画面だけ」・比べる画面）
   const branchCompare = useBranchCompare({
+    baseBranch: compareBase,
     branch,
-    defaultBranch,
     page,
     width: widthOf(page),
     head: shots,
@@ -526,6 +537,8 @@ export const ReviewWorkspace = ({
       ...(branchCompare.urlStoryId === undefined
         ? {}
         : { compare: branchCompare.urlStoryId }),
+      // 比べる相手（初めの状態なら載せない）
+      ...(compareBaseParam === undefined ? {} : { base: compareBaseParam }),
     });
     window.history.replaceState(
       null,
@@ -541,6 +554,7 @@ export const ReviewWorkspace = ({
     centerStoryId,
     status,
     branchCompare.urlStoryId,
+    compareBaseParam,
   ]);
 
   /**
@@ -1042,6 +1056,9 @@ export const ReviewWorkspace = ({
         branch={branch}
         commit={commit}
         branchOptions={branchOptions}
+        compareBase={compareBase}
+        compareBaseOptions={compareBaseOptions}
+        onCompareBaseChange={onCompareBaseChange}
         onBranchChange={(next) => {
           if (next !== branch) {
             onBranchChange(next, page, centerStoryId, storyScope);
@@ -1077,11 +1094,12 @@ export const ReviewWorkspace = ({
               marks={branchCompare.marksOf(
                 storiesOf(page).map((story) => story.id),
               )}
-              {...(branchCompare.available
+              {...(branchCompare.available && compareBase !== undefined
                 ? {
                     changedOnly: {
                       checked: branchCompare.changedOnly,
                       onChange: branchCompare.setChangedOnly,
+                      baseBranch: compareBase,
                     },
                   }
                 : {})}
@@ -1261,7 +1279,9 @@ export const ReviewWorkspace = ({
                       excludeTitlePrefixes: sources.excludeTitlePrefixes,
                     }).length === 0
                   }
-                  changedOnly={branchCompare.changedOnly}
+                  {...(branchCompare.changedOnly && compareBase !== undefined
+                    ? { changedOnlyBase: compareBase }
+                    : {})}
                   onClear={() => {
                     // 知らせの文言（Notices.tsx）と同じく、空白だけの文字は無いものとみなす
                     if (query.trim() !== "") setQuery("");
@@ -1398,15 +1418,11 @@ export const ReviewWorkspace = ({
         />
       )}
       {dialog === "help" && <HelpDialog onClose={() => setDialog(null)} />}
-      {compareStory !== undefined && (
+      {compareStory !== undefined && compareBase !== undefined && (
         <CompareDialog
           story={compareStory}
-          view={compareViewOf(
-            branchCompare.pairOf(page),
-            compareStory.id,
-            width,
-          )}
-          defaultBranch={defaultBranch}
+          view={branchCompare.viewOf(compareStory.id)}
+          baseBranch={compareBase}
           branch={branch}
           onClose={() => {
             // 閉じてから（ダイアログが開く前のフォーカスへ戻したあとで）、その画面のボタンへ戻す

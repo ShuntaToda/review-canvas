@@ -46,6 +46,14 @@ describe("url-state", () => {
       parseUrlState("?branch=feature%2Fa&compare=shop-list--default"),
     ).toStrictEqual({ branch: "feature/a", compare: "shop-list--default" });
     expect(parseUrlState("?compare=")).toStrictEqual({});
+    // 比べる相手（base）も載せて読み、空の値は捨てる
+    expect(buildSearch({ branch: "feature/a", base: "feature/b" })).toBe(
+      "?branch=feature%2Fa&base=feature%2Fb",
+    );
+    expect(parseUrlState("?base=feature%2Fb")).toStrictEqual({
+      base: "feature/b",
+    });
+    expect(parseUrlState("?base=")).toStrictEqual({});
     // 画面の幅（width）と一緒に読み書きできる
     expect(
       parseUrlState(

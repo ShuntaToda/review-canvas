@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { App } from "./App";
@@ -384,7 +385,7 @@ describe("ブランチの切り替え", () => {
     expect(requested().some((path) => path.startsWith("/sb/"))).toBe(false);
   });
 
-  describe("既定のブランチと見比べる", () => {
+  describe("ほかのブランチと比べる", () => {
     // jsdom は大きさを測らず、<dialog> の showModal・close も持たないので、キャンバスに決まった大きさを返す ResizeObserver と、
     // 開いた・閉じた印だけを付ける dialog にする
     beforeEach(() => {
@@ -411,6 +412,8 @@ describe("ブランチの切り替え", () => {
       );
     });
     beforeAll(() => {
+      // jsdom は scrollIntoView を持たない（「比較するブランチ」の一覧で使う）
+      Element.prototype.scrollIntoView = () => undefined;
       HTMLDialogElement.prototype.showModal = function showModal() {
         this.setAttribute("open", "");
       };
@@ -440,7 +443,9 @@ describe("ブランチの切り替え", () => {
     });
     const BASE_MANIFEST = "/sb/main/shop/review-canvas-shots.json";
     const HEAD_MANIFEST = "/sb/feature~2Fa/shop/review-canvas-shots.json";
-    // 一覧は変わり、カートは同じ、注文は既定のブランチに無い（新しい）
+    const FEATURE_B_MANIFEST = "/sb/feature~2Fb/shop/review-canvas-shots.json";
+    // 一覧は変わり、カートは同じ、注文は main に無い（新しい）。
+    // feature/b は一覧も feature/a と同じで、注文だけ無い
     const changedManifests: Record<string, unknown> = {
       [BASE_MANIFEST]: manifestOf([
         shot("shop-list--default", "a"),
@@ -451,8 +456,12 @@ describe("ブランチの切り替え", () => {
         shot("shop-cart--empty", "c"),
         shot("shop-order--default", "o"),
       ]),
+      [FEATURE_B_MANIFEST]: manifestOf([
+        shot("shop-list--default", "z"),
+        shot("shop-cart--empty", "c"),
+      ]),
     };
-    // どの画面も既定のブランチと同じ
+    // どの画面も main と同じ
     const sameManifests: Record<string, unknown> = {
       [BASE_MANIFEST]: manifestOf([
         shot("shop-list--default", "a"),
@@ -488,19 +497,40 @@ describe("ブランチの切り替え", () => {
       createdAt: "2026-11-13T10:00:00.000+09:00",
       updatedAt: "2026-11-13T10:00:00.000+09:00",
     };
+    /** Storybook を置いてあるブランチ（ビルドの新しい順） */
+    const metaOf = (branches: ReadonlyArray<string>) =>
+      Response.json({
+        defaultBranch: "main",
+        branches: branches.map((branch, index) => ({
+          branch,
+          commit: "aaa1111",
+          builtAt: `2026-11-${String(14 - index)}T10:00:00.000+09:00`,
+          basePath: `/sb/${branch.replace("/", "~2F")}/`,
+          storybooks,
+        })),
+        sources,
+      });
     const compareFetch =
       ({
         manifests = changedManifests,
         baseManifest,
+        delayed = BASE_MANIFEST,
+        branches = ["feature/a", "main", "feature/b"],
         comments = [],
       }: {
         manifests?: Record<string, unknown>;
-        /** 既定のブランチの目録の応答（遅らせるとき） */
+        /** 比べる相手の目録の応答（遅らせるとき） */
         baseManifest?: Promise<Response>;
+        /** baseManifest で遅らせる目録 */
+        delayed?: string;
+        branches?: ReadonlyArray<string>;
         comments?: unknown[];
       } = {}) =>
       (input: Request) => {
         const url = urlOf(input);
+        if (url.pathname === "/api/meta") {
+          return Promise.resolve(metaOf(branches));
+        }
         if (url.pathname.endsWith("/shop/index.json")) {
           return Promise.resolve(
             Response.json({
@@ -513,7 +543,7 @@ describe("ブランチの切り替え", () => {
             }),
           );
         }
-        if (url.pathname === BASE_MANIFEST && baseManifest !== undefined) {
+        if (url.pathname === delayed && baseManifest !== undefined) {
           return baseManifest;
         }
         const manifest = manifests[url.pathname];
@@ -539,7 +569,7 @@ describe("ブランチの切り替え", () => {
       screen
         .getAllByRole("button")
         .find((button) => button.getAttribute("title") === title);
-    const compareButtonName = "Shop/List / Default を既定のブランチと比べる";
+    const compareButtonName = "Shop/List / Default をほかのブランチと比べる";
     const changedOnlyBox = () =>
       screen.getByRole<HTMLInputElement>("checkbox", {
         name: "変わった画面だけ",
@@ -554,7 +584,7 @@ describe("ブランチの切り替え", () => {
 
       expect(
         await screen.findByRole("dialog", {
-          name: "Shop/List / Default を既定のブランチと比べる",
+          name: "Shop/List / Default をほかのブランチと比べる",
         }),
       ).toBeTruthy();
       expect(requested()).toContain(BASE_MANIFEST);
@@ -562,7 +592,7 @@ describe("ブランチの切り替え", () => {
         screen.getAllByRole<HTMLImageElement>("img").map((image) => image.alt),
       ).toEqual(
         expect.arrayContaining([
-          "既定のブランチ（main）",
+          "比べる相手（main）",
           "このブランチ（feature/a）",
         ]),
       );
@@ -630,7 +660,7 @@ describe("ブランチの切り替え", () => {
       expect(commentTool.getAttribute("aria-pressed")).toBe("true");
     });
 
-    test("[正常系]既定のブランチの目録を読み終えるまでキャンバスを出し、印・絞り込み・比べるボタン・比べる画面は読み終えてから出す（compare は捨てない）", async () => {
+    test("[正常系]比べる相手の目録を読み終えるまでキャンバスを出し、印・絞り込み・比べるボタン・比べる画面は読み終えてから出す（compare は捨てない）", async () => {
       sdk.state = { isAuthenticated: true, error: undefined };
       let resolveBase: (response: Response) => void = () => undefined;
       const baseManifest = new Promise<Response>((resolve) => {
@@ -706,10 +736,10 @@ describe("ブランチの切り替え", () => {
       );
 
       expect(
-        screen.getByText("既定のブランチから変わった画面はありません"),
+        screen.getByText("main から変わった画面はありません"),
       ).toBeTruthy();
       expect(
-        screen.getByText("既定のブランチから変わった画面はありません。"),
+        screen.getByText("main から変わった画面はありません。"),
       ).toBeTruthy();
 
       fireEvent.click(
@@ -732,7 +762,7 @@ describe("ブランチの切り替え", () => {
         { target: { value: "  " } },
       );
       expect(
-        screen.getByText("既定のブランチから変わった画面はありません。"),
+        screen.getByText("main から変わった画面はありません。"),
       ).toBeTruthy();
 
       fireEvent.click(
@@ -759,38 +789,334 @@ describe("ブランチの切り替え", () => {
       expect(statusRow("Shop/Cart / Empty")).toBeTruthy();
     });
 
-    test.each([
-      ["既定のブランチ", "/?page=shop&compare=shop-list--default"],
-      ["知らない ID", "/?branch=feature%2Fa&page=shop&compare=shop-unknown--x"],
-    ])("[異常系]%s の compare= は捨てる", async (_, path) => {
+    test("[異常系]知らない ID の compare= は捨てる", async () => {
       sdk.state = { isAuthenticated: true, error: undefined };
       fetchMock.mockImplementation(compareFetch());
-      await renderApp(path);
+      await renderApp("/?branch=feature%2Fa&page=shop&compare=shop-unknown--x");
 
-      await screen.findByRole("combobox", { name: "ブランチ" });
+      await screen.findByRole("button", { name: compareButtonName });
       expect(screen.queryByRole("dialog")).toBeNull();
       await waitFor(() =>
         expect(window.location.search).not.toContain("compare="),
       );
     });
 
-    test("[正常系]既定のブランチでは、ボタン・印・「変わった画面だけ」を出さず、既定のブランチの目録を読み直さない", async () => {
-      sdk.state = { isAuthenticated: true, error: undefined };
-      fetchMock.mockImplementation(compareFetch());
-      await renderApp("/?page=shop");
-
-      await screen.findByRole("combobox", { name: "ブランチ" });
+    const expectNoCompare = () => {
       expect(statusRow("Shop/List / Default")?.textContent).toBe("Default");
       expect(statusRow("Shop/Order / Default")?.textContent).toBe("Default");
       expect(
         screen.queryByRole("checkbox", { name: "変わった画面だけ" }),
       ).toBeNull();
       expect(
-        screen.queryByRole("button", { name: /既定のブランチと比べる/ }),
+        screen.queryByRole("button", { name: compareButtonName }),
       ).toBeNull();
-      expect(requested().filter((path) => path === BASE_MANIFEST)).toHaveLength(
-        1,
+      expect(screen.queryByRole("dialog")).toBeNull();
+    };
+
+    const leftHeading = (base: string) =>
+      screen.getByRole<HTMLImageElement>("img", {
+        name: `比べる相手（${base}）`,
+      });
+    const pickerButton = () =>
+      screen.getByRole("button", { name: "比較するブランチ" });
+    const pickerOptions = () =>
+      within(screen.getByRole("listbox", { name: "比較するブランチ" }));
+    const openPicker = () => {
+      fireEvent.click(pickerButton());
+      return screen.getByRole("combobox", { name: "ブランチを検索" });
+    };
+    const chooseBase = async (name: string) => {
+      openPicker();
+      await act(async () => {
+        fireEvent.mouseDown(pickerOptions().getByRole("option", { name }));
+        await Promise.resolve();
+      });
+    };
+
+    test("[正常系]上の帯の「比較するブランチ」は、置いてあるブランチから今のブランチを除いたものと「比較しない」を出し、選ぶと左の画像・見出し・印・「変わった画面だけ」がその相手と比べたものになり、URL に base= を載せる（初めの相手に戻すと消す）", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default",
       );
+
+      await screen.findByRole("dialog", { name: compareButtonName });
+      expect(pickerButton().textContent).toBe("比較:main");
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default変更");
+      openPicker();
+      expect(
+        pickerOptions()
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toStrictEqual(["比較しない", "main", "feature/b"]);
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "ブランチを検索" }),
+        {
+          key: "Escape",
+        },
+      );
+      expect(window.location.search).not.toContain("base=");
+
+      await chooseBase("feature/b");
+
+      await waitFor(() =>
+        expect(leftHeading("feature/b").src).toContain(
+          "/sb/feature~2Fb/shop/review-canvas-shots/",
+        ),
+      );
+      expect(pickerButton().textContent).toBe("比較:feature/b");
+      expect(window.location.search).toContain("base=feature%2Fb");
+      // feature/b と比べると、一覧は同じで、注文だけ新しい
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default");
+      expect(statusRow("Shop/Order / Default")?.textContent).toBe(
+        "Default新しい",
+      );
+      fireEvent.click(changedOnlyBox());
+      expect(statusRow("Shop/List / Default")).toBeUndefined();
+      expect(statusRow("Shop/Order / Default")).toBeTruthy();
+
+      await chooseBase("main");
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("base="),
+      );
+      expect(leftHeading("main")).toBeTruthy();
+    });
+
+    test("[正常系]「比較するブランチ」で検索して Enter で選べ、「比較しない」を選ぶと比べるボタン・印・「変わった画面だけ」・比べる画面を消し、URL に base=- を載せる", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default",
+      );
+      await screen.findByRole("dialog", { name: compareButtonName });
+
+      const searchBox = openPicker();
+      fireEvent.change(searchBox, { target: { value: "B" } });
+      expect(
+        pickerOptions()
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toStrictEqual(["比較しない", "feature/b"]);
+      fireEvent.keyDown(searchBox, { key: "ArrowDown" });
+      await act(async () => {
+        fireEvent.keyDown(searchBox, { key: "Enter" });
+        await Promise.resolve();
+      });
+      expect(document.activeElement).toBe(pickerButton());
+      await waitFor(() =>
+        expect(window.location.search).toContain("base=feature%2Fb"),
+      );
+
+      await chooseBase("比較しない");
+
+      expect(pickerButton().textContent).toBe("比較しない");
+      expectNoCompare();
+      await waitFor(() => expect(window.location.search).toContain("base=-"));
+      expect(window.location.search).not.toContain("compare=");
+    });
+
+    test("[正常系]URL の base= で相手を選んで開く", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default&base=feature%2Fb",
+      );
+
+      await screen.findByRole("dialog", { name: compareButtonName });
+      expect(leftHeading("feature/b").src).toContain("/sb/feature~2Fb/");
+      expect(requested()).toContain(FEATURE_B_MANIFEST);
+      expect(requested()).not.toContain(BASE_MANIFEST);
+      await waitFor(() =>
+        expect(statusRow("Shop/Order / Default")?.textContent).toBe(
+          "Default新しい",
+        ),
+      );
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default");
+      expect(window.location.search).toContain("base=feature%2Fb");
+    });
+
+    test.each([
+      ["知らないブランチ", "unknown%2Fx"],
+      ["今のブランチと同じ", "feature%2Fa"],
+    ])(
+      "[異常系]%s の base= は捨て、初めの相手（既定のブランチ）と比べる",
+      async (_, base) => {
+        sdk.state = { isAuthenticated: true, error: undefined };
+        fetchMock.mockImplementation(compareFetch());
+        await renderApp(
+          `/?branch=feature%2Fa&page=shop&compare=shop-list--default&base=${base}`,
+        );
+
+        await screen.findByRole("dialog", { name: compareButtonName });
+        expect(leftHeading("main")).toBeTruthy();
+        await waitFor(() =>
+          expect(window.location.search).not.toContain("base="),
+        );
+        expect(statusRow("Shop/List / Default")?.textContent).toBe(
+          "Default変更",
+        );
+      },
+    );
+
+    test("[正常系]ブランチを切り替えても、選んだ相手が選べれば保ち、選べなければ（切り替えた先と同じ）初めの状態に戻す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default&base=feature%2Fb",
+      );
+      await screen.findByRole("dialog", { name: compareButtonName });
+
+      const switchBranch = async (next: string) => {
+        await act(async () => {
+          fireEvent.change(screen.getByRole("combobox", { name: "ブランチ" }), {
+            target: { value: next },
+          });
+          await Promise.resolve();
+        });
+      };
+
+      // main からも feature/b を選べるので保つ
+      await switchBranch("main");
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("branch="),
+      );
+      // 切り替えると比べる画面は閉じるので、開き直す
+      fireEvent.click(
+        await screen.findByRole("button", { name: compareButtonName }),
+      );
+      expect(leftHeading("feature/b")).toBeTruthy();
+      expect(window.location.search).toContain("base=feature%2Fb");
+
+      // feature/b を見るなら feature/b とは比べられないので、初めの相手（main）に戻す
+      await switchBranch("feature/b");
+      await waitFor(() =>
+        expect(window.location.search).toContain("branch=feature%2Fb"),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: compareButtonName }),
+      );
+      expect(leftHeading("main")).toBeTruthy();
+      expect(window.location.search).not.toContain("base=");
+    });
+
+    test("[正常系]既定のブランチを見ているときは、初めは比較しない（比べるボタン・印・「変わった画面だけ」を出さず、compare= を捨て、相手の目録を読まない）", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp("/?page=shop&compare=shop-list--default");
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expect(pickerButton().textContent).toBe("比較しない");
+      expectNoCompare();
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("compare="),
+      );
+      expect(window.location.search).not.toContain("base=");
+      expect(requested()).not.toContain(HEAD_MANIFEST);
+      expect(requested()).not.toContain(FEATURE_B_MANIFEST);
+    });
+
+    test("[正常系]既定のブランチを見ていても、URL の base= で相手を選べば比べ、base= を載せたまま", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?page=shop&compare=shop-list--default&base=feature%2Fa",
+      );
+
+      await screen.findByRole("dialog", { name: compareButtonName });
+      expect(leftHeading("feature/a")).toBeTruthy();
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default変更");
+      expect(changedOnlyBox()).toBeTruthy();
+      expect(window.location.search).toContain("base=feature%2Fa");
+    });
+
+    test("[正常系]既定のブランチ以外で base=- なら比較しない（比べるボタン・印・「変わった画面だけ」を出さず、compare= を捨て、base=- は載せたまま）", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default&base=-",
+      );
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expectNoCompare();
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("compare="),
+      );
+      expect(window.location.search).toContain("base=-");
+      expect(requested()).not.toContain(BASE_MANIFEST);
+    });
+
+    test("[境界値]既定のブランチで base=- は初めの状態と同じなので、URL から外す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch());
+      await renderApp("/?page=shop&base=-");
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expectNoCompare();
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("base="),
+      );
+    });
+
+    test("[境界値]置いてあるブランチが 1 つだけなら、「比較するブランチ」・比べるボタン・印・「変わった画面だけ」を出さず、compare= を捨てる", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch({ branches: ["main"] }));
+      await renderApp("/?page=shop&compare=shop-list--default");
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expect(
+        screen.queryByRole("button", { name: "比較するブランチ" }),
+      ).toBeNull();
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default");
+      expect(
+        screen.queryByRole("checkbox", { name: "変わった画面だけ" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: compareButtonName }),
+      ).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("compare="),
+      );
+    });
+
+    test("[正常系]相手を替えて読み直すあいだは、印と「変わった画面だけ」を出さず、比べる画面は開いたまま左右に「読み込み中…」を出し、読み終えると出す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      let resolveBase: (response: Response) => void = () => undefined;
+      const baseManifest = new Promise<Response>((resolve) => {
+        resolveBase = resolve;
+      });
+      fetchMock.mockImplementation(
+        compareFetch({ baseManifest, delayed: FEATURE_B_MANIFEST }),
+      );
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default",
+      );
+      await screen.findByRole("dialog", { name: compareButtonName });
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default変更");
+
+      await chooseBase("feature/b");
+
+      const dialog = screen.getByRole("dialog", { name: compareButtonName });
+      expect(within(dialog).getAllByText("読み込み中…")).toHaveLength(2);
+      expect(statusRow("Shop/List / Default")?.textContent).toBe("Default");
+      expect(statusRow("Shop/Order / Default")?.textContent).toBe("Default");
+      expect(
+        screen.queryByRole("checkbox", { name: "変わった画面だけ" }),
+      ).toBeNull();
+
+      await act(async () => {
+        resolveBase(Response.json(changedManifests[FEATURE_B_MANIFEST]));
+        await baseManifest;
+      });
+
+      await waitFor(() =>
+        expect(statusRow("Shop/Order / Default")?.textContent).toBe(
+          "Default新しい",
+        ),
+      );
+      expect(within(dialog).queryByText("読み込み中…")).toBeNull();
+      expect(changedOnlyBox()).toBeTruthy();
+      expect(leftHeading("feature/b")).toBeTruthy();
     });
   });
 });

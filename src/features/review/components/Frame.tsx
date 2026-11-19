@@ -109,7 +109,7 @@ type FrameProps = {
   /** 読み込んだ画面でピンの要素を探した結果（スレッドのIDごと。まだ分からないピンは含めない） */
   onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
   onOpenThread: (threadId: string) => void;
-  /** 見出しの「既定のブランチと比べる」（既定のブランチを見ているとき・既定のブランチの目録を読み終える前は渡さない（useBranchCompare の canOpen）。渡さなければボタンを出さない） */
+  /** 見出しの「ほかのブランチと比べる」（比べる相手が無いとき・比べる相手の目録をはじめて読み終える前は渡さない（useBranchCompare の canOpen）。渡さなければボタンを出さない） */
   onCompare?: ((story: Story) => void) | undefined;
   /** 見出しの「この画面のリンクをコピー」を押した */
   onCopyStoryLink: (storyId: string) => void;

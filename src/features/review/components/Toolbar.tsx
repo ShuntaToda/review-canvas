@@ -11,6 +11,7 @@ import { type BranchOption, branchOptionLabel } from "../model/branch-options";
 import type { Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
 import { AccountMenu } from "./AccountMenu";
+import { CompareBranchPicker } from "./CompareBranchPicker";
 import { IconButton } from "./IconButton";
 
 const TOOLS: ReadonlyArray<{
@@ -36,6 +37,12 @@ type ToolbarProps = {
   /** 切り替える欄の行（model/branch-options） */
   branchOptions: ReadonlyArray<BranchOption>;
   onBranchChange: (branch: string) => void;
+  /** 比べる相手（undefined は比較しない） */
+  compareBase: string | undefined;
+  /** 比べる相手に選べるブランチ（無ければ「比較するブランチ」を出さない） */
+  compareBaseOptions: ReadonlyArray<string>;
+  /** 比べる相手を選んだ（「比較しない」は NO_COMPARE） */
+  onCompareBaseChange: (choice: string) => void;
   /** ログインしている人の表示名 */
   userName: string;
   onLogout: () => void;
@@ -47,7 +54,7 @@ type ToolbarProps = {
 };
 
 /**
- * 上の操作の帯。いつも使うものだけを 1 段に並べる（ページ・左右の開閉・道具・ブランチ・使い方・アカウント）。
+ * 上の操作の帯。いつも使うものだけを 1 段に並べる（ページ・左右の開閉・道具・比較するブランチ・ブランチ・使い方・アカウント）。
  * 絞り込みと並べ方の設定は、左の画面の一覧（StorySidebar）にある
  */
 export const Toolbar = ({
@@ -60,6 +67,9 @@ export const Toolbar = ({
   commit,
   branchOptions,
   onBranchChange,
+  compareBase,
+  compareBaseOptions,
+  onCompareBaseChange,
   userName,
   onLogout,
   onHelp,
@@ -128,6 +138,14 @@ export const Toolbar = ({
       </div>
 
       <div className="flex min-w-0 items-center justify-end gap-0.5 max-md:ml-auto md:flex-1">
+        {/* 置いてあるブランチが 1 つだけ（比べる相手が無い）なら出さない */}
+        {compareBaseOptions.length > 0 && (
+          <CompareBranchPicker
+            value={compareBase}
+            options={compareBaseOptions}
+            onChange={onCompareBaseChange}
+          />
+        )}
         <label className="mr-1 flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:mr-0">
           <span className="max-lg:sr-only">ブランチ</span>
           <select

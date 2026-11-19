@@ -44,10 +44,15 @@ export const StorySidebar = ({
   /** 閉じたフォルダのパス */
   collapsed: ReadonlySet<string>;
   onToggleFolder: (path: string) => void;
-  /** 既定のブランチと比べた印（印のある状態だけ。既定のブランチ・目録が無いときは渡さない） */
+  /** 比べる相手と比べた印（印のある状態だけ。比べないとき・目録が無いときは渡さない） */
   marks?: ReadonlyMap<string, CompareMark>;
   /** 「変わった画面だけ」の絞り込み（出せないときは渡さない） */
-  changedOnly?: { checked: boolean; onChange: (checked: boolean) => void };
+  changedOnly?: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    /** 比べる相手（0 件の知らせに出す） */
+    baseBranch: string;
+  };
   /** 下に出す表示の設定 */
   children: ReactNode;
 }) => {
@@ -134,7 +139,7 @@ export const StorySidebar = ({
         {rows.length === 0 ? (
           <p className="px-3 py-4 text-center text-sm text-muted">
             {changedOnly?.checked === true
-              ? messages.noChangedStories(query.trim())
+              ? messages.noChangedStories(query.trim(), changedOnly.baseBranch)
               : "絞り込みに合う画面はありません"}
           </p>
         ) : (

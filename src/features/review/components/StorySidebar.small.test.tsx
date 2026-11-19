@@ -302,7 +302,7 @@ describe("StorySidebar", () => {
     );
   });
 
-  test("[正常系]既定のブランチと比べた印を、木の中の状態の行の右に文字で出す", () => {
+  test("[正常系]比べる相手と比べた印を、木の中の状態の行の右に文字で出す", () => {
     renderSidebar(rows, undefined, {
       marks: new Map([
         [filled.id, "changed"],
@@ -324,7 +324,7 @@ describe("StorySidebar", () => {
   test("[正常系]「変わった画面だけ」は画面名の絞り込みの下に出し、切り替えを返す", () => {
     const onChange = vi.fn();
     renderSidebar(rows, undefined, {
-      changedOnly: { checked: false, onChange },
+      changedOnly: { checked: false, onChange, baseBranch: "main" },
     });
 
     fireEvent.click(screen.getByRole("checkbox", { name: "変わった画面だけ" }));
@@ -333,18 +333,26 @@ describe("StorySidebar", () => {
 
   test("[境界値]「変わった画面だけ」を入れて 1 件も無ければ、そう知らせる", () => {
     renderSidebar([], undefined, {
-      changedOnly: { checked: true, onChange: () => undefined },
+      changedOnly: {
+        checked: true,
+        onChange: () => undefined,
+        baseBranch: "feature/b",
+      },
     });
 
     expect(
-      screen.getByText("既定のブランチから変わった画面はありません"),
+      screen.getByText("feature/b から変わった画面はありません"),
     ).not.toBeNull();
   });
 
   test("[境界値]「変わった画面だけ」と文字の絞り込みを重ねて 1 件も無ければ、その語を添えて知らせる", () => {
     renderSidebar([], undefined, {
       query: " Cart ",
-      changedOnly: { checked: true, onChange: () => undefined },
+      changedOnly: {
+        checked: true,
+        onChange: () => undefined,
+        baseBranch: "feature/b",
+      },
     });
 
     expect(
@@ -352,7 +360,7 @@ describe("StorySidebar", () => {
     ).not.toBeNull();
   });
 
-  test("[正常系]印・絞り込みを渡さない（既定のブランチ）ときは出さない", () => {
+  test("[正常系]印・絞り込みを渡さない（比べる相手が無い）ときは出さない", () => {
     renderSidebar(rows);
 
     expect(screen.queryByRole("checkbox")).toBeNull();

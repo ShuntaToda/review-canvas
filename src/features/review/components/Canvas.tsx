@@ -111,7 +111,7 @@ type CanvasProps = {
    * 読み込んで高さを測らないと、長い画面の下の方のピンへ移れないため
    */
   focusStoryId?: string | null;
-  /** 画面の見出しの「既定のブランチと比べる」（既定のブランチを見ているとき・既定のブランチの目録を読み終える前は渡さない（useBranchCompare の canOpen）） */
+  /** 画面の見出しの「ほかのブランチと比べる」（比べる相手が無いとき・比べる相手の目録をはじめて読み終える前は渡さない（useBranchCompare の canOpen）） */
   onCompare?: ((story: Story) => void) | undefined;
 };
 
