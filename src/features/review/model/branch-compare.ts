@@ -69,7 +69,7 @@ export type CompareView =
   /** どちらかに今の幅の画像が無い */
   | { kind: "missing-width"; width: number }
   /** 比べられる */
-  | { kind: "ready"; base: ShotView; head: ShotView };
+  | { kind: "ready"; base: ShotView; head: ShotView; width: number };
 
 /** 比べる画面に出すものを決める。両方の目録が無いときは、既定のブランチの方を先に知らせる */
 export const compareViewOf = (
@@ -85,20 +85,8 @@ export const compareViewOf = (
   if (base === undefined || head === undefined) {
     return { kind: "missing-width", width };
   }
-  return { kind: "ready", base, head };
+  return { kind: "ready", base, head, width };
 };
-
-/** 比べられないときの文言（比べる画面の中に出す） */
-export const compareMessages = {
-  noBaseManifest:
-    "既定のブランチに画像が無いため、比べられません。既定のブランチを置き直すと比べられます",
-  noHeadManifest:
-    "このブランチに画像が無いため、比べられません。このブランチを置き直すと比べられます",
-  notInBase: "既定のブランチにこの画面はありません",
-  missingWidth: (width: number) =>
-    `${String(width)}px の画像がありません。設定の幅のどれかに切り替えると比べられます`,
-  loadFailed: "画像を読み込めませんでした",
-} as const;
 
 /** 「変わった画面だけ」で残す画面（印のある画面）。目録が片方でも無ければ、絞り込まない */
 export const filterChangedStories = <T extends { id: string }>(

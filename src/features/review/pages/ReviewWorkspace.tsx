@@ -143,8 +143,8 @@ type ReviewWorkspaceProps = {
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
   /** ページごとの、発行のときに撮った画像（無いページは空） */
   shots: Readonly<Record<StorySource, ShotCatalog>>;
-  /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空） */
-  baseShots: Readonly<Record<StorySource, ShotCatalog>>;
+  /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空。読み終えるまでは null） */
+  baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
   initialComments: Comment[];
   /** ログインしている人（書いた人として残り、自分のコメントだけを編集・削除できる） */
@@ -194,13 +194,13 @@ export const ReviewWorkspace = ({
         ? wanted
         : (sources.ids[0] ?? "");
     // 比べる画面へのリンク（?compare=）は、その画面に寄せてから開く。既定のブランチ・知らない ID は捨てる
-    const compare = resolveCompareStoryId({
+    const compareStoryId = resolveCompareStoryId({
       compare: initialUrl.compare,
       branch,
       defaultBranch,
       exists: (id) => storiesByKey.has(storyKey(page, id)),
     });
-    const storyId = thread?.root.storyId ?? compare ?? initialUrl.story;
+    const storyId = thread?.root.storyId ?? compareStoryId ?? initialUrl.story;
     const story =
       storyId === undefined
         ? undefined
@@ -224,7 +224,7 @@ export const ReviewWorkspace = ({
     return {
       page,
       cameras,
-      compare,
+      compareStoryId,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
@@ -291,12 +291,14 @@ export const ReviewWorkspace = ({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const canvas = useElementSize<HTMLDivElement>();
   // 既定のブランチとの見比べ（印・「変わった画面だけ」・比べる画面）
-  const compare = useBranchCompare({
+  const branchCompare = useBranchCompare({
     branch,
     defaultBranch,
+    page,
+    width: widthOf(page),
     head: shots,
     base: baseShots,
-    initialStoryId: initial.compare,
+    initialStoryId: initial.compareStoryId,
   });
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -341,16 +343,20 @@ export const ReviewWorkspace = ({
   const pageWidthOptions = pageWidths.optionsOf(page);
   const rowsFor = (
     source: StorySource,
-    filters: { showComponents: boolean; query: string; changedOnly?: false },
+    filters: {
+      showComponents: boolean;
+      query: string;
+      ignoreChangedOnly?: boolean;
+    },
   ) => {
     const shown = filterStories(storiesOf(source), {
       ...filters,
       excludeTitlePrefixes: sources.excludeTitlePrefixes,
     });
     const visible =
-      filters.changedOnly === false
+      filters.ignoreChangedOnly === true
         ? shown
-        : compare.filter(source, widthOf(source), shown);
+        : branchCompare.filter(source, shown);
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
@@ -432,7 +438,9 @@ export const ReviewWorkspace = ({
       ...(urlCommentId === null ? {} : { comment: urlCommentId }),
       // 一覧の状態のタブ（はじめの「未解決」は載せない）
       ...(status === "open" ? {} : { status }),
-      ...(compare.storyId === undefined ? {} : { compare: compare.storyId }),
+      ...(branchCompare.urlStoryId === undefined
+        ? {}
+        : { compare: branchCompare.urlStoryId }),
     });
     window.history.replaceState(
       null,
@@ -446,7 +454,7 @@ export const ReviewWorkspace = ({
     urlCommentId,
     centerStoryId,
     status,
-    compare.storyId,
+    branchCompare.urlStoryId,
   ]);
 
   /**
@@ -520,11 +528,7 @@ export const ReviewWorkspace = ({
         nextQuery = "";
       }
       // 「変わった画面だけ」で隠れているときも外す
-      const hiddenByChangedOnly =
-        compare.filter(root.source, widthOf(root.source), [story]).length === 0;
-      if (hiddenByChangedOnly) {
-        compare.setChangedOnly(root.source, widthOf(root.source), false);
-      }
+      const revealed = branchCompare.reveal(root.source, story.id);
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
       const currentZoom = resolveCamera(
@@ -533,7 +537,7 @@ export const ReviewWorkspace = ({
           rows: rowsFor(root.source, {
             showComponents: nextShowComponents,
             query: nextQuery,
-            ...(hiddenByChangedOnly ? { changedOnly: false } : {}),
+            ...(revealed ? { ignoreChangedOnly: true } : {}),
           }),
           bounds: null,
           viewport,
@@ -700,7 +704,7 @@ export const ReviewWorkspace = ({
   // キーボードの操作（入力欄にいるときは Esc 以外を効かせない）
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (dialog !== null || compare.storyId !== undefined) return;
+      if (dialog !== null || branchCompare.openStoryId !== undefined) return;
       // 日本語の変換中の Esc は変換の取り消し（書きかけを消したり閉じたりしない）
       if (isImeComposing(event)) return;
       const typing = isTypingTarget(event.target);
@@ -874,9 +878,9 @@ export const ReviewWorkspace = ({
   const commit = published?.commit;
   // 比べる画面を開いている画面（いまのページに無ければ開かない）
   const compareStory =
-    compare.storyId === undefined
+    branchCompare.openStoryId === undefined
       ? undefined
-      : storiesByKey.get(storyKey(page, compare.storyId));
+      : storiesByKey.get(storyKey(page, branchCompare.openStoryId));
   const branchOptions = buildBranchOptions({
     current: branch,
     defaultBranch,
@@ -927,17 +931,14 @@ export const ReviewWorkspace = ({
             onQueryChange={setQuery}
             searchRef={searchRef}
             onSelectStory={focusStory}
-            marks={compare.marksOf(
-              page,
-              width,
+            marks={branchCompare.marksOf(
               storiesOf(page).map((story) => story.id),
             )}
-            {...(compare.available(page)
+            {...(branchCompare.available
               ? {
                   changedOnly: {
-                    checked: compare.changedOnly(page, width),
-                    onChange: (on: boolean) =>
-                      compare.setChangedOnly(page, width, on),
+                    checked: branchCompare.changedOnly,
+                    onChange: branchCompare.setChangedOnly,
                   },
                 }
               : {})}
@@ -1030,8 +1031,8 @@ export const ReviewWorkspace = ({
                     )
                   }
                   onCompare={
-                    compare.enabled
-                      ? (story) => compare.open(story.id)
+                    branchCompare.canOpen
+                      ? (story) => branchCompare.open(story.id)
                       : undefined
                   }
                 />
@@ -1104,12 +1105,15 @@ export const ReviewWorkspace = ({
                   onClose={() => setActiveThreadId(null)}
                 />
               )}
-              {rows.length === 0 && !compare.changedOnly(page, width) && (
+              {rows.length === 0 && (
                 <NoMatchNotice
                   query={query}
+                  changedOnly={branchCompare.changedOnly}
                   onClear={() => {
-                    if (query === "") setShowComponents(true);
-                    else setQuery("");
+                    if (query !== "") setQuery("");
+                    else if (branchCompare.changedOnly) {
+                      branchCompare.setChangedOnly(false);
+                    } else setShowComponents(true);
                   }}
                 />
               )}
@@ -1236,12 +1240,16 @@ export const ReviewWorkspace = ({
       {compareStory !== undefined && (
         <CompareDialog
           story={compareStory}
-          view={compareViewOf(compare.pairOf(page), compareStory.id, width)}
+          view={compareViewOf(
+            branchCompare.pairOf(page),
+            compareStory.id,
+            width,
+          )}
           defaultBranch={defaultBranch}
           branch={branch}
           onClose={() => {
             // 閉じてから（ダイアログが開く前のフォーカスへ戻したあとで）、その画面のボタンへ戻す
-            flushSync(() => compare.close());
+            flushSync(() => branchCompare.close());
             focusCompareButton(compareStory.id);
           }}
         />

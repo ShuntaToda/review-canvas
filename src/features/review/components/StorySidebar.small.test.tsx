@@ -111,6 +111,14 @@ describe("StorySidebar", () => {
     expect(
       screen.getAllByRole("button").map((button) => button.textContent),
     ).toEqual(["Default", "Filled変更", "Empty新しい"]);
+    // 読み上げでは名前と印をつなげない
+    expect(
+      screen.getByRole("button", { name: "Filled（変更）" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Empty（新しい）" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Default" })).not.toBeNull();
   });
 
   test("[正常系]「変わった画面だけ」は画面名の絞り込みの下に出し、切り替えを返す", () => {
@@ -150,6 +158,26 @@ describe("StorySidebar", () => {
 
     expect(
       screen.getByText("既定のブランチから変わった画面はありません"),
+    ).not.toBeNull();
+  });
+
+  test("[境界値]「変わった画面だけ」と文字の絞り込みを重ねて 1 件も無ければ、その語を添えて知らせる", () => {
+    render(
+      <StorySidebar
+        rows={[]}
+        currentStoryId={undefined}
+        query=" Cart "
+        onQueryChange={() => undefined}
+        searchRef={createRef<HTMLInputElement>()}
+        onSelectStory={onSelectStory}
+        changedOnly={{ checked: true, onChange: () => undefined }}
+      >
+        <p>表示の設定</p>
+      </StorySidebar>,
+    );
+
+    expect(
+      screen.getByText("「Cart」に当たる、変わった画面はありません"),
     ).not.toBeNull();
   });
 

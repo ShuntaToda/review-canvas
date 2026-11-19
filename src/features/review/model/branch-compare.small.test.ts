@@ -126,6 +126,7 @@ describe("compareViewOf", () => {
       kind: "ready",
       base: base.find("shop-list--default", 1280),
       head: head.find("shop-list--default", 1280),
+      width: 1280,
     });
   });
 

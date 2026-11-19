@@ -155,28 +155,38 @@ export const DeletedThreadNotice = ({
  */
 export const NoMatchNotice = ({
   query,
+  changedOnly = false,
   onClear,
 }: {
   query: string;
+  /** 「変わった画面だけ」を入れている（文字が空なら、押すとそれを外す） */
+  changedOnly?: boolean;
   onClear: () => void;
-}) => (
-  <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
-    <div
-      role="status"
-      className="pointer-events-auto max-w-md rounded-xl border border-line bg-panel p-5 text-sm shadow-sm"
-    >
-      <p className="mb-3 text-ink">
-        {query.trim() === ""
-          ? "表示する画面がありません（部品だけのページです）。"
-          : `「${query.trim()}」に当たる画面はありません。`}
-      </p>
-      <button
-        type="button"
-        className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
-        onClick={onClear}
+}) => {
+  const trimmed = query.trim();
+  const [text, action] = changedOnly
+    ? [
+        `${messages.noChangedStories(trimmed)}。`,
+        trimmed === "" ? "「変わった画面だけ」を外す" : "絞り込みを外す",
+      ]
+    : trimmed === ""
+      ? ["表示する画面がありません（部品だけのページです）。", "部品も表示する"]
+      : [`「${trimmed}」に当たる画面はありません。`, "絞り込みを外す"];
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
+      <div
+        role="status"
+        className="pointer-events-auto max-w-md rounded-xl border border-line bg-panel p-5 text-sm shadow-sm"
       >
-        {query.trim() === "" ? "部品も表示する" : "絞り込みを外す"}
-      </button>
+        <p className="mb-3 text-ink">{text}</p>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
+          onClick={onClear}
+        >
+          {action}
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};

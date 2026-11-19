@@ -184,8 +184,6 @@ export const ReviewPage = ({
     !settled(stories, true) ||
     // 画像の有無が分かってから並べる（先に iframe で読み込み始めてから、画像に切り替えない）
     !settled(shots, true) ||
-    // 既定のブランチと見比べる印・絞り込みも、そろってから出す（あとから印が増えて一覧が動かないように）
-    !settled(baseShots, comparing && defaultPublished !== null) ||
     !settled(comments, true)
   ) {
     return <FullScreenMessage>読み込み中…</FullScreenMessage>;
@@ -224,10 +222,18 @@ export const ReviewPage = ({
             catalog.ids,
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
-          baseShots={mapSources(
-            catalog.ids,
-            (id) => baseShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
-          )}
+          // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）。
+          // 既定のブランチを置いていなければ、目録の無いものとして渡す
+          baseShots={
+            comparing &&
+            defaultPublished !== null &&
+            baseShots.data === undefined
+              ? null
+              : mapSources(
+                  catalog.ids,
+                  (id) => baseShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+                )
+          }
           initialUrl={urlState}
           initialComments={comments.data?.comments ?? []}
           me={user}

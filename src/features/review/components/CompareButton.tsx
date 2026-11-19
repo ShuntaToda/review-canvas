@@ -1,6 +1,5 @@
 import { GitCompare } from "lucide-react";
 import type { Story } from "../model/storybook";
-import { COMPARE_BUTTON_ATTRIBUTE } from "./canvas-dom";
 
 /**
  * 画面の見出しの「既定のブランチと比べる」ボタン（「Storybook で開く」の隣）。既定のブランチを見ているときは出さない（Frame が onCompare を受けたときだけ出す）
@@ -14,7 +13,8 @@ export const CompareButton = ({
 }) => (
   <button
     type="button"
-    {...{ [COMPARE_BUTTON_ATTRIBUTE]: story.id }}
+    // 閉じたときのフォーカスの戻り先（canvas-dom.ts の focusCompareButton が探す）
+    data-compare-story={story.id}
     className="inline-flex shrink-0 items-center rounded p-0.5 text-muted hover:bg-panel hover:text-accent"
     aria-label={`${story.title} / ${story.name} を既定のブランチと比べる`}
     title="既定のブランチと比べる"

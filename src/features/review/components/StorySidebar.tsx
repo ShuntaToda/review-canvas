@@ -4,6 +4,7 @@ import { COMPARE_MARK_LABELS, type CompareMark } from "../model/branch-compare";
 import type { RowPlacement } from "../model/layout";
 import type { Story } from "../model/storybook";
 import { focusCanvas } from "./canvas-dom";
+import { messages } from "@/constants/messages";
 
 /**
  * 左の画面の一覧。上に絞り込みと、キャンバスと同じ並びの画面（タイトル）・状態（ストーリー）、下に表示の設定（children）。
@@ -75,7 +76,7 @@ export const StorySidebar = ({
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-center text-sm text-muted">
           {changedOnly?.checked === true
-            ? "既定のブランチから変わった画面はありません"
+            ? messages.noChangedStories(query.trim())
             : "絞り込みに合う画面はありません"}
         </p>
       ) : (
@@ -105,6 +106,12 @@ export const StorySidebar = ({
                             : "text-ink-sub hover:bg-panel-sub hover:text-ink",
                         ].join(" ")}
                         title={`${row.title} / ${story.name}`}
+                        // 印を読み上げで名前とつなげない（「Default変更」ではなく「Default（変更）」）
+                        aria-label={
+                          mark === undefined
+                            ? undefined
+                            : `${story.name}（${COMPARE_MARK_LABELS[mark]}）`
+                        }
                         onClick={() => onSelectStory(story)}
                       >
                         <span className="min-w-0 flex-1 truncate">

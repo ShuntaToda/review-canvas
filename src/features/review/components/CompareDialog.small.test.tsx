@@ -46,7 +46,7 @@ const modeButton = (name: string) =>
 
 describe("CompareDialog", () => {
   test("[正常系]見出しに画面名を出し、はじめは「並べる」で、左に既定のブランチ・右にこのブランチを出す", () => {
-    renderDialog({ kind: "ready", base: BASE, head: HEAD });
+    renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
     expect(
       screen.getByRole("dialog", {
@@ -64,7 +64,7 @@ describe("CompareDialog", () => {
   });
 
   test("[正常系]「重ねる」に切り替えると、2 枚を重ねて上の 1 枚を difference で混ぜ、説明を出す。「並べる」に戻せる", () => {
-    renderDialog({ kind: "ready", base: BASE, head: HEAD });
+    renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
     fireEvent.click(modeButton("重ねる"));
 
@@ -82,6 +82,49 @@ describe("CompareDialog", () => {
 
     fireEvent.click(modeButton("並べる"));
     expect(screen.queryByText("同じ所は黒く、違う所が明るく出ます")).toBeNull();
+  });
+
+  test("[正常系]画像は撮った幅より大きくしない（重ねる表示でも 2 枚を同じ幅の入れ物に入れる）", () => {
+    renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
+    for (const image of screen.getAllByRole<HTMLImageElement>("img")) {
+      expect(image.style.maxWidth).toBe("375px");
+    }
+
+    fireEvent.click(modeButton("重ねる"));
+    const [base, head] = screen.getAllByRole<HTMLImageElement>("img");
+    expect(base?.parentElement).toBe(head?.parentElement);
+    expect(base?.parentElement?.style.maxWidth).toBe("375px");
+    expect(base?.className).toContain("w-full");
+    expect(head?.className).toContain("w-full");
+  });
+
+  test("[異常系]新しい画面で今の幅の画像も無ければ、右は幅の画像が無いことだけを出す", () => {
+    renderDialog({ kind: "new", head: undefined, width: 1280 });
+
+    expect(screen.getByText("1280px の画像がありません。")).not.toBeNull();
+    expect(screen.queryByText(/設定の幅のどれかに切り替える/)).toBeNull();
+  });
+
+  test("[異常系]「重ねる」で片方を読み込めないときは、重ねずに左右に並べ、読み込めなかった方に知らせ、読み込めた方に画像を出す", () => {
+    renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
+    fireEvent.click(modeButton("重ねる"));
+
+    fireEvent.error(
+      screen.getByRole("img", { name: "既定のブランチ（main）" }),
+    );
+
+    expect(screen.queryByText("同じ所は黒く、違う所が明るく出ます")).toBeNull();
+    expect(screen.getByText("画像を読み込めませんでした")).not.toBeNull();
+    expect(
+      screen.getByRole<HTMLImageElement>("img", {
+        name: "このブランチ（feature/a）",
+      }).className,
+    ).not.toContain("mix-blend-difference");
+
+    fireEvent.click(screen.getByRole("button", { name: "読み込み直す" }));
+    expect(
+      screen.getByText("同じ所は黒く、違う所が明るく出ます"),
+    ).not.toBeNull();
   });
 
   test("[正常系]新しい画面は、左に「既定のブランチにこの画面はありません」、右に画像を出し、「重ねる」は押せない", () => {
@@ -124,7 +167,7 @@ describe("CompareDialog", () => {
   );
 
   test("[異常系]画像を読み込めない側に、その旨と「読み込み直す」を出し、押すと読み込み直す", () => {
-    renderDialog({ kind: "ready", base: BASE, head: HEAD });
+    renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
     fireEvent.error(
       screen.getByRole("img", { name: "このブランチ（feature/a）" }),
@@ -154,7 +197,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
         {open && (
           <CompareDialog
             story={story}
-            view={{ kind: "ready", base: BASE, head: HEAD }}
+            view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
             defaultBranch="main"
             branch="feature/a"
             onClose={() => {
