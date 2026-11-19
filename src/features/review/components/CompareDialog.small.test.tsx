@@ -251,4 +251,34 @@ describe("CompareButton と閉じたときのフォーカス", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(button);
   });
+
+  test("[境界値]閉じたとき見出しのボタンが無い（縮小して見出しを出していない）ときは、キャンバスにフォーカスを戻す", () => {
+    /** 見出しを出していないキャンバス（ボタンが無い）で、URL の compare= から開いた比べる画面 */
+    const WithoutButton = () => {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <div data-canvas-root tabIndex={-1} aria-label="キャンバス" />
+          {open && (
+            <CompareDialog
+              story={story}
+              view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
+              defaultBranch="main"
+              branch="feature/a"
+              onClose={() => {
+                flushSync(() => setOpen(false));
+                focusCompareButton(story.id);
+              }}
+            />
+          )}
+        </>
+      );
+    };
+    render(<WithoutButton />);
+
+    fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText("キャンバス"));
+  });
 });

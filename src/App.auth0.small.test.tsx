@@ -575,6 +575,29 @@ describe("ブランチの切り替え", () => {
       expect(changedOnlyBox()).toBeTruthy();
     });
 
+    test("[正常系]comment= と compare= を両方持つリンクでは、カメラはコメントの画面に寄せ、比べる画面は compare の画面で開く", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch({ comments: [cartComment] }));
+      await renderApp(
+        `/?branch=feature%2Fa&page=shop&comment=${cartComment.id}&compare=shop-list--default`,
+      );
+
+      expect(
+        await screen.findByRole("dialog", { name: compareButtonName }),
+      ).toBeTruthy();
+      // 真ん中に見えている画面（一覧の aria-current）は、コメントの画面
+      await waitFor(() =>
+        expect(
+          statusRow("Shop/Cart / Empty")?.getAttribute("aria-current"),
+        ).toBe("true"),
+      );
+      expect(
+        statusRow("Shop/List / Default")?.getAttribute("aria-current"),
+      ).toBeNull();
+      expect(window.location.search).toContain(`comment=${cartComment.id}`);
+      expect(window.location.search).toContain("compare=shop-list--default");
+    });
+
     test("[正常系]比べる画面を開いているあいだはショートカットを効かせず、Esc で閉じると見出しのボタンにフォーカスが戻り、URL から compare が消える", async () => {
       sdk.state = { isAuthenticated: true, error: undefined };
       fetchMock.mockImplementation(compareFetch());
