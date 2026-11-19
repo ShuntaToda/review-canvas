@@ -268,6 +268,13 @@ describe("覚える先をメモリへ差し替える関数（replaceLocalStorage
     'import { replaceLocalStorageWithMemory as reset } from "../../support/storage/local-storage";',
     'import * as storage from "@/support/storage/local-storage";',
     'import { replaceLocalStorageWithMemory } from "./local-storage.ts";',
+    'await import("@/support/storage/local-storage");',
+    "await import(`./local-storage`);",
+  ];
+  /** 静的な import（no-restricted-imports）と動的 import（no-restricted-syntax）の両方で見る */
+  const swapHitsOf = async (file, code) => [
+    ...(await restrictedImportHitsOf(file, code)),
+    ...(await restrictedSyntaxHitsOf(file, code)),
   ];
 
   it.each([
@@ -276,12 +283,10 @@ describe("覚える先をメモリへ差し替える関数（replaceLocalStorage
     "src/support/auth/dev/dev-session.ts",
     "src/features/review/pages/ReviewPage.small.test.tsx",
   ])(
-    "画面のコード（%s）からは読めない（名前を変えても・import * as でも）",
+    "画面のコード（%s）からは読めない（名前を変えても・import * as でも・動的 import でも）",
     async (file) => {
       for (const code of SWAP_IMPORTS) {
-        expect((await restrictedImportHitsOf(file, code)).join()).toContain(
-          SWAP_MESSAGE,
-        );
+        expect((await swapHitsOf(file, code)).join()).toContain(SWAP_MESSAGE);
       }
     },
   );
@@ -304,10 +309,35 @@ describe("覚える先をメモリへ差し替える関数（replaceLocalStorage
     "Storybook の設定・ストーリー・そのテスト（%s）からは読める",
     async (file) => {
       for (const code of SWAP_IMPORTS) {
-        expect(await restrictedImportHitsOf(file, code)).toStrictEqual([]);
+        expect(await swapHitsOf(file, code)).toStrictEqual([]);
       }
     },
   );
+});
+
+describe("遷移（parameters.reviewCanvas）は meta に書かない", () => {
+  const META_MESSAGE = "meta に書かず";
+  const FILE = "src/features/review/pages/ReviewTransitions.stories.tsx";
+
+  it("meta に書くと止める", async () => {
+    expect(
+      (
+        await restrictedSyntaxHitsOf(
+          FILE,
+          "const meta = { parameters: { reviewCanvas: { transitions: [] } } };\nexport default meta;",
+        )
+      ).join(),
+    ).toContain(META_MESSAGE);
+  });
+
+  it("ストーリー（export）に書くのは止めない。ストーリーの動的 import も止めない", async () => {
+    expect(
+      await restrictedSyntaxHitsOf(
+        FILE,
+        'const meta = { title: "レビュー/画面のつながり" };\nexport default meta;\nexport const Selected = { parameters: { reviewCanvas: { transitions: [] } } };\nvoid import("msw");',
+      ),
+    ).toStrictEqual([]);
+  });
 });
 
 describe("infra・スクリプトからも読む画面（src/）のファイル", () => {

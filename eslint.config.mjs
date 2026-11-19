@@ -257,6 +257,15 @@ const STORY_FILES = [
   ".storybook/*.{ts,tsx}",
 ];
 
+/** 覚える先を差し替える関数を読めるファイル（ストーリー・Storybook の設定と、その関数のテスト） */
+const STORAGE_SWAP_ALLOWED_FILES = [
+  ...STORY_FILES,
+  "src/support/storage/local-storage.small.test.ts",
+];
+
+const TRANSITIONS_IN_META_MESSAGE =
+  "遷移（parameters.reviewCanvas）は meta に書かず、ストーリー（export）の側に書きます（meta に書くと、その画面のどのストーリーにも同じ遷移が付きます。docs/development.md「review-canvas 自身の Storybook」）。";
+
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
@@ -346,6 +355,29 @@ const restrictedSyntax = [
       {
         selector: importExpressionMatching(STORY_ONLY_IMPORTS.regex),
         message: STORY_ONLY_IMPORTS.message,
+      },
+    ],
+  },
+  {
+    // 覚える先を差し替える関数の動的 import（import("@/support/storage/local-storage")）。no-restricted-imports は動的 import を見ない
+    files: appFiles,
+    ignores: STORAGE_SWAP_ALLOWED_FILES,
+    selectors: [
+      {
+        selector: importExpressionMatching(STORAGE_SWAP_IMPORT.regex),
+        message: STORAGE_SWAP_IMPORT.message,
+      },
+    ],
+  },
+  {
+    // 遷移は、ストーリーごとに書く（meta に書かない）
+    files: appFiles,
+    ignores: [],
+    selectors: [
+      {
+        selector:
+          "VariableDeclarator[id.name='meta'] Property[key.name='reviewCanvas']",
+        message: TRANSITIONS_IN_META_MESSAGE,
       },
     ],
   },

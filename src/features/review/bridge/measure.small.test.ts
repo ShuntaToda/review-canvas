@@ -81,6 +81,21 @@ describe("decideSize", () => {
     },
   );
 
+  test("[異常系]引きずられた分を除いて知らせた直後に、同じ画面の高さで同じ中身をもう一度測っても、知らせない", () => {
+    // 橋渡しの測り（SIZE_DEBOUNCE_MS）と親の測り直し（Frame の MEASURE_DELAYS_MS）が、iframe が伸びる前に重なった並び
+    const at = (state: MeasureState | null, height: number, viewport: number) =>
+      decideSize(state, { height, width: 375, viewport }, false);
+    const first = at(null, 1281, 812);
+    const followed = at(first.state, 1750, 1281);
+    const played = at(followed.state, 1788, 1281);
+    expect(played.report).toBe(1319);
+
+    const again = at(played.state, 1788, 1281);
+
+    expect(again.report).toBeNull();
+    expect(again.state.height).toBe(1319);
+  });
+
   test.each([
     {
       label: "帯＋足 120px が play 関数で 300px 伸びた",

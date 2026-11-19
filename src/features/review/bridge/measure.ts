@@ -116,9 +116,12 @@ export const decideSize = (
     }
     return reported(follows);
   }
+  // 引きずられた分を除いて知らせた直後は、知らせた高さ（state.height）と測った中身（state.measured）が違う。
+  // 同じ画面の高さで同じ中身を測り直しただけなら変わっていない（そのまま知らせると、除いた分を足して伸ばし、100vh の帯が埋めて戻らない）
   const unchanged =
     near(state.height, current.height) ||
-    (state.ignored !== null && near(state.ignored, current.height));
+    (state.ignored !== null && near(state.ignored, current.height)) ||
+    (!viewportChanged && near(state.measured, current.height));
   if (unchanged) return keep({ ...state, viewport: current.viewport });
   // 画面の高さに引きずられた伸びを知らせずにいるあいだに、同じ画面の高さのまま中身が変わった（play 関数など）。
   // 中身がまだ画面の高さより高ければ（帯が画面の高さに合っている）、引きずられた分を除いた高さを知らせる

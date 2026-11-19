@@ -121,7 +121,9 @@ export const checkStoryTransitions = ({
         `${storyId}: 書いた遷移は ${String(written)} 行ですが、目録には ${String(rows.length)} 行しかありません`,
       );
     }
-    if (rows.length === 0 && !(written > 0)) continue;
+    // 遷移を書いていない・目録にも無いストーリーは、画像の幅もボタンも見ない
+    const hasTransitions = rows.length > 0 || written > 0;
+    if (!hasTransitions) continue;
     const shots = manifest.shots.filter((shot) => shot.storyId === storyId);
     for (const width of widths) {
       if (!shots.some((shot) => shot.width === width)) {
@@ -169,6 +171,8 @@ const readManifest = (file) => {
 
 /** 設定ファイルから、review-canvas 自身の Storybook の幅を読む（読めなければ problem） */
 const readAppWidths = (file) => {
+  // 設定の形の正は zod（api/infrastructure/config/review-canvas-config.ts）だが、このスクリプトは TypeScript を読めないので、
+  // 使う形（storybooks[].id・widths。既定値なし）だけを写す。形を変えたらここも直す
   try {
     const config = JSON.parse(fs.readFileSync(file, "utf8"));
     const app = (config?.storybooks ?? []).find(

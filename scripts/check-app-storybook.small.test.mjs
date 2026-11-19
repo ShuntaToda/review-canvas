@@ -213,6 +213,10 @@ describe("manifestShapeProblem", () => {
       "transitions の a--one の行の形が違います",
     ],
     [
+      { shots: [], transitions: { "a--one": {} } },
+      "transitions の a--one の行の形が違います",
+    ],
+    [
       { shots: [{ storyId: "a--one", width: 1280, transitions: {} }] },
       "shots の行の形が違います",
     ],

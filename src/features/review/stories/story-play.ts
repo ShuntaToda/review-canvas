@@ -14,7 +14,7 @@ const MARGIN_MS = 7_000;
 /**
  * いくつもの動く画面を待つときの上限(ms)。撮影は同時に数ページを開くので、どの画面も中のストーリー（play 関数）を描くあいだ CPU を取り合い、
  * 1 つを待つときの上限を越えることがある（読み込みは同時に 3 つ・play 関数を持つものは 1 つずつ。model/load-queue の frameLoadQueue）。
- * 撮影・check:storybook:app の 1 本の上限（30 秒）より短くする
+ * 1 回の待ちは、撮影・check:storybook:app の 1 本の上限（30 秒）より短い。1 本の play 関数で待ちを重ねたときは、外の上限が先に切れうる
  */
 const MANY_FRAMES_TIMEOUT_MS = 25_000;
 
@@ -138,7 +138,7 @@ export const waitForFramesWithoutShots = (
 ) => waitForFrames(canvasElement, storyIds, "iframe");
 
 /**
- * キャンバスをホイールで縦に動かす（dy は下へ動かす px）。キャンバスの見え方を、押した後と同じに戻すときは、逆の向きに同じだけ動かす
+ * キャンバスをホイールで縦に動かす（dy は下へ動かす px）。動かす前と同じに戻すときは、逆の向きに同じだけ動かす
  */
 export const scrollCanvas = async (canvasElement: HTMLElement, dy: number) => {
   const root = canvasElement.querySelector("[data-canvas-root]");
