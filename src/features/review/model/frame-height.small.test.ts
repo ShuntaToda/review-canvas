@@ -1,11 +1,5 @@
 import { decideSize, type MeasureState } from "../bridge/measure";
-import {
-  defersMeasure,
-  heldHeightToReport,
-  iframeHeightFor,
-  matchesWidth,
-  type MeasuredAt,
-} from "./frame-height";
+import { iframeHeightFor, matchesWidth, type MeasuredAt } from "./frame-height";
 import { clampFrameHeight } from "./layout";
 
 const BASE = 800;
@@ -79,44 +73,5 @@ describe("iframeHeightFor", () => {
     expect(settle(1280, null).height).toBe(920);
     generation += 1;
     expect(settle(1280, null).height).toBe(920);
-  });
-});
-
-describe("defersMeasure・heldHeightToReport", () => {
-  test("[正常系]画像を出しているあいだだけ持っておき、画像が無い・切り替わったあとはすぐ渡す", () => {
-    expect(defersMeasure({ hasShot: true, revealed: false })).toBe(true);
-    expect(defersMeasure({ hasShot: true, revealed: true })).toBe(false);
-    expect(defersMeasure({ hasShot: false, revealed: false })).toBe(false);
-  });
-
-  test("[正常系]切り替わったときは、いまの幅で測った最後の高さだけを渡す", () => {
-    expect(heldHeightToReport({ height: 1319, width: 375 }, 375)).toBe(1319);
-    expect(heldHeightToReport({ height: 1319, width: 375 }, 1280)).toBeNull();
-    expect(heldHeightToReport(null, 375)).toBeNull();
-  });
-
-  test("[正常系]描画の途中の高さ（描く前・play 関数の途中）が届いても、画像を出しているあいだは枠の高さが動かない", () => {
-    const baseHeight = 812;
-    const shotHeight = 1319;
-    let measured: number | undefined;
-    let held: { height: number; width: number } | null = null;
-    const frameHeights: number[] = [];
-    const frameHeight = () =>
-      clampFrameHeight(measured ?? shotHeight, baseHeight);
-    const receive = (height: number, revealed: boolean) => {
-      if (defersMeasure({ hasShot: true, revealed })) {
-        held = { height, width: 375 };
-      } else {
-        measured = height;
-      }
-      frameHeights.push(frameHeight());
-    };
-    // サンプルの OrderForm / Filled を 375px で読み込んだときの高さの動き
-    receive(812, false);
-    receive(1281, false);
-    receive(1319, false);
-    measured = heldHeightToReport(held, 375) ?? measured;
-    frameHeights.push(frameHeight());
-    expect(frameHeights).toEqual([1319, 1319, 1319, 1319]);
   });
 });

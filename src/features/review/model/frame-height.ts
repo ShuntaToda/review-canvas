@@ -42,24 +42,3 @@ export const iframeHeightFor = ({
   matchesWidth(measuredAt.width, width)
     ? frameHeight
     : Math.min(frameHeight, baseHeight);
-
-/**
- * 測った高さを、すぐキャンバスの並びに渡さずに持っておくか。
- * 画像の下で読み込んでいるあいだの iframe は、描画・play 関数の途中の高さ（描く前の既定の高さなど）を知らせる。
- * そのまま並びに渡すと、画像を出しているのに枠が縮んだり伸びたりして、下に並ぶ画面ごと上下に跳ねる。
- * 画像から切り替わるまでは持っておき、切り替わったときに最後の高さを 1 回だけ渡す
- */
-export const defersMeasure = ({
-  hasShot,
-  revealed,
-}: {
-  hasShot: boolean;
-  revealed: boolean;
-}): boolean => hasShot && !revealed;
-
-/** 持っておいた高さのうち、画像から切り替わったときに並びへ渡すもの（いまの幅で測ったものだけ。無ければ null） */
-export const heldHeightToReport = (
-  held: { height: number; width: number } | null,
-  width: number,
-): number | null =>
-  held !== null && matchesWidth(held.width, width) ? held.height : null;
