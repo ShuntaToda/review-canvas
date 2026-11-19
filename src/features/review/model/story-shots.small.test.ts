@@ -2,10 +2,13 @@
 import {
   buildShotCatalog,
   collectShotElements,
+  createShotTextReaders,
   EMPTY_SHOT_CATALOG,
   isShotPath,
   MAX_SHOT_ELEMENTS,
+  measureTransitionCandidates,
   parseShotsManifest,
+  readTransitionSpecs,
   shotPath,
   SHOT_ELEMENT_SELECTOR,
   SHOT_ELEMENT_TEXT_LENGTH,
@@ -258,7 +261,7 @@ describe("collectShotElements", () => {
       document,
       SHOT_ELEMENT_SELECTOR,
       max,
-      SHOT_ELEMENT_TEXT_LENGTH,
+      createShotTextReaders(document, SHOT_ELEMENT_TEXT_LENGTH),
     );
 
   test("[正常系]押せる要素と見出しの矩形と文字を集める（入力欄の中身・隠した要素・SVG は読まず、見えない要素は除く）", () => {
@@ -352,5 +355,293 @@ describe("collectShotElements", () => {
     });
     expect(collect(2)).toHaveLength(2);
     expect(collect(1)).toBeNull();
+  });
+});
+
+describe("parseShotsManifest（遷移）", () => {
+  const rows = [
+    { index: 0, to: "shop-form--default", label: "在庫があるとき" },
+    { index: 2, to: "shop-form--filled" },
+  ];
+  const rect = { index: 0, x: 16, y: 200, width: 120, height: 40 };
+
+  test("[正常系]遷移を書いたストーリーの行と、画像ごとのボタンの矩形を読む", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [shot({ transitions: [rect, { ...rect, index: 2, y: 300 }] })],
+      transitions: { "shop-list--default": rows },
+    });
+    expect(manifest?.transitions).toStrictEqual({
+      "shop-list--default": rows,
+    });
+    expect(manifest?.shots[0]?.transitions).toStrictEqual([
+      rect,
+      { ...rect, index: 2, y: 300 },
+    ]);
+  });
+
+  test("[正常系]古い目録（遷移なし）は遷移なしとして読む", () => {
+    const manifest = parseShotsManifest({ version: 1, shots: [shot()] });
+    expect(manifest).toStrictEqual({
+      version: 1,
+      shots: [shot()],
+      playFunctions: {},
+    });
+  });
+
+  test("[異常系]知らない形の遷移の行は 1 行ずつ捨て、ほかの行は残す", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [],
+      transitions: {
+        "shop-list--default": [
+          rows[0],
+          { index: 1, to: "https://example.com/" },
+          { index: 3, to: `shop--${"a".repeat(195)}` },
+          { index: 4, to: "shop-form--default", label: "あ".repeat(41) },
+          { index: 5, to: "shop-form--default", label: 1 },
+          { index: 50, to: "shop-form--default" },
+          { index: -1, to: "shop-form--default" },
+          { index: 0.5, to: "shop-form--default" },
+          { index: 0, to: "shop-form--filled" },
+          { index: 6, to: `shop--${"a".repeat(194)}`, label: "あ".repeat(40) },
+          null,
+        ],
+        "shop-form--default": "行ではない",
+        "shop-form--filled": [{ index: 0, to: "x" }],
+      },
+    });
+    expect(manifest?.transitions).toStrictEqual({
+      "shop-list--default": [
+        rows[0],
+        { index: 6, to: `shop--${"a".repeat(194)}`, label: "あ".repeat(40) },
+      ],
+    });
+  });
+
+  test("[異常系]件数が上限（50）を超える分は捨てる", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [],
+      transitions: {
+        "shop-list--default": Array.from({ length: 51 }, (_, index) => ({
+          index: index === 50 ? 49 : index,
+          to: "shop-form--default",
+        })),
+      },
+    });
+    expect(manifest?.transitions?.["shop-list--default"]).toHaveLength(50);
+  });
+
+  test("[異常系]画像の外・行の無い位置・重なる位置の矩形は捨て、ほかの矩形と画像は残す", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [
+        shot({
+          transitions: [
+            rect,
+            { ...rect, index: 2, y: 2400 },
+            { ...rect, index: 2, y: -1 },
+            { ...rect, index: 2, x: 9_990 },
+            { ...rect, index: 2, width: 0 },
+            { ...rect, index: 1 },
+            { ...rect, index: 7 },
+            { ...rect, y: 500 },
+            "矩形ではない",
+          ],
+        }),
+        shot({ width: 375, transitions: "矩形ではない" }),
+      ],
+      transitions: { "shop-list--default": rows },
+    });
+    expect(manifest?.shots[0]?.transitions).toStrictEqual([rect]);
+    expect(manifest?.shots[1]).toStrictEqual(shot({ width: 375 }));
+  });
+
+  test("[異常系]遷移の無いストーリーの画像の矩形は捨てる", () => {
+    const manifest = parseShotsManifest({
+      version: 1,
+      shots: [shot({ transitions: [rect] })],
+    });
+    expect(manifest?.shots[0]).toStrictEqual(shot());
+  });
+});
+
+describe("readTransitionSpecs", () => {
+  const windowWith = (parameters: unknown) => ({
+    __STORYBOOK_PREVIEW__: { currentRender: { story: { parameters } } },
+  });
+
+  test("[正常系]transitions だけを、文字だけの行にして読む（文字でない値・空白だけの文字は書いていないものとみなす）", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic["self"] = cyclic;
+    const parameters = {
+      get msw(): never {
+        throw new Error("読めない");
+      },
+      handler: () => undefined,
+      cyclic,
+      reviewCanvas: {
+        transitions: [
+          {
+            from: {
+              role: "button",
+              name: "カートに入れる",
+              heading: "木のマグカップ",
+              extra: cyclic,
+            },
+            to: "shop-form--default",
+            label: "在庫があるとき",
+          },
+          { from: { text: "  ", testId: 1 }, to: () => "x", label: cyclic },
+          {
+            get from(): never {
+              throw new Error("読めない");
+            },
+          },
+          "行ではない",
+        ],
+      },
+    };
+    expect(readTransitionSpecs(windowWith(parameters), 50, 100)).toStrictEqual({
+      rows: [
+        {
+          from: {
+            role: "button",
+            name: "カートに入れる",
+            heading: "木のマグカップ",
+          },
+          to: "shop-form--default",
+          label: "在庫があるとき",
+        },
+        { from: {} },
+        { from: null },
+        { from: null },
+      ],
+      overflow: false,
+    });
+  });
+
+  test("[正常系]上限の行まで読み、後ろの行があったかを返す。長い文字は上限で切る", () => {
+    const row = { from: { text: "あ".repeat(10) }, to: "shop-form--default" };
+    const read = (length: number) =>
+      readTransitionSpecs(
+        windowWith({
+          reviewCanvas: { transitions: Array.from({ length }, () => row) },
+        }),
+        3,
+        5,
+      );
+    expect(read(3).overflow).toBe(false);
+    expect(read(4)).toStrictEqual({
+      rows: Array.from({ length: 3 }, () => ({
+        from: { text: "あ".repeat(5) },
+        to: "shop-",
+      })),
+      overflow: true,
+    });
+  });
+
+  test.each([
+    ["プレビューが無い", {}],
+    [
+      "transitions が並びでない",
+      windowWith({ reviewCanvas: { transitions: {} } }),
+    ],
+    [
+      "parameters が読めない",
+      {
+        __STORYBOOK_PREVIEW__: {
+          currentRender: {
+            get story(): never {
+              throw new Error("読めない");
+            },
+          },
+        },
+      },
+    ],
+    [
+      "並びの長さが読めない",
+      windowWith({
+        reviewCanvas: {
+          transitions: new Proxy([], {
+            get: () => {
+              throw new Error("読めない");
+            },
+          }),
+        },
+      }),
+    ],
+  ])("[異常系]%s ときは遷移なし", (_, win) => {
+    expect(readTransitionSpecs(win, 50, 100)).toStrictEqual({
+      rows: [],
+      overflow: false,
+    });
+  });
+});
+
+describe("measureTransitionCandidates", () => {
+  const setUp = (
+    html: string,
+    rects: Record<string, [number, number, number, number]>,
+  ) => {
+    document.body.innerHTML = html;
+    for (const node of document.body.querySelectorAll("*")) {
+      const [x, y, width, height] = rects[node.id] ?? [0, 0, 10, 10];
+      node.getBoundingClientRect = () => new DOMRect(x, y, width, height);
+    }
+  };
+  const readers = () =>
+    createShotTextReaders(document, SHOT_ELEMENT_TEXT_LENGTH);
+  const byId = (...ids: string[]) =>
+    ids.map((id) => document.getElementById(id) as Element);
+
+  test("[正常系]見出しで絞り、目録の主な要素と同じ見出しの読み方で比べる", () => {
+    setUp(
+      `<ul>
+         <li><h2>木の マグカップ</h2><button id="a">カートに入れる</button></li>
+         <li><h2>麻のトートバッグ</h2><button id="b">カートに入れる</button></li>
+       </ul>`,
+      { a: [16.4, 100.6, 120.2, 34], b: [16, 250, 120, 34] },
+    );
+    expect(
+      measureTransitionCandidates(
+        byId("a", "b"),
+        readers(),
+        "木のマグカップ",
+        null,
+      ),
+    ).toStrictEqual([{ x: 16, y: 101, width: 120, height: 34 }]);
+    expect(
+      measureTransitionCandidates(byId("a", "b"), readers(), null, null),
+    ).toHaveLength(2);
+  });
+
+  test("[正常系]文字で探したときは、文字を持つ要素を含む押せる要素の矩形にし、同じ要素は 1 つに数える", () => {
+    setUp(
+      `<button id="button"><span id="label">注文する</span><span id="icon">→</span></button>
+       <p id="note">注文する</p>`,
+      { button: [0, 0, 160, 40], note: [0, 100, 300, 20] },
+    );
+    expect(
+      measureTransitionCandidates(
+        byId("label", "icon", "note"),
+        readers(),
+        null,
+        "button, a[href]",
+      ),
+    ).toStrictEqual([
+      { x: 0, y: 0, width: 160, height: 40 },
+      { x: 0, y: 100, width: 300, height: 20 },
+    ]);
+  });
+
+  test("[正常系]画面の左・上の外にある要素は数えない", () => {
+    setUp(`<a id="skip" href="#main">本文へ</a>`, {
+      skip: [-9999, 0, 80, 20],
+    });
+    expect(
+      measureTransitionCandidates(byId("skip"), readers(), null, null),
+    ).toStrictEqual([]);
   });
 });
