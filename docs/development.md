@@ -65,10 +65,11 @@ pnpm run test:structure    # つくりの決まりのテストと、自前の li
 pnpm run test:coverage     # すべてのテストと、層ごとのカバレッジの下限（CI はこれを動かす）
 pnpm run openapi:check     # openapi.json が API のコードと合っているか（手元のファイルと比べる。コミットの前でも確かめられる）
 pnpm run infra:validate    # infra の tsc・prettier・eslint
-pnpm run infra:test        # infra のテスト（スタックの形・置くスクリプト・配信の関数）
+pnpm run infra:test        # infra のテスト（スタックの形・置くスクリプト・配信の関数。撮影のテストは Chromium を使う）
 pnpm --dir examples/sample-storybook run validate
 ```
 
+- `infra:test` は、遷移のボタンを実際のブラウザで探すテスト（`infra/test/story-transitions-capture.small.test.ts`）に Playwright の Chromium を使います。先に `pnpm --dir infra exec playwright install chromium` で入れておきます（CI の test ジョブも入れる）
 - API を変えたら `pnpm run openapi:generate` で `openapi.json` を作り直します（画面の型 `src/generated/` は `codegen` で作る。どちらも手で直さない）
 - 設定ファイルの形（`api/infrastructure/config/review-canvas-config.ts`）を変えたら `pnpm run config:schema` で `review-canvas.config.schema.json` を作り直します
 - テストの名前は `*.small.test.ts`（外につながない）・`*.medium.test.ts`（DynamoDB Local を使う）です
@@ -195,6 +196,7 @@ npm には出しません。使う側は、このリポジトリのコミット�
 - スレッドの状態（`open`・`ai-fixed`・`resolved`）は保存せず、`resolved` と AI 修正済みの印（`aiFixedAt`）から決めます。印を持つ前のコメントは印なしとして読み、API の `resolved`・`PUT .../resolution` はそのままです（状態を足しても、前からのデータ・呼び出しは動く）
 - 置き場の目録（`meta.json`）は `version: 1` です。形を変えるときは version を上げ、古い目録も読めるようにします
 - Storybook ごとの画像の目録（`review-canvas-shots.json`）も `version: 1` です。目録の無い置き場（撮る前の版で置いたブランチ）は、キャンバスが iframe で出します（置き直すと画像になる）
+- 目録に、無くてもよい項目を足すだけ（遷移の `transitions` など）なら、版は 1 のままにします（古いキャンバスは知らない項目を無視し、新しいキャンバスは無ければ無いものとして読む。版を上げると、古いキャンバスで全ブランチの画像が消える）
 - 依存は `pnpm-workspace.yaml` の `minimumReleaseAge`（出てから 3 週間）を待ってから上げ、`save-exact` で固定します
 
 ### IP 制限・ログイン連動を足した版で変わること

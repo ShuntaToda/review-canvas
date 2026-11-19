@@ -33,13 +33,13 @@ export const Default: Story = {
 /** play 関数で入力して送る（review-canvas は play 関数を持つストーリーを 1 つずつ読み込む） */
 export const Filled: Story = {
   parameters: {
-    // 受け付けの知らせは play 関数で送った後に出る
+    // 「買い物を続ける」は play 関数で送った後に出る
     reviewCanvas: {
       transitions: [
         {
-          from: { text: "ご注文を受け付けました（サンプル）" },
+          from: { text: "買い物を続ける" },
           to: "shop-productlist--default",
-          label: "買い物を続ける",
+          label: "注文を受け付けた後",
         },
       ],
     },

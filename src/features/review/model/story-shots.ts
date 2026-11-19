@@ -65,7 +65,10 @@ export type ShotElement = {
 /** 1 枚に残す主な要素の数の上限。超える画面では要素を残さない（一部だけ残すと、残っていない要素を「無くなった」と見誤る） */
 export const MAX_SHOT_ELEMENTS = 150;
 
-/** 主な要素の文字を残す長さ（同じ要素かを見分けるのに足りる分だけ。目録を大きくしない） */
+/**
+ * 主な要素の文字を残す長さ（同じ要素かを見分けるのに足りる分だけ。目録を大きくしない）。
+ * 見出しもこの長さで残すので、遷移の heading の比べ方（docs/host-setup.md の「空白を除いた 24 字まで」）もこの長さで決まる
+ */
 export const SHOT_ELEMENT_TEXT_LENGTH = 24;
 
 /**
@@ -411,19 +414,19 @@ export const measureTransitionCandidates = (
   heading: string | null,
   climbSelector: string | null,
 ): TransitionCandidate[] => {
-  const targets: Element[] = [];
+  const matches: Element[] = [];
   for (const element of elements) {
-    const target =
+    const match =
       climbSelector === null
         ? element
         : (element.closest(climbSelector) ?? element);
-    if (!targets.includes(target)) targets.push(target);
+    if (!matches.includes(match)) matches.push(match);
   }
   const candidates: TransitionCandidate[] = [];
-  for (const target of targets) {
-    if (heading !== null && readers.headingOf(target) !== heading) continue;
-    const view = target.ownerDocument.defaultView;
-    const rect = target.getBoundingClientRect();
+  for (const match of matches) {
+    if (heading !== null && readers.headingOf(match) !== heading) continue;
+    const view = match.ownerDocument.defaultView;
+    const rect = match.getBoundingClientRect();
     const x = Math.round(rect.left + (view?.scrollX ?? 0));
     const y = Math.round(rect.top + (view?.scrollY ?? 0));
     if (x < 0 || y < 0) continue;
@@ -481,9 +484,13 @@ export const MAX_TRANSITION_TO_LENGTH = 200;
 /** 遷移の札の文字の長さの上限 */
 export const MAX_TRANSITION_LABEL_LENGTH = 40;
 
-/** 遷移の行き先に書ける形か（ストーリー ID: 小文字の英数字と - で、-- を 1 つ含む。長さは別に見る） */
+/**
+ * 遷移の行き先に書ける形か（ストーリー ID: 小文字の英数字と - で、-- を 1 つ含む。長さは別に見る）。
+ * Storybook の ID（<タイトル>--<名前>。どちらも英数字の並びを - 1 つでつなぎ、端に - を持たない形に整えたもの）に合わせ、
+ * 端の -・続いた ---・2 つ目の -- は受け付けない
+ */
 export const isTransitionTargetId = (value: string): boolean =>
-  /^[a-z0-9-]+$/.test(value) && (value.match(/--/g) ?? []).length === 1;
+  /^[a-z0-9]+(?:-[a-z0-9]+)*--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 
 /**
  * 1 枚の高さの上限(px)。使う側の好みではなく、壊れないためだけのもの
@@ -585,7 +592,12 @@ const parseStoryTransition = (raw: unknown): StoryTransition | null => {
     return null;
   }
   if (label === undefined) return { index, to };
-  if (typeof label !== "string" || label.length > MAX_TRANSITION_LABEL_LENGTH) {
+  // 撮るときは空白だけの札を書かない（書いていないものとみなす）ので、目録にあれば形が違う
+  if (
+    typeof label !== "string" ||
+    label.trim() === "" ||
+    label.length > MAX_TRANSITION_LABEL_LENGTH
+  ) {
     return null;
   }
   return { index, to, label };

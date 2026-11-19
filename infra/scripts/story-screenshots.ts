@@ -45,7 +45,7 @@ import {
   type TransitionFrom,
   type TransitionProblem,
   type TransitionProblemGroup,
-  type TransitionTarget,
+  type TransitionLookup,
 } from "./story-transitions";
 
 /**
@@ -368,7 +368,7 @@ export const SHOT_CONTENT_SCRIPT = `(() => {
 
 /**
  * ブラウザの中で、描画したストーリーの遷移（parameters.reviewCanvas.transitions）を文字だけにして読む式。
- * 上限より 1 行先まで数えず、上限の行まで読む（後ろの行があったかは overflow で返す）
+ * 上限（MAX_STORY_TRANSITIONS）の行までを読み、並びの長さが上限を超えていたかを overflow で返す
  */
 const TRANSITION_SPECS_SCRIPT = `(() => {
   const __name = (fn) => fn;
@@ -404,16 +404,109 @@ type TransitionFinder = (
   options: { heading: string | null; climb: string | null },
 ) => unknown;
 
-/** ボタンの決め方から、Playwright の探し方を作る（見えている要素だけ。名前・文字は前後の空白を除いた完全一致） */
+type AriaRole = Parameters<Page["getByRole"]>[0];
+
+/** Playwright の getByRole が受け付ける役割（型と同じ並び。足りない・余るものは型の検査で落ちる） */
+const ARIA_ROLES: Readonly<Record<AriaRole, true>> = {
+  alert: true,
+  alertdialog: true,
+  application: true,
+  article: true,
+  banner: true,
+  blockquote: true,
+  button: true,
+  caption: true,
+  cell: true,
+  checkbox: true,
+  code: true,
+  columnheader: true,
+  combobox: true,
+  complementary: true,
+  contentinfo: true,
+  definition: true,
+  deletion: true,
+  dialog: true,
+  directory: true,
+  document: true,
+  emphasis: true,
+  feed: true,
+  figure: true,
+  form: true,
+  generic: true,
+  grid: true,
+  gridcell: true,
+  group: true,
+  heading: true,
+  img: true,
+  insertion: true,
+  link: true,
+  list: true,
+  listbox: true,
+  listitem: true,
+  log: true,
+  main: true,
+  marquee: true,
+  math: true,
+  meter: true,
+  menu: true,
+  menubar: true,
+  menuitem: true,
+  menuitemcheckbox: true,
+  menuitemradio: true,
+  navigation: true,
+  none: true,
+  note: true,
+  option: true,
+  paragraph: true,
+  presentation: true,
+  progressbar: true,
+  radio: true,
+  radiogroup: true,
+  region: true,
+  row: true,
+  rowgroup: true,
+  rowheader: true,
+  scrollbar: true,
+  search: true,
+  searchbox: true,
+  separator: true,
+  slider: true,
+  spinbutton: true,
+  status: true,
+  strong: true,
+  subscript: true,
+  superscript: true,
+  switch: true,
+  tab: true,
+  table: true,
+  tablist: true,
+  tabpanel: true,
+  term: true,
+  textbox: true,
+  time: true,
+  timer: true,
+  toolbar: true,
+  tooltip: true,
+  tree: true,
+  treegrid: true,
+  treeitem: true,
+};
+
+const isAriaRole = (role: string): role is AriaRole =>
+  Object.hasOwn(ARIA_ROLES, role);
+
+/**
+ * ボタンの決め方から、Playwright の探し方を作る（見えている要素だけ。名前・文字は前後の空白を除いた完全一致）。
+ * 知らない役割は探せないので null（ボタンが見つからない）
+ */
 const locateTransition = (page: Page, from: TransitionFrom) => {
   switch (from.kind) {
     case "role":
-      return page
-        .getByRole(from.role as Parameters<Page["getByRole"]>[0], {
-          name: from.name,
-          exact: true,
-        })
-        .filter({ visible: true });
+      return isAriaRole(from.role)
+        ? page
+            .getByRole(from.role, { name: from.name, exact: true })
+            .filter({ visible: true })
+        : null;
     case "text":
       return page
         .getByText(from.text, { exact: true })
@@ -429,15 +522,20 @@ const locateTransition = (page: Page, from: TransitionFrom) => {
  */
 const findTransitionCandidates = async (
   page: Page,
-  targets: ReadonlyArray<TransitionTarget>,
+  lookups: ReadonlyArray<TransitionLookup>,
 ): Promise<Map<number, TransitionCandidate[]>> => {
   const found = new Map<number, TransitionCandidate[]>();
-  if (targets.length === 0) return found;
+  if (lookups.length === 0) return found;
   const finder: JSHandle = await page.evaluateHandle(TRANSITION_FINDER_SCRIPT);
   try {
-    for (const { index, from } of targets) {
+    for (const { index, from } of lookups) {
       try {
-        const raw = await locateTransition(page, from).evaluateAll(
+        const locator = locateTransition(page, from);
+        if (locator === null) {
+          found.set(index, []);
+          continue;
+        }
+        const raw = await locator.evaluateAll(
           (elements, { fn, heading, climb }) =>
             (fn as TransitionFinder)(elements, { heading, climb }),
           {
@@ -545,6 +643,7 @@ export const captureStorybook = async ({
   baseHeight,
   deadline,
   log,
+  transitionTimeoutMs = STORY_TIMEOUT_MS,
 }: {
   /** Storybook のビルド結果（index.json・iframe.html のあるディレクトリ） */
   dir: string;
@@ -555,6 +654,8 @@ export const captureStorybook = async ({
   /** 撮影をやめる時刻（Date.now() と同じ数え方）。1 回の呼び出しで撮る Storybook の全部で分け合う */
   deadline: number;
   log: (message: string) => void;
+  /** 1 枚の遷移のボタンを探す時間の上限(ms)。超えたら、その 1 枚は矩形なしで残す（テストで短くする） */
+  transitionTimeoutMs?: number;
 }): Promise<CaptureResult> => {
   const startedAt = Date.now();
   const shotsDir = path.join(dir, SHOTS_DIR);
@@ -714,28 +815,6 @@ export const captureStorybook = async ({
         if (isTimeout(error)) throw error;
         return null;
       });
-      // 遷移の書き方を読み、play 関数が終わった後の画面でボタンを探す（撮る前。画面は撮るときと同じ）
-      const checked = checkTransitionSpecs(
-        storyId,
-        toTransitionSpecs(
-          await inTime(
-            page.evaluate<unknown>(TRANSITION_SPECS_SCRIPT),
-            "遷移の読み取り",
-          ).catch((error: unknown) => {
-            if (isTimeout(error)) throw error;
-            return null;
-          }),
-        ),
-        knownStories,
-      );
-      // 探せなかった（時間切れ以外）ときは、この幅の矩形も書き間違いも残さない
-      const candidates = await inTime(
-        findTransitionCandidates(page, checked.targets),
-        "遷移のボタンの読み取り",
-      ).catch((error: unknown) => {
-        if (isTimeout(error)) throw error;
-        return null;
-      });
       const png = await page.screenshot({
         type: "png",
         fullPage: true,
@@ -747,20 +826,6 @@ export const captureStorybook = async ({
           : {}),
       });
       let shot = withContent(toShot(storyId, width, png), content);
-      const rects: ShotTransition[] = [];
-      const problems: TransitionProblem[] = [];
-      for (const { index } of candidates === null ? [] : checked.targets) {
-        const placed = placeTransition({
-          storyId,
-          width,
-          shotHeight: shot.height,
-          index,
-          candidates: candidates?.get(index) ?? [],
-        });
-        if ("rect" in placed) rects.push(placed.rect);
-        else problems.push(placed.problem);
-      }
-      if (rects.length > 0) shot = { ...shot, transitions: rects };
       fs.writeFileSync(path.join(dir, shot.path), png);
       try {
         const withSmall = withThumb(shot);
@@ -772,14 +837,6 @@ export const captureStorybook = async ({
       } catch {
         // 縮小が作れなくても、元の画像は置く（キャンバスは引いたときも元の画像を出す）
       }
-      // 撮れた 1 枚の分だけを残す（撮る途中で時間切れになった幅の書き間違いは出さない）
-      widthProblems.push(...problems);
-      if (!storyTransitions.has(storyId)) {
-        storyTransitions.set(storyId, {
-          transitions: checked.transitions,
-          problems: checked.problems,
-        });
-      }
       if (state.phase === "errored" || state.phase === "aborted") {
         log(
           `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
@@ -787,17 +844,49 @@ export const captureStorybook = async ({
       }
       return shot;
     };
+    /**
+     * 撮った後の同じ画面（play 関数が終わった後）で、遷移の書き方を読み、ボタンを探す。
+     * 書き間違い・目録の行は返すだけにし、呼ぶ側が時間内に終わったものだけを残す
+     */
+    const lookUp = async (
+      { storyId, width }: { storyId: string; width: number },
+      slot: number,
+      shot: StoryShot,
+    ) => {
+      const page = pages[slot];
+      if (page === undefined) throw new Error("撮るページがありません");
+      const checked = checkTransitionSpecs(
+        storyId,
+        toTransitionSpecs(
+          await page
+            .evaluate<unknown>(TRANSITION_SPECS_SCRIPT)
+            .catch(() => null),
+        ),
+        knownStories,
+      );
+      const candidates = await findTransitionCandidates(page, checked.lookups);
+      const rects: ShotTransition[] = [];
+      const problems: TransitionProblem[] = [];
+      for (const { index } of checked.lookups) {
+        const placed = placeTransition({
+          storyId,
+          width,
+          shotHeight: shot.height,
+          index,
+          candidates: candidates.get(index) ?? [],
+        });
+        if ("rect" in placed) rects.push(placed.rect);
+        else problems.push(placed.problem);
+      }
+      return { checked, rects, problems };
+    };
     const settled = await runPool(plan, concurrency, async (item, slot) => {
       const stop = guard.stopReason();
       if (stop !== null) throw new Error(stop);
+      let shot: StoryShot;
       try {
-        const shot = await withTimeout(
-          shoot(item, slot),
-          SHOT_TIMEOUT_MS,
-          "撮影",
-        );
+        shot = await withTimeout(shoot(item, slot), SHOT_TIMEOUT_MS, "撮影");
         guard.record("finished");
-        return shot;
       } catch (error) {
         guard.record(isTimeout(error) ? "timeout" : "finished");
         // 終わらなかったページは使い回さない（メインスレッドが止まったままだと、次の 1 枚も開けない）
@@ -805,6 +894,33 @@ export const captureStorybook = async ({
           await renewPages(slot).catch(() => undefined);
         }
         throw error;
+      }
+      // 遷移のボタンを探すのが時間切れ・失敗でも、撮った 1 枚は残す（矩形なし。この幅の書き間違いも出さない）
+      try {
+        const found = await withTimeout(
+          lookUp(item, slot, shot),
+          transitionTimeoutMs,
+          "遷移のボタンの読み取り",
+        );
+        widthProblems.push(...found.problems);
+        if (!storyTransitions.has(item.storyId)) {
+          storyTransitions.set(item.storyId, {
+            transitions: found.checked.transitions,
+            problems: found.checked.problems,
+          });
+        }
+        return found.rects.length === 0
+          ? shot
+          : { ...shot, transitions: found.rects };
+      } catch (error) {
+        log(
+          `  ! ${item.storyId}（${String(item.width)}px）: 遷移のボタンを探せませんでした（画像は置きます）: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+        );
+        // 終わらなかったページは使い回さない
+        if (isTimeout(error) && guard.stopReason() === null) {
+          await renewPages(slot).catch(() => undefined);
+        }
+        return shot;
       }
     });
     await context.close().catch(() => undefined);

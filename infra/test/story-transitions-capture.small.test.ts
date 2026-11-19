@@ -35,12 +35,19 @@ const STORIES: Readonly<Record<string, string>> = {
     <button style="visibility: hidden">注文する</button>
     <button>注文する</button>
     <button hidden>戻る</button>
+    <div data-testid="gone" style="display: none">隠れた箱</div>
+    <button style="width: 0; height: 0; padding: 0; border: 0; overflow: hidden">大きさの無いボタン</button>
     <div style="height: 17000px"></div>
     <button>いちばん下</button>
   `,
   // parameters の transitions の外に、関数・大きな値・getter・循環がある
   "shop-list--params": `<button data-testid="buy">買う</button>`,
   "shop-form--default": `<h1>注文フォーム</h1>`,
+};
+
+/** 遷移のボタンを探すのが時間切れになるストーリー（別の Storybook として撮る） */
+const SLOW_STORIES: Readonly<Record<string, string>> = {
+  "shop-list--slow": `<button>重い</button>`,
 };
 
 const PARAMETERS_SCRIPT = `
@@ -62,6 +69,19 @@ const PARAMETERS_SCRIPT = `
       { from: { role: "button", name: "注文する" }, to: "shop-form--default" },
       { from: { text: "戻る" }, to: "shop-form--default" },
       { from: { text: "いちばん下" }, to: "shop-form--default" },
+      { from: { testId: "gone" }, to: "shop-form--default" },
+      { from: { role: "button", name: "大きさの無いボタン" }, to: "shop-form--default" },
+    ],
+    // 遷移を読むのに時間がかかる（メインスレッドを止める）
+    "shop-list--slow": [
+      {
+        from: { role: "button", name: "重い" },
+        get to() {
+          const end = Date.now() + 4000;
+          while (Date.now() < end) {}
+          return "shop-form--default";
+        },
+      },
     ],
     "shop-list--params": [
       { from: { testId: "buy" }, to: "shop-form--default", label: "買うとき" },
@@ -93,7 +113,7 @@ const IFRAME_HTML = `<!doctype html>
     <div id="storybook-root"></div>
     <script>
       ${PARAMETERS_SCRIPT}
-      const stories = ${JSON.stringify(STORIES)};
+      const stories = ${JSON.stringify({ ...STORIES, ...SLOW_STORIES })};
       const id = new URLSearchParams(location.search).get("id");
       const root = document.getElementById("storybook-root");
       root.innerHTML = stories[id] ?? "";
@@ -120,27 +140,36 @@ const root = fs.mkdtempSync(
 let result: CaptureResult;
 let manifest: ShotsManifest;
 
-beforeAll(async () => {
-  fs.writeFileSync(path.join(root, "iframe.html"), IFRAME_HTML);
+/** 偽の Storybook のビルド結果（ids のストーリーだけを一覧に載せる） */
+const buildStorybook = (name: string, ids: ReadonlyArray<string>): string => {
+  const dir = path.join(root, name);
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, "iframe.html"), IFRAME_HTML);
   fs.writeFileSync(
-    path.join(root, "index.json"),
+    path.join(dir, "index.json"),
     JSON.stringify({
       v: 5,
-      entries: Object.fromEntries(
-        Object.keys(STORIES).map((id) => [id, { type: "story", id }]),
-      ),
+      entries: Object.fromEntries(ids.map((id) => [id, { type: "story", id }])),
     }),
   );
+  return dir;
+};
+
+const readManifest = (dir: string): ShotsManifest =>
+  JSON.parse(
+    fs.readFileSync(path.join(dir, "review-canvas-shots.json"), "utf8"),
+  ) as ShotsManifest;
+
+beforeAll(async () => {
+  const dir = buildStorybook("shop", Object.keys(STORIES));
   result = await captureStorybook({
-    dir: root,
+    dir,
     widths: [375, 768],
     baseHeight: 600,
     deadline: Date.now() + 120_000,
     log: () => undefined,
   });
-  manifest = JSON.parse(
-    fs.readFileSync(path.join(root, "review-canvas-shots.json"), "utf8"),
-  ) as ShotsManifest;
+  manifest = readManifest(dir);
 }, 150_000);
 
 afterAll(() => {
@@ -186,6 +215,8 @@ describe("captureStorybook（遷移）", () => {
       "shop-list--default（幅 375・768）の 6 行目: ボタンが見つかりません",
       "shop-list--hidden（幅 375・768）の 2 行目: ボタンが見つかりません",
       "shop-list--hidden（幅 375・768）の 3 行目: ボタンが画像の外にあります（画像の高さの上限より下）",
+      "shop-list--hidden（幅 375・768）の 4 行目: ボタンが見つかりません",
+      "shop-list--hidden（幅 375・768）の 5 行目: ボタンが見つかりません",
       "shop-list--params の 2 行目: 書き方が違います（from に role・text・testId のどれか 1 つを書いてください）",
     ]);
   });
@@ -200,7 +231,7 @@ describe("captureStorybook（遷移）", () => {
     ).toStrictEqual([0]);
   });
 
-  test("見えていない要素（display: none・visibility: hidden・hidden）は数えない", () => {
+  test("見えていない要素（display: none・visibility: hidden・hidden・大きさ 0）は、role・text・testId のどれで探しても数えない", () => {
     expect(rectsOf("shop-list--hidden", 375)).toStrictEqual([
       expect.objectContaining({ index: 0, width: 160, height: 40 }),
     ]);
@@ -222,4 +253,45 @@ describe("captureStorybook（遷移）", () => {
     );
     expect(rectsOf("shop-form--default", 375)).toBeUndefined();
   });
+});
+
+describe("captureStorybook（遷移のボタンを探すのが時間切れ）", () => {
+  test("撮った画像は矩形なしで残し、ページを作り直してほかのストーリーも撮る（書き間違いは出さない）", async () => {
+    const dir = buildStorybook("slow", [
+      "shop-list--slow",
+      "shop-form--default",
+    ]);
+    const logged: string[] = [];
+
+    const slow = await captureStorybook({
+      dir,
+      widths: [375, 768],
+      baseHeight: 600,
+      deadline: Date.now() + 120_000,
+      log: (message) => logged.push(message),
+      transitionTimeoutMs: 1_000,
+    });
+
+    const written = readManifest(dir);
+    expect(slow.failures).toStrictEqual([]);
+    expect(
+      written.shots.map(({ storyId, width }) => `${storyId}@${String(width)}`),
+    ).toStrictEqual([
+      "shop-list--slow@375",
+      "shop-list--slow@768",
+      "shop-form--default@375",
+      "shop-form--default@768",
+    ]);
+    for (const shot of written.shots) {
+      expect(fs.existsSync(path.join(dir, shot.path))).toBe(true);
+      expect(shot.transitions).toBeUndefined();
+    }
+    expect(written.transitions).toBeUndefined();
+    expect(slow.transitionProblems).toStrictEqual([]);
+    expect(
+      logged.filter((message) =>
+        message.includes("遷移のボタンを探せませんでした"),
+      ),
+    ).toHaveLength(2);
+  }, 120_000);
 });

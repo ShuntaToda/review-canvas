@@ -405,10 +405,19 @@ describe("parseShotsManifest（遷移）", () => {
           { index: 0.5, to: "shop-form--default" },
           { index: 0, to: "shop-form--filled" },
           { index: 6, to: `shop--${"a".repeat(194)}`, label: "あ".repeat(40) },
+          { index: 7, to: "shop-form--default", label: "" },
+          { index: 8, to: "shop-form--default", label: "  " },
+          // Storybook の ID の形でない（-- が 2 つ・- が続く・名前が無い・端に -）
+          { index: 9, to: "a--b--c" },
+          { index: 10, to: "a---b" },
+          { index: 11, to: "--" },
+          { index: 12, to: "-a--b" },
+          { index: 13, to: "a--b-" },
           null,
         ],
         "shop-form--default": "行ではない",
         "shop-form--filled": [{ index: 0, to: "x" }],
+        "": [{ index: 0, to: "shop-form--default" }],
       },
     });
     expect(manifest?.transitions).toStrictEqual({
@@ -419,18 +428,75 @@ describe("parseShotsManifest（遷移）", () => {
     });
   });
 
-  test("[異常系]件数が上限（50）を超える分は捨てる", () => {
+  test("[異常系]51 行目から先は、形が正しくても読まない（行も矩形も）", () => {
+    // 1 行目の形が違うので位置 0 は空いているが、51 行目の位置 0 は読まない
+    const written = [
+      { index: 0, to: "https://example.com/" },
+      ...Array.from({ length: 49 }, (_, i) => ({
+        index: i + 1,
+        to: "shop-form--default",
+      })),
+      { index: 0, to: "shop-form--default" },
+    ];
+    const rects = [
+      { ...rect, index: 99 },
+      ...Array.from({ length: 49 }, (_, i) => ({ ...rect, index: i + 1 })),
+      { ...rect, index: 0 },
+    ];
     const manifest = parseShotsManifest({
       version: 1,
-      shots: [],
+      shots: [shot({ transitions: rects })],
       transitions: {
-        "shop-list--default": Array.from({ length: 51 }, (_, index) => ({
-          index: index === 50 ? 49 : index,
-          to: "shop-form--default",
-        })),
+        "shop-list--default": written,
+        "shop-form--default": [{ index: 0, to: "shop-list--default" }],
       },
     });
-    expect(manifest?.transitions?.["shop-list--default"]).toHaveLength(50);
+    const kept = manifest?.transitions?.["shop-list--default"] ?? [];
+    expect(kept.map((row) => row.index)).toStrictEqual(
+      Array.from({ length: 49 }, (_, i) => i + 1),
+    );
+    expect(
+      manifest?.shots[0]?.transitions?.map((row) => row.index),
+    ).toStrictEqual(Array.from({ length: 49 }, (_, i) => i + 1));
+  });
+
+  test("[異常系]ストーリー ID が Object の名前（constructor・toString・__proto__）の画像・遷移でも投げず、画像はすべて残し、行の無い ID の矩形は捨てる", () => {
+    const shotOf = (storyId: string) =>
+      shot({
+        storyId,
+        path: `review-canvas-shots/${storyId.replace(/_/g, "x")}-1000-0123456789abcdef.png`,
+        transitions: [rect],
+      });
+    const raw: unknown = JSON.parse(
+      JSON.stringify({
+        version: 1,
+        shots: [
+          shotOf("constructor"),
+          shotOf("toString"),
+          shotOf("__proto__"),
+          shotOf("shop-list--default"),
+        ],
+      }).replace(
+        /}$/,
+        `,"transitions":{"__proto__":[{"index":0,"to":"shop-form--default"}],"shop-list--default":[{"index":0,"to":"shop-form--default"}]}}`,
+      ),
+    );
+
+    const manifest = parseShotsManifest(raw);
+
+    expect(manifest?.shots.map((row) => row.storyId)).toStrictEqual([
+      "constructor",
+      "toString",
+      "__proto__",
+      "shop-list--default",
+    ]);
+    expect(manifest?.shots[0]?.transitions).toBeUndefined();
+    expect(manifest?.shots[1]?.transitions).toBeUndefined();
+    expect(manifest?.shots[3]?.transitions).toStrictEqual([rect]);
+    // __proto__ のキーは、自分の項目として読む（Object の原型を書き換えない）
+    expect(Object.hasOwn(manifest?.transitions ?? {}, "__proto__")).toBe(true);
+    expect(manifest?.shots[2]?.transitions).toStrictEqual([rect]);
+    expect(Object.getPrototypeOf(manifest?.transitions)).toBe(Object.prototype);
   });
 
   test("[異常系]画像の外・行の無い位置・重なる位置の矩形は捨て、ほかの矩形と画像は残す", () => {

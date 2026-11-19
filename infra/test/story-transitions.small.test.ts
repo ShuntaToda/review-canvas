@@ -52,7 +52,7 @@ describe("checkTransitionSpecs", () => {
       { index: 2, to: "shop-form--default" },
       { index: 3, to: "shop-form--filled" },
     ]);
-    expect(result.targets).toStrictEqual([
+    expect(result.lookups).toStrictEqual([
       {
         index: 0,
         from: {
@@ -79,18 +79,21 @@ describe("checkTransitionSpecs", () => {
       { from: { text: "a" }, to: "Shop-Form--Default" },
       { from: { text: "a" }, to: "shop-form-default" },
       { from: { text: "a" } },
+      { from: { text: "a" }, to: "a--b--c" },
+      { from: { text: "a" }, to: "a---b" },
+      { from: { text: "a" }, to: "--" },
       { from: { text: "a" }, to: "shop-form--default" },
     ]);
 
     expect(result.transitions).toStrictEqual([
-      { index: 9, to: "shop-form--default" },
+      { index: 12, to: "shop-form--default" },
     ]);
     expect(lines(result.problems)).toStrictEqual([
       ...[1, 2, 3, 4, 5].map(
         (row) =>
           `shop-list--default の ${String(row)} 行目: 書き方が違います（from に role・text・testId のどれか 1 つを書いてください）`,
       ),
-      ...[6, 7, 8, 9].map(
+      ...[6, 7, 8, 9, 10, 11, 12].map(
         (row) =>
           `shop-list--default の ${String(row)} 行目: 書き方が違います（to はストーリー ID で書いてください）`,
       ),

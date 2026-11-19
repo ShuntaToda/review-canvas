@@ -23,8 +23,8 @@ export type TransitionFrom = (
   | { kind: "testId"; testId: string }
 ) & { heading: string | null };
 
-/** 探す 1 行 */
-export type TransitionTarget = { index: number; from: TransitionFrom };
+/** ボタンを探す 1 行（行き先ではなく、起点のボタンの探し方） */
+export type TransitionLookup = { index: number; from: TransitionFrom };
 
 /** 書き間違い 1 つ（row は書いた順で 1 から。width は幅ごとに出るもの） */
 export type TransitionProblem =
@@ -156,11 +156,11 @@ export const checkTransitionSpecs = (
   storyIds: ReadonlySet<string>,
 ): {
   transitions: StoryTransition[];
-  targets: TransitionTarget[];
+  lookups: TransitionLookup[];
   problems: TransitionProblem[];
 } => {
   const transitions: StoryTransition[] = [];
-  const targets: TransitionTarget[] = [];
+  const lookups: TransitionLookup[] = [];
   const problems: TransitionProblem[] = [];
   specs.rows.forEach((spec, index) => {
     const row = index + 1;
@@ -190,10 +190,10 @@ export const checkTransitionSpecs = (
       problems.push({ storyId, row, kind: "missingTarget", to });
     }
     transitions.push({ index, to, ...(label === undefined ? {} : { label }) });
-    targets.push({ index, from });
+    lookups.push({ index, from });
   });
   if (specs.overflow) problems.push({ storyId, kind: "tooMany" });
-  return { transitions, targets, problems };
+  return { transitions, lookups, problems };
 };
 
 /**
