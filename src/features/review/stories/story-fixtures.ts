@@ -128,7 +128,7 @@ export const mixedComments: ReadonlyArray<Comment> = [
   }),
   comment({
     id: "01JD7Z0000000000000000C005",
-    storyId: "admin-orders--default",
+    storyId: "shop-adminorders--default",
     x: 260,
     y: 60,
     body: "注文の一覧を、日付で並べ替えられるようにしたいです",

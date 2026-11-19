@@ -2,10 +2,10 @@
   "version": 1,
   "shots": [
     {
-      "storyId": "admin-orders--default",
+      "storyId": "shop-adminorders--default",
       "width": 375,
       "height": 2691,
-      "path": "review-canvas-shots/admin-orders--default-375-8c9081bc803de643.png",
+      "path": "review-canvas-shots/shop-adminorders--default-375-8c9081bc803de643.png",
       "contentHeight": 2691,
       "elements": [
         {
@@ -261,7 +261,7 @@
           "heading": "A-1023"
         }
       ],
-      "thumb": "review-canvas-shots/admin-orders--default-375-8c9081bc803de643-thumb.png"
+      "thumb": "review-canvas-shots/shop-adminorders--default-375-8c9081bc803de643-thumb.png"
     },
     {
       "storyId": "shop-orderform--default",
@@ -640,7 +640,7 @@
     }
   ],
   "playFunctions": {
-    "admin-orders--default": false,
+    "shop-adminorders--default": false,
     "shop-orderform--default": false,
     "shop-productlist--default": false,
     "shop-orderform--validation-error": true,

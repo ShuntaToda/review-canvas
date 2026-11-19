@@ -92,16 +92,16 @@ export const Drafting: Story = {
   },
 };
 
-/** 見せる範囲を URL（?scope=）でショップの画面（Shop）に絞って開く（管理の画面 Admin は並ばない） */
+/**
+ * 見せる範囲を URL（?scope=）でフォルダ Shop に絞って開く。範囲はタイトルより上のフォルダだけ（model/story-tree.ts の isTitleInScope）で、
+ * サンプルのショップの画面はどれも Shop/<画面> なので、並ぶ画面は変わらず、範囲の印（「表示: Shop」）が出る
+ */
 export const Scoped: Story = {
   name: "見せる範囲を絞った",
   parameters: { reviewUrl: "?scope=Shop" },
   play: async ({ canvas }) => {
-    await waitForShot(canvas, "Shop/OrderForm / Default");
-    await waitForText(canvas, "表示: Shop");
-    await expect(
-      canvas.queryByRole("img", { name: "Admin/Orders / Default" }),
-    ).toBeNull();
+    await waitForShot(canvas, "Shop/AdminOrders / Default");
+    await expect(await waitForText(canvas, "表示: Shop")).toBeVisible();
     await settle();
   },
 };

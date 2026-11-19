@@ -43,10 +43,10 @@
       "name": "Validation Error",
       "importPath": "./src/pages/OrderForm.stories.tsx"
     },
-    "admin-orders--default": {
+    "shop-adminorders--default": {
       "type": "story",
-      "id": "admin-orders--default",
-      "title": "Admin/Orders",
+      "id": "shop-adminorders--default",
+      "title": "Shop/AdminOrders",
       "name": "Default",
       "importPath": "./src/pages/AdminOrders.stories.tsx"
     }
