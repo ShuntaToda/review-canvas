@@ -1,41 +1,51 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { SourcesContext } from "../hooks/useSources";
 import { buildSourceCatalog } from "../model/sources";
 import { Toolbar } from "./Toolbar";
 
 afterEach(() => cleanup());
 
-const sources = buildSourceCatalog({
+const storybook = (id: string, label: string) => ({
+  id,
+  label,
+  widths: [1280],
+  defaultWidth: 1280,
+  baseHeight: 800,
+});
+
+const twoSources = buildSourceCatalog({
   storybooks: [
-    {
-      id: "shop",
-      label: "サンプルショップ",
-      widths: [1280],
-      defaultWidth: 1280,
-      baseHeight: 800,
-    },
-    {
-      id: "console",
-      label: "コンソール",
-      widths: [1280],
-      defaultWidth: 1280,
-      baseHeight: 800,
-    },
+    storybook("shop", "サンプルショップ"),
+    storybook("console", "コンソール"),
   ],
   excludeTitlePrefixes: [],
 });
+const oneSource = buildSourceCatalog({
+  storybooks: [storybook("shop", "サンプルショップ")],
+  excludeTitlePrefixes: [],
+});
 
-const onWidthChange = vi.fn();
-const onWidthRemove = vi.fn();
+const onLogout = vi.fn();
+const onToggleStoryList = vi.fn();
 
 afterEach(() => vi.clearAllMocks());
 
-const renderToolbar = (
-  openCounts: Record<string, number>,
-  { width = 1280 }: { width?: number } = {},
-) =>
+const renderToolbar = ({
+  sources = twoSources,
+  openCounts = {},
+  commit,
+}: {
+  sources?: typeof twoSources;
+  openCounts?: Record<string, number>;
+  commit?: string;
+} = {}) =>
   render(
     <SourcesContext value={sources}>
       <Toolbar
@@ -44,27 +54,21 @@ const renderToolbar = (
         openCounts={openCounts}
         tool="move"
         onToolChange={() => undefined}
-        query=""
-        onQueryChange={() => undefined}
-        searchRef={createRef<HTMLInputElement>()}
-        showComponents={false}
-        onShowComponentsChange={() => undefined}
-        width={width}
-        widthOptions={[
-          { width: 1280, custom: false },
-          { width: 1000, custom: true },
-        ]}
-        onWidthChange={onWidthChange}
-        onWidthRemove={onWidthRemove}
-        perRow={4}
-        onPerRowChange={() => undefined}
         branch="main"
-        commit={undefined}
-        branchOptions={[]}
+        commit={commit}
+        branchOptions={[
+          {
+            branch: "main",
+            published: true,
+            commentCount: 0,
+          },
+        ]}
         onBranchChange={() => undefined}
-        userName="山田"
-        onLogout={() => undefined}
+        userName="山田 太郎"
+        onLogout={onLogout}
         onHelp={() => undefined}
+        storyListOpen
+        onToggleStoryList={onToggleStoryList}
         sidebarOpen={false}
         onToggleSidebar={() => undefined}
       />
@@ -72,67 +76,101 @@ const renderToolbar = (
   );
 
 describe("Toolbar", () => {
-  test("[正常系]ページの切り替えの件数の印は、何の件数か（未解決・確認待ち）を名前と title で伝え、0 件のページには出さない", () => {
-    renderToolbar({ shop: 3, console: 0 });
+  test("[正常系]ページの切り替えは、件数のあるページに括弧で件数を出し、0 件のページは名前だけにする", () => {
+    renderToolbar({ openCounts: { shop: 3, console: 0 } });
 
+    const select = screen.getByRole("combobox", { name: "ページ" });
+    expect(select.getAttribute("title")).toBe(
+      "括弧の中は未解決・確認待ちの件数",
+    );
     expect(
-      screen.getByRole("button", {
-        name: "サンプルショップ（未解決・確認待ち 3 件）",
-      }),
-    ).not.toBeNull();
-    expect(screen.getByTitle("未解決・確認待ち 3 件")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "コンソール" })).not.toBeNull();
+      screen
+        .getAllByRole("option")
+        .map((option) => option.textContent)
+        .slice(0, 2),
+    ).toEqual(["サンプルショップ（3）", "コンソール"]);
   });
 
-  test("[正常系]幅の切り替えには、設定の幅に続けて自分で足した幅を「自分用」の印つきで出す", () => {
-    renderToolbar({});
+  test("[正常系]Storybook が 1 つなら、ページの切り替えを出さない", () => {
+    renderToolbar({ sources: oneSource });
 
-    expect(
-      screen.getAllByRole("option").map((option) => option.textContent),
-    ).toEqual(expect.arrayContaining(["1280px", "1000px（自分用）"]));
+    expect(screen.queryByRole("combobox", { name: "ページ" })).toBeNull();
   });
 
-  test("[正常系]好きな px を入れて追加すると、その幅を選ぶ（足すかどうかは受け取る側が決める。欄は空に戻す）", () => {
-    renderToolbar({});
-    const input = screen.getByLabelText<HTMLInputElement>("足す幅（px）");
+  test("[正常系]コミットは、ブランチの欄の説明に出す", () => {
+    renderToolbar({ commit: "abc1234" });
 
-    fireEvent.change(input, { target: { value: "1440px" } });
-    fireEvent.click(screen.getByRole("button", { name: "追加" }));
-
-    expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(1440);
-    expect(input.value).toBe("");
+    expect(screen.getByDisplayValue("main").getAttribute("title")).toBe(
+      "Storybook のコミット: abc1234",
+    );
   });
 
-  test("[正常系]もう一覧にある幅を入れても、同じようにその幅を選ぶ", () => {
-    renderToolbar({});
+  test("[正常系]画面の一覧のボタンで開閉し、開いているときは押した印を付ける", () => {
+    renderToolbar();
+    const button = screen.getByRole("button", { name: "画面の一覧（[）" });
 
-    fireEvent.change(screen.getByLabelText("足す幅（px）"), {
-      target: { value: "1000" },
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button);
+    expect(onToggleStoryList).toHaveBeenCalledOnce();
+  });
+
+  test("[正常系]名前とログアウトは、アカウントのボタンを押したときだけ出る", () => {
+    renderToolbar();
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "アカウント（山田 太郎）" }),
+    );
+    expect(screen.getByText("山田 太郎 としてログイン中")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "ログアウト" }));
+
+    expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  test("[正常系]アカウントの中身は Esc で閉じ、ボタンへフォーカスを戻し、キャンバスのショートカット（window）には Esc を届けない", () => {
+    const onWindowKeyDown = vi.fn();
+    window.addEventListener("keydown", onWindowKeyDown);
+    renderToolbar();
+    const button = screen.getByRole("button", {
+      name: "アカウント（山田 太郎）",
     });
-    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    fireEvent.click(button);
 
-    expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(1000);
+    // フォーカスはどこにも無い（ボタンを押してもフォーカスを移さないブラウザと同じ）
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button);
+    expect(onWindowKeyDown).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", onWindowKeyDown);
   });
 
-  test("[異常系]幅にならない値は足さず、欄に印を付ける", () => {
-    renderToolbar({});
-    const input = screen.getByLabelText("足す幅（px）");
+  test("[正常系]アカウントの中身は、外を押すと閉じ、中の名前を押しても閉じない", () => {
+    renderToolbar();
+    fireEvent.click(
+      screen.getByRole("button", { name: "アカウント（山田 太郎）" }),
+    );
 
-    fireEvent.change(input, { target: { value: "広め" } });
-    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    fireEvent.pointerDown(screen.getByText("山田 太郎 としてログイン中"));
+    expect(screen.getByRole("button", { name: "ログアウト" })).not.toBeNull();
 
-    expect(onWidthChange).not.toHaveBeenCalled();
-    expect(input.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
   });
 
-  test("[正常系]自分で足した幅を選んでいるときだけ、その幅を外す操作を出す", () => {
-    renderToolbar({});
-    expect(screen.queryByRole("button", { name: /を外す/ })).toBeNull();
-    cleanup();
+  test("[正常系]アカウントの中身は、外へフォーカスが移ると閉じる", () => {
+    renderToolbar();
+    fireEvent.click(
+      screen.getByRole("button", { name: "アカウント（山田 太郎）" }),
+    );
 
-    renderToolbar({}, { width: 1000 });
-    fireEvent.click(screen.getByRole("button", { name: "1000px を外す" }));
+    act(() =>
+      screen
+        .getByRole("button", { name: "使い方・ショートカット（?）" })
+        .focus(),
+    );
 
-    expect(onWidthRemove).toHaveBeenCalledExactlyOnceWith(1000);
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
   });
 });

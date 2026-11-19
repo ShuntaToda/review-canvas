@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ErrorBoundary } from "react-error-boundary";
 import { isUnauthorized, type ReviewMetaBranch } from "../api/review-api";
 import { Canvas } from "../components/Canvas";
 import { COMMENT_LIST_ID, CommentSidebar } from "../components/CommentSidebar";
+import { DisplaySettings } from "../components/DisplaySettings";
 import { DraftPopover } from "../components/DraftPopover";
 import type { PinView } from "../components/Frame";
 import { HelpDialog } from "../components/HelpDialog";
@@ -17,9 +19,11 @@ import {
   StorybookMissingNotice,
   Toast,
 } from "../components/Notices";
+import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
+import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
@@ -30,6 +34,7 @@ import {
   useComments,
 } from "../hooks/useReviewData";
 import { useSources } from "../hooks/useSources";
+import { useStoryListOpen } from "../hooks/useStoryListOpen";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
 import {
@@ -227,6 +232,15 @@ export const ReviewWorkspace = ({
   const [sidebarOpen, setSidebarOpen] = useState(
     () => !isNarrowViewport(window.innerWidth),
   );
+  const [storyListOpen, setStoryListOpenState] = useStoryListOpen(
+    () => window.innerWidth,
+  );
+  const setStoryListOpen = (open: boolean) => {
+    // 一覧の中にいるまま閉じると、フォーカスが body へ落ちるので、キャンバスへ戻す
+    if (!open && isInsideStoryList(document.activeElement)) focusCanvas();
+    setStoryListOpenState(open);
+  };
+
   const [cameraStates, setCameraStates] = useState(initial.cameras);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
@@ -426,6 +440,23 @@ export const ReviewWorkspace = ({
     setPage(next);
     setDraft(null);
     setTitleFilter(undefined);
+  };
+
+  /** 画面の一覧で選んだ状態へ移る（並びに出ているものだけを選べるので、絞り込みは変えない） */
+  const focusStory = (story: Story) => {
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: {
+        kind: "focus",
+        storyId: story.id,
+        // 開いたときの初めの見え方（URL の story=）と同じく、画面の上の方を真ん中に寄せる
+        point: { x: width / 2, y: 300 },
+        zoom: focusZoom(camera.zoom),
+      },
+    }));
+    setDraft(null);
+    // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じて画面を見せる
+    if (isNarrowViewport(window.innerWidth)) setStoryListOpen(false);
   };
 
   const focusThread = (thread: Thread) => {
@@ -675,7 +706,12 @@ export const ReviewWorkspace = ({
           updateCamera((c) => zoomAt(c, 1, viewportCenter));
           break;
         case "focus-search":
+          // 閉じていれば開いてから、絞り込みの欄へ移る（欄は一覧の中にある）
+          if (!storyListOpen) flushSync(() => setStoryListOpen(true));
           searchRef.current?.focus();
+          break;
+        case "toggle-story-list":
+          setStoryListOpen(!storyListOpen);
           break;
         case "toggle-sidebar":
           setSidebarOpen((open) => !open);
@@ -817,17 +853,6 @@ export const ReviewWorkspace = ({
           setTool(next);
           if (next !== "comment") setDraft(null);
         }}
-        query={query}
-        onQueryChange={setQuery}
-        searchRef={searchRef}
-        showComponents={showComponents}
-        onShowComponentsChange={setShowComponents}
-        width={width}
-        widthOptions={pageWidthOptions}
-        onWidthChange={(next) => pageWidths.select(page, next)}
-        onWidthRemove={(target) => pageWidths.remove(page, target)}
-        perRow={perRow}
-        onPerRowChange={setPerRow}
         branch={branch}
         commit={commit}
         branchOptions={branchOptions}
@@ -837,10 +862,33 @@ export const ReviewWorkspace = ({
         userName={me.name}
         onLogout={onLogout}
         onHelp={() => setDialog("help")}
+        storyListOpen={storyListOpen}
+        onToggleStoryList={() => setStoryListOpen(!storyListOpen)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
       <div className="relative flex min-h-0 flex-1">
+        {storyListOpen && (
+          <StorySidebar
+            rows={rows}
+            currentStoryId={centerStoryId}
+            query={query}
+            onQueryChange={setQuery}
+            searchRef={searchRef}
+            onSelectStory={focusStory}
+          >
+            <DisplaySettings
+              showComponents={showComponents}
+              onShowComponentsChange={setShowComponents}
+              width={width}
+              widthOptions={pageWidthOptions}
+              onWidthChange={(next) => pageWidths.select(page, next)}
+              onWidthRemove={(target) => pageWidths.remove(page, target)}
+              perRow={perRow}
+              onPerRowChange={setPerRow}
+            />
+          </StorySidebar>
+        )}
         <main className="relative min-w-0 flex-1" aria-label="キャンバス">
           {published === null ? (
             <BranchNotPublishedNotice branch={branch} />

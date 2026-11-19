@@ -1,0 +1,89 @@
+import { LogOut, UserRound } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+
+/**
+ * 右端のアカウントのボタン。押すと、ログインしている人の名前とログアウトを出す（めったに押さないので、常には並べない）
+ */
+export const AccountMenu = ({
+  userName,
+  onLogout,
+}: {
+  userName: string;
+  onLogout: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+
+  // 開いている間だけ、外を押した・外へフォーカスが移った・Esc で閉じる。
+  // ボタンを押してもフォーカスを移さないブラウザ（Safari など）があるので、ボタンの blur・keydown には頼らない
+  useEffect(() => {
+    if (!open) return;
+    const isOutside = (target: EventTarget | null) =>
+      !(
+        target instanceof Node &&
+        containerRef.current?.contains(target) === true
+      );
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isOutside(event.target)) setOpen(false);
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (isOutside(event.target)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // キャンバスの Esc（スレッドを閉じる・道具を戻す）まで届かせない
+      event.stopImmediatePropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("focusin", handleFocusIn);
+    // キャンバスのショートカットは window で受けるので、その前（取り込みの段階）で受ける
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`アカウント（${userName}）`}
+        title={`アカウント（${userName}）`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className={[
+          "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-sub hover:bg-panel-sub hover:text-ink",
+          open ? "bg-accent-soft text-accent" : "",
+        ].join(" ")}
+        onClick={() => setOpen(!open)}
+      >
+        <UserRound aria-hidden className="size-4" />
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          className="absolute top-full right-0 z-50 mt-1 w-56 rounded-md border border-line bg-panel p-2 text-sm shadow-lg"
+        >
+          <p className="truncate px-1 py-1 text-ink-sub" title={userName}>
+            {userName} としてログイン中
+          </p>
+          <button
+            type="button"
+            className="mt-1 flex w-full items-center gap-2 rounded px-1 py-1.5 text-left text-ink hover:bg-panel-sub"
+            onClick={onLogout}
+          >
+            <LogOut aria-hidden className="size-4" />
+            ログアウト
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -3,24 +3,15 @@ import {
   Hand,
   MessageSquarePlus,
   MousePointer2,
-  LogOut,
+  PanelLeft,
   PanelRight,
-  Search,
-  UserRound,
 } from "lucide-react";
-import { type Ref, useState } from "react";
 import { useSources } from "../hooks/useSources";
 import { type BranchOption, branchOptionLabel } from "../model/branch-options";
-import {
-  MAX_CUSTOM_WIDTH,
-  parseWidthInput,
-  type WidthOption,
-} from "../model/custom-widths";
-import { FRAMES_PER_ROW_OPTIONS } from "../model/layout";
 import type { Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
+import { AccountMenu } from "./AccountMenu";
 import { IconButton } from "./IconButton";
-import { focusCanvas } from "./canvas-dom";
 
 const TOOLS: ReadonlyArray<{
   tool: Tool;
@@ -39,20 +30,6 @@ type ToolbarProps = {
   openCounts: Record<StorySource, number>;
   tool: Tool;
   onToolChange: (tool: Tool) => void;
-  query: string;
-  onQueryChange: (query: string) => void;
-  searchRef: Ref<HTMLInputElement>;
-  showComponents: boolean;
-  onShowComponentsChange: (show: boolean) => void;
-  width: number;
-  /** 切り替えられる幅（設定の幅と、見る人が自分で足した幅） */
-  widthOptions: ReadonlyArray<WidthOption>;
-  /** 幅を選ぶ（欄から選んだ・「幅を足す」で入れた。設定にも自分用にも無い幅は、受け取る側が自分用に足す） */
-  onWidthChange: (width: number) => void;
-  /** 自分で足した幅を外す */
-  onWidthRemove: (width: number) => void;
-  perRow: number;
-  onPerRowChange: (perRow: number) => void;
   branch: string;
   /** 選んでいるブランチの Storybook のコミット（置いていなければ undefined） */
   commit: string | undefined;
@@ -63,12 +40,15 @@ type ToolbarProps = {
   userName: string;
   onLogout: () => void;
   onHelp: () => void;
+  storyListOpen: boolean;
+  onToggleStoryList: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 };
 
 /**
- * 上の操作の帯。ページ（設定ファイルの Storybook）・操作の種類・絞り込み・幅・ブランチ・ログインしている人
+ * 上の操作の帯。いつも使うものだけを 1 段に並べる（ページ・左右の開閉・道具・ブランチ・使い方・アカウント）。
+ * 絞り込みと並べ方の設定は、左の画面の一覧（StorySidebar）にある
  */
 export const Toolbar = ({
   page,
@@ -76,17 +56,6 @@ export const Toolbar = ({
   openCounts,
   tool,
   onToolChange,
-  query,
-  onQueryChange,
-  searchRef,
-  showComponents,
-  onShowComponentsChange,
-  width,
-  widthOptions,
-  onWidthChange,
-  onWidthRemove,
-  perRow,
-  onPerRowChange,
   branch,
   commit,
   branchOptions,
@@ -94,64 +63,48 @@ export const Toolbar = ({
   userName,
   onLogout,
   onHelp,
+  storyListOpen,
+  onToggleStoryList,
   sidebarOpen,
   onToggleSidebar,
 }: ToolbarProps) => {
   const sources = useSources();
-  // 足す幅の入力（px）。足せない値のまま足そうとしたら、欄に印を付ける
-  const [widthInput, setWidthInput] = useState("");
-  const [widthInvalid, setWidthInvalid] = useState(false);
-  const selectedCustom =
-    widthOptions.find((option) => option.width === width)?.custom ?? false;
   return (
-    // 狭い幅（Tailwind の md 未満。model/viewport.ts）では、ページ・道具・絞り込み・ブランチと、右端の「?」・一覧の開閉だけを出す
-    // （閲覧・返信・解決ができれば足りる。幅や並べ方を変える欄は出さない）。「?」と一覧の開閉は、1 段目の右端に固定する
-    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3 py-1.5">
-      <h1 className="hidden text-sm font-bold whitespace-nowrap text-ink min-[1400px]:block">
-        Review Canvas
-      </h1>
-
-      {/* Storybook が 1 つなら、切り替える先が無いので出さない */}
-      {sources.ids.length > 1 && (
-        <nav
-          aria-label="ページ"
-          className="flex min-w-0 overflow-x-auto rounded-md bg-panel-sub p-0.5 max-md:order-1 max-md:max-w-36"
+    <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-panel px-3 py-1.5">
+      <div className="flex min-w-0 items-center gap-2 md:flex-1">
+        <h1 className="hidden text-sm font-bold whitespace-nowrap text-ink min-[1400px]:block">
+          Review Canvas
+        </h1>
+        {/* Storybook が 1 つなら、切り替える先が無いので出さない */}
+        {sources.ids.length > 1 && (
+          <select
+            aria-label="ページ"
+            title="括弧の中は未解決・確認待ちの件数"
+            value={page}
+            className="max-w-48 min-w-0 rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
+            onChange={(event) => onPageChange(event.target.value)}
+          >
+            {sources.ids.map((source) => {
+              const count = openCounts[source] ?? 0;
+              return (
+                <option key={source} value={source}>
+                  {sources.label(source)}
+                  {count > 0 ? `（${String(count)}）` : ""}
+                </option>
+              );
+            })}
+          </select>
+        )}
+        <IconButton
+          label="画面の一覧（[）"
+          pressed={storyListOpen}
+          onClick={onToggleStoryList}
         >
-          {sources.ids.map((source) => (
-            <button
-              key={source}
-              type="button"
-              aria-current={source === page ? "page" : undefined}
-              className={[
-                "rounded px-3 py-1 text-sm whitespace-nowrap",
-                source === page
-                  ? "bg-panel font-bold text-ink shadow-sm"
-                  : "text-ink-sub hover:text-ink",
-              ].join(" ")}
-              onClick={() => onPageChange(source)}
-            >
-              {sources.label(source)}
-              {(openCounts[source] ?? 0) > 0 && (
-                <span
-                  className="ml-1.5 rounded-full bg-accent px-1.5 text-xs font-bold text-white"
-                  title={`未解決・確認待ち ${openCounts[source]} 件`}
-                >
-                  <span aria-hidden="true">{openCounts[source]}</span>
-                  <span className="sr-only">
-                    （未解決・確認待ち {openCounts[source]} 件）
-                  </span>
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      )}
+          <PanelLeft aria-hidden className="size-4" />
+        </IconButton>
+      </div>
 
-      <div
-        role="toolbar"
-        aria-label="操作"
-        className="flex gap-0.5 max-md:order-1"
-      >
+      <div role="toolbar" aria-label="操作" className="flex gap-0.5">
         {TOOLS.map(({ tool: value, label, key, Icon }) => (
           <IconButton
             key={value}
@@ -174,123 +127,18 @@ export const Toolbar = ({
         ))}
       </div>
 
-      <label className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-accent max-md:order-3">
-        <Search aria-hidden className="size-4 text-muted" />
-        <input
-          ref={searchRef}
-          type="search"
-          aria-label="画面名で絞り込む"
-          placeholder="絞り込む（/）"
-          value={query}
-          className="w-28 bg-transparent py-1 text-sm outline-none"
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            // 抜けた先をキャンバスにする（blur だと抜けた入力欄が「最後にいた所」に残り、画面の中に取られたフォーカスがそこへ戻るため）
-            if (event.key === "Escape") focusCanvas();
-          }}
-        />
-      </label>
-
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
-        <input
-          type="checkbox"
-          checked={showComponents}
-          onChange={(event) => onShowComponentsChange(event.target.checked)}
-        />
-        部品も表示
-      </label>
-
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
-        幅
-        <select
-          value={width}
-          className="rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
-          onChange={(event) => onWidthChange(Number(event.target.value))}
-        >
-          {widthOptions.map((option) => (
-            <option key={option.width} value={option.width}>
-              {option.width}px{option.custom ? "（自分用）" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* 設定に無い幅を、見る人が自分用に足す（ブラウザに覚える。足した幅は iframe で並べる） */}
-      <form
-        className="flex items-center gap-1 max-md:hidden"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const next = parseWidthInput(widthInput);
-          if (next === undefined) {
-            setWidthInvalid(true);
-            return;
-          }
-          setWidthInput("");
-          setWidthInvalid(false);
-          onWidthChange(next);
-        }}
-      >
-        <input
-          type="text"
-          inputMode="numeric"
-          aria-label="足す幅（px）"
-          aria-invalid={widthInvalid}
-          title={`好きな幅（px。1〜${MAX_CUSTOM_WIDTH} の整数）を自分用に足します。このブラウザに覚え、ほかの人には出ません`}
-          placeholder="幅を足す"
-          value={widthInput}
-          className={[
-            "w-20 rounded-md border bg-transparent px-1.5 py-1 text-sm outline-none focus:border-accent",
-            widthInvalid ? "border-warn" : "border-line",
-          ].join(" ")}
-          onChange={(event) => {
-            setWidthInput(event.target.value);
-            setWidthInvalid(false);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") focusCanvas();
-          }}
-        />
-        <button
-          type="submit"
-          className="rounded-md border border-line px-1.5 py-1 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
-        >
-          追加
-        </button>
-        {selectedCustom && (
-          <button
-            type="button"
-            className="rounded-md border border-line px-1.5 py-1 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub"
-            aria-label={`${String(width)}px を外す`}
-            title={`自分用に足した幅 ${String(width)}px を外します`}
-            onClick={() => onWidthRemove(width)}
-          >
-            外す
-          </button>
-        )}
-      </form>
-
-      <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:hidden">
-        横に
-        <select
-          value={perRow}
-          aria-label="1行に並べる状態の数"
-          className="rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
-          onChange={(event) => onPerRowChange(Number(event.target.value))}
-        >
-          {FRAMES_PER_ROW_OPTIONS.map((n) => (
-            <option key={n} value={n}>
-              {n}枚
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="flex min-w-0 items-center gap-2 max-md:order-3 md:ml-auto">
-        <label className="flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub">
-          <span className="max-md:sr-only">ブランチ</span>
+      <div className="flex min-w-0 items-center justify-end gap-0.5 max-md:ml-auto md:flex-1">
+        <label className="mr-1 flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap text-ink-sub max-md:mr-0">
+          <span className="max-lg:sr-only">ブランチ</span>
           <select
             value={branch}
-            className="max-w-40 rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink"
+            // コミットは常には出さず、説明に出す（帯を 1 段に収めるため）
+            title={
+              commit === undefined
+                ? undefined
+                : `Storybook のコミット: ${commit}`
+            }
+            className="max-w-40 min-w-0 rounded-md border border-line bg-panel px-1.5 py-1 text-sm text-ink max-md:max-w-28"
             onChange={(event) => onBranchChange(event.target.value)}
           >
             {branchOptions.map((b) => (
@@ -300,28 +148,6 @@ export const Toolbar = ({
             ))}
           </select>
         </label>
-        {commit !== undefined && (
-          <code
-            // 狭い画面では帯が2段にならないよう出さない（ヘルプの横に出すコミットは、ブランチの一覧の行の見出しでも分かる）
-            className="hidden rounded bg-panel-sub px-1.5 py-0.5 text-xs text-ink-sub 2xl:inline"
-            title="選んでいるブランチの Storybook のコミット"
-          >
-            {commit}
-          </code>
-        )}
-        <span
-          className="inline-flex items-center gap-1 px-1 py-1 text-sm text-ink-sub max-md:hidden"
-          title={`${userName} としてログイン中`}
-        >
-          <UserRound aria-hidden className="size-4 shrink-0" />
-          <span className="max-w-24 truncate">{userName}</span>
-        </span>
-        <IconButton label="ログアウト" onClick={onLogout}>
-          <LogOut aria-hidden className="size-4" />
-        </IconButton>
-      </div>
-
-      <div className="flex items-center gap-1 max-md:order-2 max-md:ml-auto">
         <IconButton label="使い方・ショートカット（?）" onClick={onHelp}>
           <CircleHelp aria-hidden className="size-4" />
         </IconButton>
@@ -332,6 +158,7 @@ export const Toolbar = ({
         >
           <PanelRight aria-hidden className="size-4" />
         </IconButton>
+        <AccountMenu userName={userName} onLogout={onLogout} />
       </div>
     </header>
   );

@@ -26,7 +26,7 @@ export const DevAuthProvider = ({
   const [name, setName] = useState<string | undefined>(readDevSession);
 
   // 別のタブで名前を変えた・ログアウトしたら、このタブの利用者も合わせる（トークンは保存した名前で作るため、
-  // 合わせないとツールバーの名前と書いた人が食い違う）
+  // 合わせないと画面に出す名前と書いた人が食い違う）
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key === DEV_SESSION_STORAGE_KEY || event.key === null) {
