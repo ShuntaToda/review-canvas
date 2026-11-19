@@ -70,16 +70,38 @@ export const storyLinkFocusPoint = (
 });
 
 /**
- * 開いたときに枠で示す画面。?story= のリンクで、その画面があるときだけ
- * （?comment= のリンクはスレッドを開くので示さない）。
- * 再読み込み（navigationType が "reload"）では示さない（アドレスの欄がいつも ?story= を持つため、ふだんの読み直しで出さない）
+ * 作業の画面をどう作ったか。url: URL から開いた最初の 1 回、branch-switch: ブランチを切り替えて作り直した
+ * （切り替える前に真ん中に見えていた画面を story に入れて開くが、リンクで開いたのではない）
+ */
+export type WorkspaceOpening = "url" | "branch-switch";
+
+/**
+ * リンクの幅（?width=）を当てるページと幅。URL から開いた最初の 1 回だけ（ブランチを切り替えたら、覚えた幅に戻す）
+ */
+export const linkWidthToApply = (
+  url: UrlState,
+  opening: WorkspaceOpening,
+): { source: string; width: number | null | undefined } | undefined =>
+  opening === "url" && url.page !== undefined
+    ? { source: url.page, width: url.width }
+    : undefined;
+
+/**
+ * 開いたときに枠で示す画面。URL の ?story= のリンクを新しく開いたときで、その画面があるときだけ。
+ * ?comment= のリンクはスレッドを開くので示さない。ブランチの切り替え・再読み込み・戻る／進むでも示さない
+ * （アドレスの欄がいつも ?story= を持つため、ふだんの読み直しや行き来で出さない）。開き方が読めないブラウザでは示す
  */
 export const linkHighlightStory = (
   url: UrlState,
   foundStoryId: string | undefined,
-  navigationType: string | undefined,
+  opening: {
+    by: WorkspaceOpening;
+    navigationType: NavigationTimingType | undefined;
+  },
 ): string | null =>
-  navigationType !== "reload" &&
+  opening.by === "url" &&
+  (opening.navigationType === undefined ||
+    opening.navigationType === "navigate") &&
   url.comment === undefined &&
   url.story !== undefined
     ? (foundStoryId ?? null)

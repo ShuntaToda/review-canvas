@@ -7,7 +7,7 @@ const prefersReducedMotion = (): boolean =>
 /**
  * 画面を指すリンクで開いたときに、その画面を枠で示す（一度だけ）。
  * ready（開いたページで、その画面に寄せ終えた）になってから出し、LINK_HIGHLIGHT_MS で消す。
- * 出したあとはほかの画面へ移っても待たずに消え、ほかのページへ切り替えたら（onPage が false）その時点で終える
+ * 出したあとはほかの画面へ移っても、そのまま同じ時間で消える。ほかのページへ切り替えたら（onPage が false）その時点で終える
  */
 export const useLinkHighlight = (
   storyId: string | null,

@@ -15,12 +15,12 @@ import { useLocalSetting } from "./useLocalSetting";
 
 /**
  * ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）。どちらもブラウザに覚える。
- * linkWidth は開いたリンクの幅（?width=）。開いたページの幅として重ねるだけで、覚えた幅には書かない
+ * link は開いたリンクの幅（?width=）。開いたページの幅として重ねるだけで、覚えた幅には書かない
  * （そのページの幅を本人が選んだら、重ねるのをやめる）
  */
 export const useCustomWidths = (
   sources: SourceCatalog,
-  linkWidth?: { source: string; width: number | null | undefined },
+  link?: { source: string; width: number | null | undefined },
 ): {
   /** ページのいまの幅（リンクの幅を重ねていればその幅。覚えていなければ既定） */
   widthOf: (source: StorySource) => number;
@@ -31,7 +31,7 @@ export const useCustomWidths = (
   /** 自分で足した幅を外す（その幅で見ていたら、既定の幅に戻す） */
   remove: (source: StorySource, width: number) => void;
   /** 開いたリンクの幅で開いた幅（リンクに幅が無ければ undefined。開いたときの値のまま変わらない） */
-  linkWidth: number | undefined;
+  openedLinkWidth: number | undefined;
 } => {
   const [custom, setCustom] = useLocalSetting<CustomWidths>(
     "review-canvas.customWidths",
@@ -51,13 +51,13 @@ export const useCustomWidths = (
   );
   // 開いたリンクの幅（覚えた幅とは別に持つ）
   const [opened] = useState(() => {
-    if (linkWidth === undefined || !sources.has(linkWidth.source)) {
+    if (link === undefined || !sources.has(link.source)) {
       return undefined;
     }
-    const config = sources.get(linkWidth.source);
+    const config = sources.get(link.source);
     const width = resolveLinkWidth(
-      linkWidth.width,
-      widthOptions(config.widths, custom[linkWidth.source]),
+      link.width,
+      widthOptions(config.widths, custom[link.source]),
       config.defaultWidth,
     );
     return width === undefined ? undefined : { source: config.id, width };
@@ -93,6 +93,6 @@ export const useCustomWidths = (
         setWidths({ ...widths, [source]: fallback });
       }
     },
-    linkWidth: opened?.width,
+    openedLinkWidth: opened?.width,
   };
 };

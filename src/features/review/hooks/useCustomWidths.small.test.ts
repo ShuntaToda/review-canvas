@@ -254,7 +254,7 @@ describe("useCustomWidths", () => {
 
         expect(result.current.widthOf("shop")).toBe(1000);
         expect(result.current.widthOf("blog")).toBe(1280);
-        expect(result.current.linkWidth).toBeUndefined();
+        expect(result.current.openedLinkWidth).toBeUndefined();
       });
     });
   });

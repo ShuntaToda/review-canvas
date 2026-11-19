@@ -4,6 +4,7 @@ import { widthOptions } from "./custom-widths";
 import { layoutRows } from "./layout";
 import {
   linkHighlightStory,
+  linkWidthToApply,
   resolveLinkWidth,
   storyLinkFocusPoint,
   storyLinkState,
@@ -81,7 +82,10 @@ describe("resolveLinkWidth", () => {
 describe("linkHighlightStory", () => {
   test("[正常系]?story= のリンクで、その画面があれば枠で示す", () => {
     expect(
-      linkHighlightStory({ page: "shop", story: "a--b" }, "a--b", "navigate"),
+      linkHighlightStory({ page: "shop", story: "a--b" }, "a--b", {
+        by: "url",
+        navigationType: "navigate",
+      }),
     ).toBe("a--b");
   });
 
@@ -90,24 +94,29 @@ describe("linkHighlightStory", () => {
       linkHighlightStory(
         { page: "shop", story: "a--b", comment: "01" },
         "a--b",
-        "navigate",
+        { by: "url", navigationType: "navigate" },
       ),
     ).toBeNull();
     expect(
-      linkHighlightStory({ page: "shop", comment: "01" }, "a--b", "navigate"),
+      linkHighlightStory({ page: "shop", comment: "01" }, "a--b", {
+        by: "url",
+        navigationType: "navigate",
+      }),
     ).toBeNull();
   });
 
   test("[境界値]画面が見つからない・?story= の無いリンクでは示さない", () => {
     expect(
-      linkHighlightStory(
-        { page: "shop", story: "x--y" },
-        undefined,
-        "navigate",
-      ),
+      linkHighlightStory({ page: "shop", story: "x--y" }, undefined, {
+        by: "url",
+        navigationType: "navigate",
+      }),
     ).toBeNull();
     expect(
-      linkHighlightStory({ page: "shop" }, undefined, "navigate"),
+      linkHighlightStory({ page: "shop" }, undefined, {
+        by: "url",
+        navigationType: "navigate",
+      }),
     ).toBeNull();
   });
 });
@@ -165,18 +174,53 @@ describe("storyLinkFocusPoint", () => {
 });
 
 describe("linkHighlightStory の開き方", () => {
-  test("[正常系]再読み込みでは示さない（アドレスの欄がいつも ?story= を持つため）", () => {
-    expect(
-      linkHighlightStory({ page: "shop", story: "a--b" }, "a--b", "reload"),
-    ).toBeNull();
-  });
+  const url = { page: "shop", story: "a--b" } as const;
 
-  test.each([["navigate"], ["back_forward"], [undefined]])(
-    "[正常系]再読み込みでなければ（%s）示す",
-    (type) => {
+  test.each([["reload"], ["back_forward"]] as const)(
+    "[正常系]再読み込み・戻る／進む（%s）では示さない（アドレスの欄がいつも ?story= を持つため）",
+    (navigationType) => {
       expect(
-        linkHighlightStory({ page: "shop", story: "a--b" }, "a--b", type),
+        linkHighlightStory(url, "a--b", { by: "url", navigationType }),
+      ).toBeNull();
+    },
+  );
+
+  test.each([["navigate"], [undefined]] as const)(
+    "[正常系]新しく開いた・開き方が読めない（%s）なら示す",
+    (navigationType) => {
+      expect(
+        linkHighlightStory(url, "a--b", { by: "url", navigationType }),
       ).toBe("a--b");
     },
   );
+
+  test("[正常系]ブランチを切り替えて作り直したときは、真ん中に見えていた画面が story にあっても示さない", () => {
+    expect(
+      linkHighlightStory(url, "a--b", {
+        by: "branch-switch",
+        navigationType: "navigate",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("linkWidthToApply", () => {
+  test("[正常系]URL から開いた最初の 1 回は、リンクのページと幅を当てる", () => {
+    expect(
+      linkWidthToApply({ page: "shop", story: "a--b", width: 820 }, "url"),
+    ).toStrictEqual({ source: "shop", width: 820 });
+  });
+
+  test("[正常系]ブランチを切り替えて作り直したときは当てない（覚えた幅に戻す）", () => {
+    expect(
+      linkWidthToApply(
+        { page: "shop", story: "a--b", width: 820 },
+        "branch-switch",
+      ),
+    ).toBeUndefined();
+  });
+
+  test("[境界値]ページの無い URL では当てない", () => {
+    expect(linkWidthToApply({ width: 820 }, "url")).toBeUndefined();
+  });
 });

@@ -80,8 +80,10 @@ import {
 import { mapSources, type StorySource } from "../model/sources";
 import {
   linkHighlightStory,
+  linkWidthToApply,
   storyLinkFocusPoint,
   storyLinkUrl,
+  type WorkspaceOpening,
 } from "../model/story-link";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
@@ -145,6 +147,8 @@ type ReviewWorkspaceProps = {
   /** ページごとの、発行のときに撮った画像（無いページは空） */
   shots: Readonly<Record<StorySource, ShotCatalog>>;
   initialUrl: UrlState;
+  /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
+  openedBy: WorkspaceOpening;
   initialComments: Comment[];
   /** ログインしている人（書いた人として残り、自分のコメントだけを編集・削除できる） */
   me: AuthUser;
@@ -164,6 +168,7 @@ export const ReviewWorkspace = ({
   storyErrors,
   shots,
   initialUrl,
+  openedBy,
   initialComments,
   me,
   onLogout,
@@ -184,9 +189,7 @@ export const ReviewWorkspace = ({
   // リンクの幅（?width=）は、リンクのページにだけ重ねる
   const pageWidths = useCustomWidths(
     sources,
-    initialUrl.page === undefined
-      ? undefined
-      : { source: initialUrl.page, width: initialUrl.width },
+    linkWidthToApply(initialUrl, openedBy),
   );
   const widthOf = pageWidths.widthOf;
 
@@ -216,7 +219,7 @@ export const ReviewWorkspace = ({
         point:
           thread === undefined
             ? storyLinkFocusPoint(
-                pageWidths.linkWidth,
+                pageWidths.openedLinkWidth,
                 sources.get(story.source).defaultWidth,
               )
             : { x: thread.root.x, y: thread.root.y },
@@ -236,11 +239,10 @@ export const ReviewWorkspace = ({
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
       // ?story= のリンクで開いた画面（寄せ終えたら枠で示す）
-      highlightStoryId: linkHighlightStory(
-        initialUrl,
-        story?.id,
-        readNavigationType(),
-      ),
+      highlightStoryId: linkHighlightStory(initialUrl, story?.id, {
+        by: openedBy,
+        navigationType: readNavigationType(),
+      }),
     };
   });
 
