@@ -4,6 +4,7 @@
   "private": true,
   "description": "review-canvas の AWS 構成（CDK のコンストラクト ReviewCanvas と、そのまま出せるスタック）と、ブランチの Storybook を置くスクリプト",
   "scripts": {
+    "annotate-screen": "node -r esbuild-register scripts/annotate-screen.ts",
     "branch-storybooks": "node -r esbuild-register scripts/branch-storybooks.ts",
     "cdk": "cdk",
     "deploy": "pnpm --dir .. run build:deployed && REQUIRE_DIST=true cdk deploy --all",

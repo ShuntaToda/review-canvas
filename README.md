@@ -89,20 +89,20 @@ pnpm dev                    # → http://localhost:4100
 
 ## ドキュメント
 
-| 文書                                                             | 内容                                                                                                |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| [docs/host-setup.md](docs/host-setup.md)                         | 使う側のリポジトリでの準備（設定ファイルの項目・CLI・呼ぶワークフローの例・CDK に組み込む）         |
-| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順）                                          |
-| [docs/auth0.md](docs/auth0.md)                                   | Auth0 の設定（メールのワンタイムコード・招待制・使う人を足す・Post Login の Action・AI が呼ぶ M2M） |
-| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                         |
-| [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                          |
-| [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                              |
-| [docs/ai.md](docs/ai.md)                                         | AI に直してもらう（MCP サーバーの道具・環境変数・Claude Code への登録・スキル）                     |
-| [llms.txt](llms.txt)                                             | AI 向けの入口（文書の一覧）                                                                         |
-| [docs/design-screenshots.md](docs/design-screenshots.md)         | 設計メモ: コメントにスクリーンショットを残す（コメントに結び付ける部分は未実装）                    |
-| [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                                      |
-| [docs/development.md](docs/development.md)                       | 開発・テスト・リリースと互換性                                                                      |
-| [docs/architecture.md](docs/architecture.md)                     | つくりと決まり（層ごとの置き場・やってはいけないこと・API や画面の機能を足すときの順番）            |
-| [docs/adr/README.md](docs/adr/README.md)                         | 決定の記録（SPA と Lambda・小さな AWS の構成・別のオリジン・状態の導出・契約の生成・道具で縛る）    |
+| 文書                                                             | 内容                                                                                                                   |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [docs/host-setup.md](docs/host-setup.md)                         | 使う側のリポジトリでの準備（設定ファイルの項目・CLI・呼ぶワークフローの例・CDK に組み込む）                            |
+| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順）                                                             |
+| [docs/auth0.md](docs/auth0.md)                                   | Auth0 の設定（メールのワンタイムコード・招待制・使う人を足す・Post Login の Action・AI が呼ぶ M2M）                    |
+| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                                            |
+| [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                                             |
+| [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                                                 |
+| [docs/ai.md](docs/ai.md)                                         | AI に直してもらう（MCP サーバーの道具・環境変数・Claude Code への登録・スキル）                                        |
+| [llms.txt](llms.txt)                                             | AI 向けの入口（文書の一覧）                                                                                            |
+| [docs/design-screenshots.md](docs/design-screenshots.md)         | 設計メモ: コメントにスクリーンショットを残す（コメントに結び付ける部分は未実装）                                       |
+| [docs/api.md](docs/api.md)                                       | API・データ・要素の手がかり・AI 向けの書き出し                                                                         |
+| [docs/development.md](docs/development.md)                       | 開発・テスト・Issue から PR までの流れ（AI と回す。スキルとレビュー役の一覧は [llms.txt](llms.txt)）・リリースと互換性 |
+| [docs/architecture.md](docs/architecture.md)                     | つくりと決まり（層ごとの置き場・やってはいけないこと・API や画面の機能を足すときの順番）                               |
+| [docs/adr/README.md](docs/adr/README.md)                         | 決定の記録（SPA と Lambda・小さな AWS の構成・別のオリジン・状態の導出・契約の生成・道具で縛る）                       |
 
 npm には出していません。使う側は、このリポジトリのコミットを指して使います（[docs/development.md](docs/development.md#リリースと互換性)）。
