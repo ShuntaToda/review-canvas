@@ -183,6 +183,14 @@ jobs:
                 exit 1
               fi
             done
+          # ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を、ビルドした Storybook でも読み、どの幅でもボタンが見つかる（遷移を書いているのはサンプルのショップ）
+          out=examples/sample-storybook/storybook-static
+          missing="$(jq '(.transitions // {} | keys) as $ids | [.shots[] | select(.storyId as $s | $ids | index($s)) | select((.transitions // []) | length == 0)] | length' "$out/review-canvas-shots.json")"
+          stories_with_transitions="$(jq '.transitions // {} | length' "$out/review-canvas-shots.json")"
+          if [ "$stories_with_transitions" -eq 0 ] || [ "$missing" -ne 0 ]; then
+            echo "::error::遷移を読めていない、またはボタンが見つからないスクリーンショットがあります（遷移のあるストーリー $stories_with_transitions 個・ボタンの無い画像 $missing 枚）"
+            exit 1
+          fi
 
       # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
       # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）
@@ -245,10 +253,12 @@ jobs:
       - name: Start DynamoDB Local
         run: pnpm run docker:up
 
-      # 層ごとのカバレッジの下限（vitest.config.ts の thresholds）も確かめる
+      # 層ごとのカバレッジの下限（vitest.config.ts の thresholds）も確かめる。
+      # infra のテストは、遷移のボタンを実際のブラウザで探す（infra/test/story-transitions-capture.small.test.ts）ので Chromium を入れる
       - name: Test
         run: |
           pnpm run test:coverage --silent
+          pnpm --dir infra exec playwright install --with-deps --only-shell chromium
           pnpm run infra:test --silent
 
   # 雛形（pnpm run new:api）で作った直後の状態が、検査とテストを通ることを確かめる（雛形が決まりからずれたら落ちる）

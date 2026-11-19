@@ -25,6 +25,7 @@ import {
   type FramePlacement,
 } from "../model/layout";
 import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
+import { sameScreenHeight } from "../model/pending-place";
 import { pinPointFromClick } from "../model/pin-point";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
@@ -36,7 +37,11 @@ import {
   type RenderState,
   STORY_SETTLE_TIMEOUT_MS,
 } from "../model/story-render";
-import { type ShotView, shotUrlAt } from "../model/story-shots";
+import {
+  type ShotTransition,
+  type ShotView,
+  shotUrlAt,
+} from "../model/story-shots";
 import { type Story, storybookUrl, storyIframeUrl } from "../model/storybook";
 import type { CommentAnchor, ThreadStatus } from "../model/threads";
 import { CompareButton } from "./CompareButton";
@@ -115,6 +120,13 @@ type FrameProps = {
   onCopyStoryLink: (storyId: string) => void;
   /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
   linkHighlight: LinkHighlight | null;
+  /** 遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
+  transitionBoxes?: ReadonlyArray<ShotTransition>;
+  /**
+   * 動く画面が撮ったときとずれた（中身の高さが違う・操作のモードで中を触った）か、ずれが無くなった。
+   * ずれている画面ではボタンの枠を出さず、出る矢印は画面の右の端から出す
+   */
+  onTransitionDrift?: ((storyId: string, drifted: boolean) => void) | undefined;
 };
 
 /** 外すと決めた画面を about:blank へ移してから、実際に外すまでの待ちの上限(ms) */
@@ -179,6 +191,8 @@ export const Frame = ({
   onPendingPlace,
   onScreenChanged,
   onCompare,
+  transitionBoxes = [],
+  onTransitionDrift,
 }: FrameProps) => {
   const storybookBase = useStorybookBase();
   const sources = useSources();
@@ -261,6 +275,15 @@ export const Frame = ({
   const [measuredAt, setMeasuredAt] = useState<MeasuredAt | null>(null);
   // 動く画面で測った、いまの幅の中身の高さ（画像を撮ったときの高さと比べて、中身がずれていないかを見る）
   const liveHeightRef = useRef<number | null>(null);
+  // 同じく、遷移のボタンの位置が撮ったときと合っているかを見るための、いまの回の中身の高さ（描き直すために state でも持つ）
+  const [liveHeight, setLiveHeight] = useState<{
+    generation: number;
+    height: number;
+  } | null>(null);
+  // 操作のモードで中を触った回（触った後は、撮ったときのボタンの位置と合っているとは限らない）
+  const [touchedGeneration, setTouchedGeneration] = useState<number | null>(
+    null,
+  );
   const baseHeight = sources.get(source).baseHeight;
   const sizeContextRef = useRef<FrameAt>({ generation, width: w });
   useLayoutEffect(() => {
@@ -296,6 +319,11 @@ export const Frame = ({
     const current = sizeContextRef.current;
     if (!matchesWidth(width, current.width)) return false;
     liveHeightRef.current = height;
+    setLiveHeight((previous) =>
+      previous?.generation === current.generation && previous.height === height
+        ? previous
+        : { generation: current.generation, height },
+    );
     const decided = reportOrHoldHeight({
       showingShot: showingShotRef.current,
       height,
@@ -570,6 +598,39 @@ export const Frame = ({
   );
   const highlightBox = draftPin?.box ?? highlightPin?.box ?? null;
 
+  // 操作のモードで画面の中を押した（フォーカスが iframe へ移った）ら、触ったとみなす（橋渡しの知らせが届かない中身の操作も拾う）
+  useEffect(() => {
+    if (tool !== "interact" || !mounted) return;
+    const handleBlur = () => {
+      window.setTimeout(() => {
+        if (
+          iframeRef.current !== null &&
+          document.activeElement === iframeRef.current
+        ) {
+          setTouchedGeneration(generation);
+        }
+      }, 0);
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [tool, mounted, generation]);
+  // 動く画面が撮ったときとずれた（ピンを置くときと同じく、中身の高さで比べる）・操作のモードで中を触った
+  const drifted =
+    revealed &&
+    shot !== null &&
+    (touchedGeneration === generation ||
+      (liveHeight?.generation === generation &&
+        !sameScreenHeight(shot, liveHeight.height, baseHeight)));
+  const onTransitionDriftRef = useRef(onTransitionDrift);
+  useLayoutEffect(() => {
+    onTransitionDriftRef.current = onTransitionDrift;
+  }, [onTransitionDrift]);
+  useEffect(() => {
+    if (!drifted) return;
+    onTransitionDriftRef.current?.(story.id, true);
+    return () => onTransitionDriftRef.current?.(story.id, false);
+  }, [drifted, story.id]);
+
   /** 順番待ちを通して読み直す（いまの iframe は外す手順を通して外す） */
   const reload = () => {
     setInterrupted(false);
@@ -652,6 +713,7 @@ export const Frame = ({
         }
         // 利用者が自分で画面の中へ入った。抜けたときに、その前の入力欄へ戻さない
         forgetParentFocus();
+        if (byUser) setTouchedGeneration(loadedGeneration);
         return;
       }
       if (busy()) {
@@ -883,6 +945,24 @@ export const Frame = ({
             }}
           />
         )}
+        {!drifted &&
+          transitionBoxes.map((box) => (
+            // 遷移を持つボタンの枠。クリックは下へ通す（ピンを置ける・操作のモードで押せる）
+            <div
+              key={box.index}
+              aria-hidden
+              data-transition-box={box.index}
+              className="pointer-events-none absolute rounded-sm bg-accent/10"
+              style={{
+                left: box.x,
+                top: box.y,
+                width: box.width,
+                height: box.height,
+                outline: `${1.5 / zoom}px solid color-mix(in srgb, var(--color-accent) 60%, transparent)`,
+                zIndex: 4,
+              }}
+            />
+          ))}
         {highlightBox !== null && (
           // 指している要素の枠。ストーリーの DOM には手を入れず、キャンバスの側に重ねる
           <div

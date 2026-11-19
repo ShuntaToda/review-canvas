@@ -10,10 +10,40 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  parameters: {
+    // 同じボタンから、入力しだいで行き先が分かれる
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { role: "button", name: "注文する" },
+          to: "shop-orderform--filled",
+          label: "入力したとき",
+        },
+        {
+          from: { role: "button", name: "注文する" },
+          to: "shop-orderform--validation-error",
+          label: "入力が足りないとき",
+        },
+      ],
+    },
+  },
+};
 
 /** play 関数で入力して送る（review-canvas は play 関数を持つストーリーを 1 つずつ読み込む） */
 export const Filled: Story = {
+  parameters: {
+    // 「買い物を続ける」は play 関数で送った後に出る
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { text: "買い物を続ける" },
+          to: "shop-productlist--default",
+          label: "注文を受け付けた後",
+        },
+      ],
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByLabelText("お名前"), "山田 太郎");

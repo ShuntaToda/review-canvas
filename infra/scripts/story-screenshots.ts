@@ -4,18 +4,24 @@ import * as http from "http";
 import type { AddressInfo } from "net";
 import * as os from "os";
 import * as path from "path";
+import type { JSHandle, Page } from "playwright";
 import {
   SETTLED_STORY_PHASES,
   type StorybookWindow,
 } from "../../src/features/review/model/story-render";
 import {
   collectShotElements,
+  createShotTextReaders,
+  INTERACTIVE_SELECTORS,
   isShotPath,
   MAX_MEASURED_NODES,
   MAX_SHOT_ELEMENTS,
   MAX_SHOT_HEIGHT,
+  MAX_STORY_TRANSITIONS,
   measureContentHeight,
+  measureTransitionCandidates,
   parseShotsManifest,
+  readTransitionSpecs,
   SHOT_ELEMENT_SELECTOR,
   SHOT_ELEMENT_TEXT_LENGTH,
   SHOTS_DIR,
@@ -24,8 +30,24 @@ import {
   THUMB_SCALE,
   type ShotElement,
   type ShotsManifest,
+  type ShotTransition,
   type StoryShot,
+  type StoryTransition,
+  type TransitionCandidate,
 } from "../../src/features/review/model/story-shots";
+import {
+  checkTransitionSpecs,
+  groupTransitionProblems,
+  oneLine,
+  placeTransition,
+  toTransitionCandidates,
+  toTransitionSpecs,
+  TRANSITION_SPEC_TEXT_LENGTH,
+  type TransitionFrom,
+  type TransitionProblem,
+  type TransitionProblemGroup,
+  type TransitionLookup,
+} from "./story-transitions";
 
 /**
  * ストーリーのスクリーンショットを撮る（置くスクリプト branch-storybooks.ts が、ビルドの後・上げる前に使う）。
@@ -37,6 +59,8 @@ import {
  *   （completed・afterEach・finished。失敗は errored・aborted）になるのを待ってから撮る。段階の並びは storybook の StoryRender（preview/runtime.js）
  * - 撮るときに、中身の高さ（切り上げる前）と主な要素（押せる要素・見出し）の矩形と文字も目録に残す。
  *   キャンバスが、画像の上でクリックした位置の要素が動く画面でも同じかを確かめるのに使う（src/features/review/model/pending-place.ts）
+ * - ストーリーに書いた遷移（parameters.reviewCanvas.transitions）も読み、行き先と、幅ごとのボタンの矩形を目録に残す（story-transitions.ts）。
+ *   ボタンは play 関数が終わった後の画面で、Playwright の探し方（getByRole・getByText・getByTestId。見えている要素だけ）で探す
  * - 画像と目録は、ビルド結果の中（<outDir>/review-canvas-shots/・<outDir>/review-canvas-shots.json）に書く。
  *   Storybook をビルドし直すと outDir ごと作り直されるので、古いビルドの画像は残らない
  *
@@ -293,11 +317,15 @@ class CaptureTimeoutError extends Error {
   override name = "TimeoutError";
 }
 
-/** 上限の時間で打ち切る（元の処理は止められないので、呼ぶ側がページを作り直す） */
+/**
+ * 上限の時間で打ち切る（元の処理は止められないので、呼ぶ側がページを作り直す）。
+ * 知らせには limitMs の秒数を出す（残りの時間で打ち切るときも、知らせは上限の秒数にする）
+ */
 export const withTimeout = async <T>(
   work: Promise<T>,
   ms: number,
   label: string,
+  limitMs = ms,
 ): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -308,7 +336,7 @@ export const withTimeout = async <T>(
           () =>
             reject(
               new CaptureTimeoutError(
-                `${label}が ${String(Math.round(ms / 1000))} 秒で終わりませんでした`,
+                `${label}が ${String(Math.round(limitMs / 1000))} 秒で終わりませんでした`,
               ),
             ),
           ms,
@@ -335,10 +363,204 @@ export const SHOT_CONTENT_SCRIPT = `(() => {
       document,
       ${JSON.stringify(SHOT_ELEMENT_SELECTOR)},
       ${String(MAX_SHOT_ELEMENTS)},
-      ${String(SHOT_ELEMENT_TEXT_LENGTH)},
+      (${createShotTextReaders.toString()})(
+        document,
+        ${String(SHOT_ELEMENT_TEXT_LENGTH)},
+      ),
     ),
   };
 })()`;
+
+/**
+ * ブラウザの中で、描画したストーリーの遷移（parameters.reviewCanvas.transitions）を文字だけにして読む式。
+ * 上限（MAX_STORY_TRANSITIONS）の行までを読み、並びの長さが上限を超えていたかを overflow で返す
+ */
+const TRANSITION_SPECS_SCRIPT = `(() => {
+  const __name = (fn) => fn;
+  return (${readTransitionSpecs.toString()})(
+    window,
+    ${String(MAX_STORY_TRANSITIONS)},
+    ${String(TRANSITION_SPEC_TEXT_LENGTH)},
+  );
+})()`;
+
+/**
+ * ブラウザの中で、Playwright で探した要素を見出しで絞って矩形にする関数を作る式（目録の主な要素と同じ見出しの読み方）。
+ * 返す関数は (要素の並び, { heading, climb }) を受ける
+ */
+const TRANSITION_FINDER_SCRIPT = `(() => {
+  const __name = (fn) => fn;
+  const createReaders = (${createShotTextReaders.toString()});
+  const measure = (${measureTransitionCandidates.toString()});
+  return (elements, options) =>
+    measure(
+      elements,
+      createReaders(document, ${String(SHOT_ELEMENT_TEXT_LENGTH)}),
+      options.heading,
+      options.climb,
+    );
+})()`;
+
+/** 文字で探したときに、さかのぼる押せる要素 */
+const CLIMB_SELECTOR = INTERACTIVE_SELECTORS.join(", ");
+
+type TransitionFinder = (
+  elements: Element[],
+  options: { heading: string | null; climb: string | null },
+) => unknown;
+
+type AriaRole = Parameters<Page["getByRole"]>[0];
+
+/** Playwright の getByRole が受け付ける役割（型と同じ役割の集まり。足りない・余るものは型の検査で落ちる） */
+const ARIA_ROLES: Readonly<Record<AriaRole, true>> = {
+  alert: true,
+  alertdialog: true,
+  application: true,
+  article: true,
+  banner: true,
+  blockquote: true,
+  button: true,
+  caption: true,
+  cell: true,
+  checkbox: true,
+  code: true,
+  columnheader: true,
+  combobox: true,
+  complementary: true,
+  contentinfo: true,
+  definition: true,
+  deletion: true,
+  dialog: true,
+  directory: true,
+  document: true,
+  emphasis: true,
+  feed: true,
+  figure: true,
+  form: true,
+  generic: true,
+  grid: true,
+  gridcell: true,
+  group: true,
+  heading: true,
+  img: true,
+  insertion: true,
+  link: true,
+  list: true,
+  listbox: true,
+  listitem: true,
+  log: true,
+  main: true,
+  marquee: true,
+  math: true,
+  meter: true,
+  menu: true,
+  menubar: true,
+  menuitem: true,
+  menuitemcheckbox: true,
+  menuitemradio: true,
+  navigation: true,
+  none: true,
+  note: true,
+  option: true,
+  paragraph: true,
+  presentation: true,
+  progressbar: true,
+  radio: true,
+  radiogroup: true,
+  region: true,
+  row: true,
+  rowgroup: true,
+  rowheader: true,
+  scrollbar: true,
+  search: true,
+  searchbox: true,
+  separator: true,
+  slider: true,
+  spinbutton: true,
+  status: true,
+  strong: true,
+  subscript: true,
+  superscript: true,
+  switch: true,
+  tab: true,
+  table: true,
+  tablist: true,
+  tabpanel: true,
+  term: true,
+  textbox: true,
+  time: true,
+  timer: true,
+  toolbar: true,
+  tooltip: true,
+  tree: true,
+  treegrid: true,
+  treeitem: true,
+};
+
+const isAriaRole = (role: string): role is AriaRole =>
+  Object.hasOwn(ARIA_ROLES, role);
+
+/**
+ * ボタンの決め方から、Playwright の探し方を作る（見えている要素だけ。名前・文字の比べ方は Playwright の exact: true。docs/host-setup.md）。
+ * 知らない役割は探せないので null（ボタンが見つからない）
+ */
+const locateTransition = (page: Page, from: TransitionFrom) => {
+  switch (from.kind) {
+    case "role":
+      return isAriaRole(from.role)
+        ? page
+            .getByRole(from.role, { name: from.name, exact: true })
+            .filter({ visible: true })
+        : null;
+    case "text":
+      return page
+        .getByText(from.text, { exact: true })
+        .filter({ visible: true });
+    case "testId":
+      return page.getByTestId(from.testId).filter({ visible: true });
+  }
+};
+
+/**
+ * 遷移の行ごとに、いまの画面でボタンの候補を探す（行の index ごと）。
+ * 探せない行（知らない role など）は候補なしにする。時間切れは投げる（呼ぶ側がページを作り直す）
+ */
+const findTransitionCandidates = async (
+  page: Page,
+  lookups: ReadonlyArray<TransitionLookup>,
+): Promise<Map<number, TransitionCandidate[]>> => {
+  const found = new Map<number, TransitionCandidate[]>();
+  if (lookups.length === 0) return found;
+  const finder: JSHandle = await page.evaluateHandle(TRANSITION_FINDER_SCRIPT);
+  try {
+    for (const { index, from } of lookups) {
+      try {
+        const locator = locateTransition(page, from);
+        if (locator === null) {
+          found.set(index, []);
+          continue;
+        }
+        const raw = await locator.evaluateAll(
+          (elements, { fn, heading, climb }) =>
+            (fn as TransitionFinder)(elements, { heading, climb }),
+          {
+            fn: finder,
+            heading: from.heading,
+            climb: from.kind === "text" ? CLIMB_SELECTOR : null,
+          },
+        );
+        found.set(index, toTransitionCandidates(raw));
+      } catch (error) {
+        // ページ・ブラウザが閉じた（撮影の時間の上限など）ときの結果は、呼ぶ側（assertRunning）が捨てる
+        if (isTimeout(error)) throw error;
+        found.set(index, []);
+      }
+    }
+  } finally {
+    await finder.dispose().catch(() => undefined);
+  }
+  return found;
+};
 
 /** 撮った 1 枚の目録の行に、中身の高さと主な要素を足す（読めなかった・形が違うものは足さない。画像の外の要素は除く） */
 export const withContent = (shot: StoryShot, content: unknown): StoryShot => {
@@ -403,6 +625,10 @@ export const createCaptureGuard = ({
   };
 };
 
+/** 知らせに出すエラーの 1 行目 */
+const firstLine = (error: unknown): string =>
+  error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
+
 const isTimeout = (error: unknown): boolean =>
   error instanceof Error && error.name === "TimeoutError";
 
@@ -410,6 +636,8 @@ export type CaptureResult = {
   manifest: ShotsManifest;
   /** 撮れなかった 1 枚（理由つき） */
   failures: { storyId: string; width: number; reason: string }[];
+  /** 遷移の書き間違い（幅だけが違うものをまとめ、ストーリーの並び・行の順に並べたもの） */
+  transitionProblems: TransitionProblemGroup[];
   elapsedMs: number;
 };
 
@@ -425,6 +653,7 @@ export const captureStorybook = async ({
   baseHeight,
   deadline,
   log,
+  transitionTimeoutMs = STORY_TIMEOUT_MS,
 }: {
   /** Storybook のビルド結果（index.json・iframe.html のあるディレクトリ） */
   dir: string;
@@ -435,6 +664,8 @@ export const captureStorybook = async ({
   /** 撮影をやめる時刻（Date.now() と同じ数え方）。1 回の呼び出しで撮る Storybook の全部で分け合う */
   deadline: number;
   log: (message: string) => void;
+  /** 1 枚の遷移のボタンを探す時間の上限(ms)。超えたら、その 1 枚は矩形なしで残す（テストで短くする） */
+  transitionTimeoutMs?: number;
 }): Promise<CaptureResult> => {
   const startedAt = Date.now();
   const shotsDir = path.join(dir, SHOTS_DIR);
@@ -458,6 +689,7 @@ export const captureStorybook = async ({
     return {
       manifest,
       failures: plan.map((item) => ({ ...item, reason: "時間の上限" })),
+      transitionProblems: [],
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -476,6 +708,13 @@ export const captureStorybook = async ({
     Math.max(0, deadline - Date.now()),
   );
   const playFunctions: Record<string, boolean> = {};
+  // 遷移は、ストーリーごとに最初に撮れた幅で読んだものを残す（parameters は幅で変わらない）
+  const knownStories = new Set(storyIds);
+  const storyTransitions = new Map<
+    string,
+    { transitions: StoryTransition[]; problems: TransitionProblem[] }
+  >();
+  const widthProblems: TransitionProblem[] = [];
   try {
     fs.mkdirSync(shotsDir, { recursive: true });
     const context = await browser.newContext({ deviceScaleFactor: 1 });
@@ -610,22 +849,27 @@ export const captureStorybook = async ({
       }
       if (state.phase === "errored" || state.phase === "aborted") {
         log(
-          `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
+          `  ! ${oneLine(storyId)}（${String(width)}px）: 描画が ${oneLine(state.phase)} で終わりました（そのままの画面を撮っています）`,
         );
       }
       return shot;
     };
+    /** ページ・ブラウザが閉じたか（撮影の時間の上限でブラウザを閉じたときなど） */
+    const isGone = (page: Page): boolean =>
+      page.isClosed() || !browser.isConnected();
+    /** 撮影を止めた後（ページ・ブラウザが閉じた後も）に終わった結果は、途中で切れているかもしれないので使わない */
+    const assertRunning = (page: Page): void => {
+      if (guard.stopReason() !== null || isGone(page)) {
+        throw new Error("撮影を止めたので、遷移を読み切れませんでした");
+      }
+    };
     const settled = await runPool(plan, concurrency, async (item, slot) => {
       const stop = guard.stopReason();
       if (stop !== null) throw new Error(stop);
+      let shot: StoryShot;
       try {
-        const shot = await withTimeout(
-          shoot(item, slot),
-          SHOT_TIMEOUT_MS,
-          "撮影",
-        );
+        shot = await withTimeout(shoot(item, slot), SHOT_TIMEOUT_MS, "撮影");
         guard.record("finished");
-        return shot;
       } catch (error) {
         guard.record(isTimeout(error) ? "timeout" : "finished");
         // 終わらなかったページは使い回さない（メインスレッドが止まったままだと、次の 1 枚も開けない）
@@ -633,6 +877,75 @@ export const captureStorybook = async ({
           await renewPages(slot).catch(() => undefined);
         }
         throw error;
+      }
+      // 撮った後の同じ画面で、遷移を読み、ボタンを探す（読むのと探すのとで、1 枚に transitionTimeoutMs まで）。
+      // 時間切れ・失敗でも撮った 1 枚は残す。読めた行き先と幅に依らない書き間違いは残し、矩形とこの幅の書き間違いだけを捨てる
+      const page = pages[slot];
+      const startedLookUp = Date.now();
+      const remaining = () =>
+        Math.max(0, transitionTimeoutMs - (Date.now() - startedLookUp));
+      const giveUp = async (error: unknown): Promise<StoryShot> => {
+        log(
+          `  ! ${oneLine(item.storyId)}（${String(item.width)}px）: 遷移のボタンを探せませんでした（画像は置きます）: ${oneLine(firstLine(error))}`,
+        );
+        // 終わらなかったページは使い回さない
+        if (isTimeout(error) && guard.stopReason() === null) {
+          await renewPages(slot).catch(() => undefined);
+        }
+        return shot;
+      };
+      const lookUpLabel = "遷移のボタン探し";
+      if (page === undefined) {
+        return giveUp(new Error("撮るページがありません"));
+      }
+      // 読めないときは、このストーリーの行き先を登録しない（ほかの幅で読めれば、そちらを残す）
+      let checked: ReturnType<typeof checkTransitionSpecs>;
+      try {
+        const raw = await withTimeout(
+          page.evaluate<unknown>(TRANSITION_SPECS_SCRIPT),
+          remaining(),
+          lookUpLabel,
+          transitionTimeoutMs,
+        );
+        assertRunning(page);
+        checked = checkTransitionSpecs(
+          item.storyId,
+          toTransitionSpecs(raw),
+          knownStories,
+        );
+      } catch (error) {
+        return giveUp(error);
+      }
+      if (!storyTransitions.has(item.storyId)) {
+        storyTransitions.set(item.storyId, {
+          transitions: checked.transitions,
+          problems: checked.problems,
+        });
+      }
+      if (checked.lookups.length === 0) return shot;
+      try {
+        const candidates = await withTimeout(
+          findTransitionCandidates(page, checked.lookups),
+          remaining(),
+          lookUpLabel,
+          transitionTimeoutMs,
+        );
+        assertRunning(page);
+        const rects: ShotTransition[] = [];
+        for (const { index } of checked.lookups) {
+          const placed = placeTransition({
+            storyId: item.storyId,
+            width: item.width,
+            shotHeight: shot.height,
+            index,
+            candidates: candidates.get(index) ?? [],
+          });
+          if ("rect" in placed) rects.push(placed.rect);
+          else widthProblems.push(placed.problem);
+        }
+        return rects.length === 0 ? shot : { ...shot, transitions: rects };
+      } catch (error) {
+        return giveUp(error);
       }
     });
     await context.close().catch(() => undefined);
@@ -646,18 +959,39 @@ export const captureStorybook = async ({
         shots.push(result.value);
         return;
       }
-      const reason =
-        result.reason instanceof Error
-          ? (result.reason.message.split("\n")[0] ?? "")
-          : String(result.reason);
+      const reason = firstLine(result.reason);
       failures.push({ ...item, reason });
       log(
-        `  ! ${item.storyId}（${String(item.width)}px）: 撮れません: ${reason}`,
+        `  ! ${oneLine(item.storyId)}（${String(item.width)}px）: 撮れません: ${oneLine(reason)}`,
       );
     });
-    const manifest: ShotsManifest = { version: 1, shots, playFunctions };
+    const transitions = Object.fromEntries(
+      storyIds.flatMap((storyId) => {
+        const rows = storyTransitions.get(storyId)?.transitions ?? [];
+        return rows.length === 0 ? [] : [[storyId, rows]];
+      }),
+    );
+    const manifest: ShotsManifest = {
+      version: 1,
+      shots,
+      playFunctions,
+      ...(Object.keys(transitions).length === 0 ? {} : { transitions }),
+    };
     fs.writeFileSync(manifestFile, `${JSON.stringify(manifest)}\n`);
-    return { manifest, failures, elapsedMs: Date.now() - startedAt };
+    return {
+      manifest,
+      failures,
+      transitionProblems: groupTransitionProblems(
+        [
+          ...storyIds.flatMap(
+            (storyId) => storyTransitions.get(storyId)?.problems ?? [],
+          ),
+          ...widthProblems,
+        ],
+        storyIds,
+      ),
+      elapsedMs: Date.now() - startedAt,
+    };
   } finally {
     clearTimeout(closeAtDeadline);
     await server.close();
@@ -697,6 +1031,10 @@ export const stageShots = ({
             thumb !== undefined && isOwnPng(thumb) ? { ...shot, thumb } : shot,
           ),
         playFunctions: found?.playFunctions ?? {},
+        // 遷移は撮り直さず、確かめ直した前の目録のものを置く（書き間違いの一覧は出さない）
+        ...(found?.transitions === undefined
+          ? {}
+          : { transitions: found.transitions }),
       };
       const stagedDir = path.join(outDir, source);
       const manifestFile = path.join(stagedDir, SHOTS_MANIFEST_FILE);

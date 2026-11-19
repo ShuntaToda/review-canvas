@@ -13,6 +13,7 @@ import {
   planUnpublish,
   readHeadObject,
   readKeyCount,
+  reportTransitionProblems,
   resolveConfigFile,
   resolveDefaultBranch,
   resolveOutDir,
@@ -720,5 +721,50 @@ describe("parseArgs", () => {
     { argv: ["publish", "--branch", "a..b"], message: "受け付けない形" },
   ])("$argv は例外にする", ({ argv, message }) => {
     expect(() => parseArgs(argv, {})).toThrow(message);
+  });
+});
+
+describe("reportTransitionProblems", () => {
+  test("書き間違いが 0 件なら、何も出さず、ジョブのまとめも書かない", () => {
+    const summaryFile = path.join(root, "summary-empty.md");
+    const logged: string[] = [];
+    reportTransitionProblems([], null, {
+      log: (message) => logged.push(message),
+      summaryFile,
+    });
+    expect(logged).toStrictEqual([]);
+    expect(fs.existsSync(summaryFile)).toBe(false);
+  });
+
+  test("書き間違いを一覧で出し、GITHUB_STEP_SUMMARY があるときだけジョブのまとめに足す（書けなくても止めない）", () => {
+    const summaryFile = path.join(root, "summary.md");
+    fs.writeFileSync(summaryFile, "前の step のまとめ\n");
+    const logged: string[] = [];
+    const lines = [
+      "shop-list--default（幅 375）の 1 行目: ボタンが見つかりません",
+    ];
+    const summary = "## 画面のつながりの書き間違い（1 件）\n\n- …\n";
+    reportTransitionProblems(lines, summary, {
+      log: (message) => logged.push(message),
+      summaryFile,
+    });
+    expect(logged).toStrictEqual([
+      "画面のつながりの書き間違い（1 件）:",
+      `  - ${lines[0] ?? ""}`,
+    ]);
+    expect(fs.readFileSync(summaryFile, "utf8")).toBe(
+      `前の step のまとめ\n${summary}\n`,
+    );
+
+    reportTransitionProblems(lines, summary, {
+      log: () => undefined,
+      summaryFile: undefined,
+    });
+    expect(() =>
+      reportTransitionProblems(lines, summary, {
+        log: () => undefined,
+        summaryFile: path.join(root, "no-such-dir", "summary.md"),
+      }),
+    ).not.toThrow();
   });
 });

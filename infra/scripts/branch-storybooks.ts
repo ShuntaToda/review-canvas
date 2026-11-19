@@ -21,6 +21,11 @@ import {
   type StagedShots,
   stageShots,
 } from "./story-screenshots";
+import {
+  formatTransitionProblems,
+  type TransitionProblemGroup,
+  transitionProblemsSummary,
+} from "./story-transitions";
 
 /**
  * ブランチの Storybook を配信（review-canvas の S3・CloudFront）へ置く・消す・確かめるスクリプト。
@@ -908,8 +913,34 @@ const prepareStorybooks = (
 };
 
 /**
+ * 遷移の書き間違いを知らせる（標準出力と、GitHub Actions ではジョブのまとめ）。0 件なら何も出さない。置くことは止めない
+ */
+export const reportTransitionProblems = (
+  lines: ReadonlyArray<string>,
+  summary: string | null,
+  {
+    log,
+    summaryFile,
+  }: { log: (message: string) => void; summaryFile: string | undefined },
+): void => {
+  if (lines.length === 0) return;
+  log(`画面のつながりの書き間違い（${String(lines.length)} 件）:`);
+  for (const line of lines) log(`  - ${line}`);
+  if (summary !== null && summaryFile !== undefined && summaryFile !== "") {
+    try {
+      fs.appendFileSync(summaryFile, `${summary}\n`);
+    } catch (error) {
+      console.warn(
+        `ジョブのまとめに書けませんでした: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+};
+
+/**
  * Storybook ごとにスクリーンショットを撮り、ビルド結果の中に書く。
- * 撮れなかった 1 枚があっても続ける（キャンバスはその 1 枚を iframe で出す）。ブラウザを起こせないときは例外
+ * 撮れなかった 1 枚があっても続ける（キャンバスはその 1 枚を iframe で出す）。ブラウザを起こせないときは例外。
+ * 撮り終えたら、遷移の書き間違いを一覧で知らせる
  */
 const captureScreenshots = async (
   config: ReviewCanvasConfig,
@@ -917,23 +948,34 @@ const captureScreenshots = async (
 ): Promise<void> => {
   // 時間の上限は Storybook ごとでなく、全部で 1 つ（ワークフローの step の上限に収める）
   const deadline = Date.now() + CAPTURE_TIME_LIMIT_MS;
+  const groups: TransitionProblemGroup[] = [];
   for (const { id: source, widths, baseHeight } of config.storybooks) {
     const dir = dirs[source];
     if (dir === undefined) continue;
     console.log(
       `スクリーンショットを撮ります: ${source}（幅 ${widths.join("・")}px）`,
     );
-    const { manifest, failures, elapsedMs } = await captureStorybook({
-      dir,
-      widths,
-      baseHeight,
-      deadline,
-      log: (message) => console.warn(message),
-    });
+    const { manifest, failures, transitionProblems, elapsedMs } =
+      await captureStorybook({
+        dir,
+        widths,
+        baseHeight,
+        deadline,
+        log: (message) => console.warn(message),
+      });
     console.log(
       `  ${String(manifest.shots.length)} 枚を撮りました（${String(Math.round(elapsedMs / 1000))} 秒${failures.length === 0 ? "" : `。撮れなかったもの ${String(failures.length)} 枚`}）`,
     );
+    groups.push(...transitionProblems);
   }
+  reportTransitionProblems(
+    formatTransitionProblems(groups),
+    transitionProblemsSummary(groups),
+    {
+      log: (message) => console.log(message),
+      summaryFile: process.env["GITHUB_STEP_SUMMARY"],
+    },
+  );
 };
 
 const publish = async (
