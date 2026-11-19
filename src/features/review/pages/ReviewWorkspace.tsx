@@ -4,6 +4,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { isUnauthorized, type ReviewMetaBranch } from "../api/review-api";
 import { Canvas } from "../components/Canvas";
 import { COMMENT_LIST_ID, CommentSidebar } from "../components/CommentSidebar";
+import { CompareDialog } from "../components/CompareDialog";
 import { DisplaySettings } from "../components/DisplaySettings";
 import { DraftPopover } from "../components/DraftPopover";
 import type { PinView } from "../components/Frame";
@@ -24,8 +25,13 @@ import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
-import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
+import {
+  focusCanvas,
+  focusCompareButton,
+  isInsideStoryList,
+} from "../components/canvas-dom";
 import { copyLinkWithToast } from "../components/copy-link";
+import { useBranchCompare } from "../hooks/useBranchCompare";
 import { useCollapsedFolders } from "../hooks/useCollapsedFolders";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
@@ -52,6 +58,7 @@ import {
   mergeLocatedPins,
   isUnlocatedPin,
 } from "../model/anchor-locate";
+import { compareViewOf, resolveCompareStoryId } from "../model/branch-compare";
 import { buildBranchOptions } from "../model/branch-options";
 import {
   type Camera,
@@ -159,6 +166,8 @@ type ReviewWorkspaceProps = {
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
   /** ページごとの、発行のときに撮った画像（無いページは空） */
   shots: Readonly<Record<StorySource, ShotCatalog>>;
+  /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空。読み終えるまでは null） */
+  baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
   /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
   openedBy: WorkspaceOpening;
@@ -180,6 +189,7 @@ export const ReviewWorkspace = ({
   stories,
   storyErrors,
   shots,
+  baseShots,
   initialUrl,
   openedBy,
   initialComments,
@@ -217,7 +227,14 @@ export const ReviewWorkspace = ({
       wanted !== undefined && sources.has(wanted)
         ? wanted
         : (sources.ids[0] ?? "");
-    const storyId = thread?.root.storyId ?? initialUrl.story;
+    // 比べる画面へのリンク（?compare=）は、その画面に寄せてから開く。既定のブランチ・知らない ID は捨てる
+    const compareStoryId = resolveCompareStoryId({
+      compare: initialUrl.compare,
+      branch,
+      defaultBranch,
+      exists: (id) => storiesByKey.has(storyKey(page, id)),
+    });
+    const storyId = thread?.root.storyId ?? compareStoryId ?? initialUrl.story;
     const story =
       storyId === undefined
         ? undefined
@@ -257,6 +274,7 @@ export const ReviewWorkspace = ({
       storyScope: initialStoryScope.scope,
       storyScopeMissing: initialStoryScope.missing,
       cameras,
+      compareStoryId,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
@@ -331,6 +349,16 @@ export const ReviewWorkspace = ({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const focusedByPointer = useFocusedByPointer();
   const canvas = useElementSize<HTMLDivElement>();
+  // 既定のブランチとの見比べ（印・「変わった画面だけ」・比べる画面）
+  const branchCompare = useBranchCompare({
+    branch,
+    defaultBranch,
+    page,
+    width: widthOf(page),
+    head: shots,
+    base: baseShots,
+    initialStoryId: initial.compareStoryId,
+  });
   const searchRef = useRef<HTMLInputElement>(null);
 
   const commentsQuery = useComments(branch);
@@ -377,12 +405,25 @@ export const ReviewWorkspace = ({
     {
       scope: storyScopeFilter,
       ...filters
-    }: { showComponents: boolean; query: string; scope: string | undefined },
+    }: {
+      showComponents: boolean;
+      query: string;
+      scope: string | undefined;
+      ignoreChangedOnly?: boolean;
+    },
   ) => {
-    const visible = filterStories(
+    const shown = filterStories(
       filterStoriesByScope(storiesOf(source), storyScopeFilter),
-      { ...filters, excludeTitlePrefixes: sources.excludeTitlePrefixes },
+      {
+        showComponents: filters.showComponents,
+        query: filters.query,
+        excludeTitlePrefixes: sources.excludeTitlePrefixes,
+      },
     );
+    const visible =
+      filters.ignoreChangedOnly === true
+        ? shown
+        : branchCompare.filter(source, shown);
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
@@ -482,6 +523,9 @@ export const ReviewWorkspace = ({
       ...(urlCommentId === null ? {} : { comment: urlCommentId }),
       // 一覧の状態のタブ（はじめの「未解決」は載せない）
       ...(status === "open" ? {} : { status }),
+      ...(branchCompare.urlStoryId === undefined
+        ? {}
+        : { compare: branchCompare.urlStoryId }),
     });
     window.history.replaceState(
       null,
@@ -496,6 +540,7 @@ export const ReviewWorkspace = ({
     urlCommentId,
     centerStoryId,
     status,
+    branchCompare.urlStoryId,
   ]);
 
   /**
@@ -602,6 +647,8 @@ export const ReviewWorkspace = ({
       ) {
         nextQuery = "";
       }
+      // 「変わった画面だけ」で隠れているときも外す
+      const revealed = branchCompare.reveal(root.source, story.id);
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
       setStoryScope(nextStoryScope);
@@ -612,6 +659,7 @@ export const ReviewWorkspace = ({
             showComponents: nextShowComponents,
             query: nextQuery,
             scope: nextStoryScope,
+            ...(revealed ? { ignoreChangedOnly: true } : {}),
           }),
           bounds: null,
           viewport,
@@ -783,7 +831,7 @@ export const ReviewWorkspace = ({
   // キーボードの操作（入力欄にいるときは Esc 以外を効かせない）
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (dialog !== null) return;
+      if (dialog !== null || branchCompare.openStoryId !== undefined) return;
       // 日本語の変換中の Esc は変換の取り消し（書きかけを消したり閉じたりしない）
       if (isImeComposing(event)) return;
       const typing = isTypingTarget(event.target);
@@ -959,6 +1007,11 @@ export const ReviewWorkspace = ({
     published?.storybooks.find((s) => s.source === page)?.available ?? false
   );
   const commit = published?.commit;
+  // 比べる画面を開いている画面（いまのページに無ければ開かない）
+  const compareStory =
+    branchCompare.openStoryId === undefined
+      ? undefined
+      : storiesByKey.get(storyKey(page, branchCompare.openStoryId));
   const branchOptions = buildBranchOptions({
     current: branch,
     defaultBranch,
@@ -1021,6 +1074,17 @@ export const ReviewWorkspace = ({
               onScopeChange={changeStoryScope}
               collapsed={collapsedFolders}
               onToggleFolder={toggleFolder}
+              marks={branchCompare.marksOf(
+                storiesOf(page).map((story) => story.id),
+              )}
+              {...(branchCompare.available
+                ? {
+                    changedOnly: {
+                      checked: branchCompare.changedOnly,
+                      onChange: branchCompare.setChangedOnly,
+                    },
+                  }
+                : {})}
             >
               <DisplaySettings
                 showComponents={showComponents}
@@ -1112,6 +1176,11 @@ export const ReviewWorkspace = ({
                       "画面が変わりました。もう一度クリックしてください",
                     )
                   }
+                  onCompare={
+                    branchCompare.canOpen
+                      ? (story) => branchCompare.open(story.id)
+                      : undefined
+                  }
                 />
               </ErrorBoundary>
               {activeThread !== undefined && threadPosition !== undefined && (
@@ -1192,9 +1261,13 @@ export const ReviewWorkspace = ({
                       excludeTitlePrefixes: sources.excludeTitlePrefixes,
                     }).length === 0
                   }
+                  changedOnly={branchCompare.changedOnly}
                   onClear={() => {
-                    if (query === "") setShowComponents(true);
-                    else setQuery("");
+                    // 知らせの文言（Notices.tsx）と同じく、空白だけの文字は無いものとみなす
+                    if (query.trim() !== "") setQuery("");
+                    else if (branchCompare.changedOnly) {
+                      branchCompare.setChangedOnly(false);
+                    } else setShowComponents(true);
                   }}
                 />
               )}
@@ -1325,6 +1398,23 @@ export const ReviewWorkspace = ({
         />
       )}
       {dialog === "help" && <HelpDialog onClose={() => setDialog(null)} />}
+      {compareStory !== undefined && (
+        <CompareDialog
+          story={compareStory}
+          view={compareViewOf(
+            branchCompare.pairOf(page),
+            compareStory.id,
+            width,
+          )}
+          defaultBranch={defaultBranch}
+          branch={branch}
+          onClose={() => {
+            // 閉じてから（ダイアログが開く前のフォーカスへ戻したあとで）、その画面のボタンへ戻す
+            flushSync(() => branchCompare.close());
+            focusCompareButton(compareStory.id);
+          }}
+        />
+      )}
     </div>
   );
 };

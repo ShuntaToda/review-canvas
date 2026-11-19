@@ -13,6 +13,7 @@ import { frameLoadQueue } from "../model/load-queue";
 import { buildSourceCatalog } from "../model/sources";
 import { LINK_HIGHLIGHT_MS, type LinkHighlight } from "../model/story-link";
 import type { ShotView } from "../model/story-shots";
+import type { Story } from "../model/storybook";
 import { Frame, StoryIframe } from "./Frame";
 
 afterEach(() => {
@@ -520,5 +521,85 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
     const { container } = renderHeader({});
 
     expect(container.querySelector("[data-link-highlight]")).toBeNull();
+  });
+});
+
+describe("Frame の見出しの「既定のブランチと比べる」", () => {
+  const sample: Story = {
+    id: "shop-compare--default",
+    title: "Shop/Compare",
+    name: "Default",
+    importPath: null,
+    source: "shop",
+  };
+  const sources = buildSourceCatalog({
+    storybooks: [
+      {
+        id: "shop",
+        label: "サンプルショップ",
+        widths: [375],
+        defaultWidth: 375,
+        baseHeight: 812,
+      },
+    ],
+    excludeTitlePrefixes: [],
+  });
+  const frameWith = (onCompare?: (story: Story) => void) => (
+    <SourcesContext.Provider value={sources}>
+      <Frame
+        source="shop"
+        placement={{ story: sample, x: 0, y: 0, w: 375, h: 800 }}
+        zoom={1}
+        tool="move"
+        shouldLoad={false}
+        keepLoaded={false}
+        showLabel={true}
+        shot={{ url: "https://sb.example.com/shot.png", height: 800 }}
+        playHint={false}
+        pins={[]}
+        activeThreadId={null}
+        draftPin={null}
+        onMeasure={() => undefined}
+        onPlace={() => undefined}
+        onLocate={() => undefined}
+        onOpenThread={() => undefined}
+        onActivate={() => undefined}
+        pendingPlace={null}
+        onPendingPlace={() => undefined}
+        onScreenChanged={() => undefined}
+        onCopyStoryLink={() => undefined}
+        linkHighlight={null}
+        onCompare={onCompare}
+      />
+    </SourcesContext.Provider>
+  );
+
+  test("[正常系]「Storybook で開く」「この画面のリンクをコピー」の隣に出し、押すとその画面を返す", () => {
+    const onCompare = vi.fn();
+    render(frameWith(onCompare));
+
+    const open = screen.getByRole("link", {
+      name: "Shop/Compare / Default を Storybook で開く",
+    });
+    const button = screen.getByRole("button", {
+      name: "Shop/Compare / Default を既定のブランチと比べる",
+    });
+    const copy = screen.getByRole("button", {
+      name: "Shop/Compare / Default のリンクをコピー",
+    });
+    expect(open.nextElementSibling).toBe(copy);
+    expect(copy.nextElementSibling).toBe(button);
+    expect(button.tabIndex).toBe(-1);
+
+    fireEvent.click(button);
+    expect(onCompare).toHaveBeenCalledExactlyOnceWith(sample);
+  });
+
+  test("[正常系]既定のブランチ（onCompare を渡さない）では出さない", () => {
+    render(frameWith());
+
+    expect(
+      screen.queryByRole("button", { name: /既定のブランチと比べる/ }),
+    ).toBeNull();
   });
 });

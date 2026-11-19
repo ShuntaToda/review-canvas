@@ -453,6 +453,10 @@ export type ShotCatalog = {
   hasPlayFunction: (storyId: string) => boolean | undefined;
   /** 画像の枚数 */
   size: number;
+  /** 目録を読めたか（無い・形が違うときは false。既定のブランチと比べられるかに使う） */
+  hasManifest: boolean;
+  /** そのストーリーの画像を、どれかの幅で 1 枚でも持つか */
+  hasStory: (storyId: string) => boolean;
 };
 
 const shotKey = (storyId: string, width: number): string =>
@@ -480,6 +484,7 @@ export const buildShotCatalog = (
     ]),
   );
   const playFunctions = manifest?.playFunctions ?? {};
+  const storyIds = new Set((manifest?.shots ?? []).map((shot) => shot.storyId));
   return {
     find: (storyId, width) => byKey.get(shotKey(storyId, width)),
     hasPlayFunction: (storyId) =>
@@ -487,6 +492,8 @@ export const buildShotCatalog = (
         ? playFunctions[storyId]
         : undefined,
     size: byKey.size,
+    hasManifest: manifest !== null,
+    hasStory: (storyId) => storyIds.has(storyId),
   };
 };
 

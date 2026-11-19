@@ -83,6 +83,27 @@ export const ReviewPage = ({
   // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
   const shots = useShots(base, availableIds, session);
   const comments = useComments(branch);
+  // 既定のブランチの画像の目録（既定のブランチ以外の、置いてあるブランチを見ているときだけ。同じ画面を見比べる）。
+  // 既定のブランチを置いていなければ、目録の無いものとして扱う
+  const defaultPublished =
+    meta.data?.branches.find((b) => b.branch === meta.data?.defaultBranch) ??
+    null;
+  const onFeatureBranch =
+    published !== null &&
+    meta.data !== undefined &&
+    branch !== meta.data.defaultBranch;
+  const defaultBranchShots = useShots(
+    `${storybookOrigin}${defaultPublished?.basePath ?? DEFAULT_STORYBOOK_BASE}`,
+    catalog.ids.filter(
+      (source) =>
+        defaultPublished?.storybooks.find((s) => s.source === source)
+          ?.available ?? false,
+    ),
+    {
+      access: session.access,
+      ready: session.ready && onFeatureBranch && defaultPublished !== null,
+    },
+  );
 
   // クッキーをもらえないと Storybook を何も読めないので、置いてあるブランチを読めないときと同じ扱いにする
   const metaError: unknown = meta.error;
@@ -205,6 +226,18 @@ export const ReviewPage = ({
             catalog.ids,
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
+          // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）。
+          // 既定のブランチを置いていなければ、目録の無いものとして渡す
+          baseShots={
+            onFeatureBranch &&
+            defaultPublished !== null &&
+            defaultBranchShots.data === undefined
+              ? null
+              : mapSources(
+                  catalog.ids,
+                  (id) => defaultBranchShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+                )
+          }
           initialUrl={urlState}
           openedBy={switchedBranch ? "branch-switch" : "url"}
           initialComments={comments.data?.comments ?? []}

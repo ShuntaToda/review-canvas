@@ -129,7 +129,19 @@ describe("buildShotCatalog", () => {
     expect(catalog.hasPlayFunction("constructor")).toBeUndefined();
   });
 
+  test("[正常系]そのストーリーの画像をどれかの幅で持つかを答え、目録を読めたかを持つ", () => {
+    expect(catalog.hasStory("shop-list--default")).toBe(true);
+    expect(catalog.hasStory("shop-form--filled")).toBe(false);
+    expect(catalog.hasManifest).toBe(true);
+    expect(
+      buildShotCatalog({ version: 1, shots: [], playFunctions: {} }, "")
+        .hasManifest,
+    ).toBe(true);
+  });
+
   test("[正常系]目録の無い Storybook は、何も持たない", () => {
+    expect(EMPTY_SHOT_CATALOG.hasManifest).toBe(false);
+    expect(EMPTY_SHOT_CATALOG.hasStory("a")).toBe(false);
     expect(EMPTY_SHOT_CATALOG.size).toBe(0);
     expect(EMPTY_SHOT_CATALOG.find("a", 375)).toBeUndefined();
     expect(EMPTY_SHOT_CATALOG.hasPlayFunction("a")).toBeUndefined();

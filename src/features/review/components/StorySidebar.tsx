@@ -1,9 +1,11 @@
 import { ChevronDown, ChevronRight, Focus, Search } from "lucide-react";
 import { type ReactNode, type Ref, useEffect, useRef } from "react";
+import { COMPARE_MARK_LABELS, type CompareMark } from "../model/branch-compare";
 import type { RowPlacement } from "../model/layout";
 import { buildStoryTree, type StoryTreeNode } from "../model/story-tree";
 import type { Story } from "../model/storybook";
 import { focusCanvas } from "./canvas-dom";
+import { messages } from "@/constants/messages";
 
 /** 木の 1 段ごとの字下げ(px) */
 const INDENT = 12;
@@ -24,6 +26,8 @@ export const StorySidebar = ({
   onScopeChange,
   collapsed,
   onToggleFolder,
+  marks,
+  changedOnly,
   children,
 }: {
   /** キャンバスに並べている行（絞り込んだあと。並びもキャンバスと同じ） */
@@ -40,6 +44,10 @@ export const StorySidebar = ({
   /** 閉じたフォルダのパス */
   collapsed: ReadonlySet<string>;
   onToggleFolder: (path: string) => void;
+  /** 既定のブランチと比べた印（印のある状態だけ。既定のブランチ・目録が無いときは渡さない） */
+  marks?: ReadonlyMap<string, CompareMark>;
+  /** 「変わった画面だけ」の絞り込み（出せないときは渡さない） */
+  changedOnly?: { checked: boolean; onChange: (checked: boolean) => void };
   /** 下に出す表示の設定 */
   children: ReactNode;
 }) => {
@@ -93,6 +101,16 @@ export const StorySidebar = ({
             }}
           />
         </label>
+        {changedOnly !== undefined && (
+          <label className="flex items-center gap-2 text-sm text-ink-sub">
+            <input
+              type="checkbox"
+              checked={changedOnly.checked}
+              onChange={(event) => changedOnly.onChange(event.target.checked)}
+            />
+            変わった画面だけ
+          </label>
+        )}
         {scope !== undefined && (
           <div className="flex items-center gap-2 text-xs">
             <span
@@ -115,7 +133,9 @@ export const StorySidebar = ({
       <nav className="min-h-0 flex-1 overflow-y-auto py-1">
         {rows.length === 0 ? (
           <p className="px-3 py-4 text-center text-sm text-muted">
-            絞り込みに合う画面はありません
+            {changedOnly?.checked === true
+              ? messages.noChangedStories(query.trim())
+              : "絞り込みに合う画面はありません"}
           </p>
         ) : (
           <TreeList
@@ -123,6 +143,7 @@ export const StorySidebar = ({
             depth={0}
             currentStoryId={currentStoryId}
             onSelectStory={onSelectStory}
+            marks={marks}
             scope={scope}
             onScopeChange={(path) => changeScope(path, path)}
             // 文字で絞り込んでいるあいだは、閉じたフォルダも開いて出す（消すと覚えた開閉に戻る）
@@ -149,6 +170,7 @@ type TreeProps = {
   onScopeChange: (scope: string) => void;
   isOpen: (path: string) => boolean;
   onToggleFolder: (path: string) => void;
+  marks: ReadonlyMap<string, CompareMark> | undefined;
 };
 
 const TreeList = ({
@@ -176,6 +198,7 @@ const TreeList = ({
           depth={depth}
           currentStoryId={props.currentStoryId}
           onSelectStory={props.onSelectStory}
+          marks={props.marks}
         />
       ),
     )}
@@ -230,12 +253,14 @@ const ScreenItem = ({
   depth,
   currentStoryId,
   onSelectStory,
+  marks,
 }: {
   name: string;
   row: RowPlacement;
   depth: number;
   currentStoryId: string | undefined;
   onSelectStory: (story: Story) => void;
+  marks: ReadonlyMap<string, CompareMark> | undefined;
 }) => (
   <li>
     <h3
@@ -246,25 +271,39 @@ const ScreenItem = ({
       {name}
     </h3>
     <ul>
-      {row.frames.map(({ story }) => (
-        <li key={story.id}>
-          <button
-            type="button"
-            aria-current={story.id === currentStoryId ? "true" : undefined}
-            className={[
-              "block w-full truncate py-1 pr-3 text-left text-sm",
-              story.id === currentStoryId
-                ? "bg-accent-soft text-accent"
-                : "text-ink-sub hover:bg-panel-sub hover:text-ink",
-            ].join(" ")}
-            style={{ paddingLeft: 24 + depth * INDENT }}
-            title={`${row.title} / ${story.name}`}
-            onClick={() => onSelectStory(story)}
-          >
-            {story.name}
-          </button>
-        </li>
-      ))}
+      {row.frames.map(({ story }) => {
+        const mark = marks?.get(story.id);
+        return (
+          <li key={story.id}>
+            <button
+              type="button"
+              aria-current={story.id === currentStoryId ? "true" : undefined}
+              className={[
+                "flex w-full items-center gap-2 py-1 pr-3 text-left text-sm",
+                story.id === currentStoryId
+                  ? "bg-accent-soft text-accent"
+                  : "text-ink-sub hover:bg-panel-sub hover:text-ink",
+              ].join(" ")}
+              style={{ paddingLeft: 24 + depth * INDENT }}
+              title={`${row.title} / ${story.name}`}
+              // 印を読み上げで名前とつなげない（「Default変更」ではなく「Default（変更）」）
+              aria-label={
+                mark === undefined
+                  ? undefined
+                  : `${story.name}（${COMPARE_MARK_LABELS[mark]}）`
+              }
+              onClick={() => onSelectStory(story)}
+            >
+              <span className="min-w-0 flex-1 truncate">{story.name}</span>
+              {mark !== undefined && (
+                <span className="shrink-0 rounded border border-line px-1 text-xs text-ink-sub">
+                  {COMPARE_MARK_LABELS[mark]}
+                </span>
+              )}
+            </button>
+          </li>
+        );
+      })}
     </ul>
   </li>
 );

@@ -31,6 +31,7 @@ import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
 import type { LinkHighlight } from "../model/story-link";
 import type { ShotCatalog } from "../model/story-shots";
+import type { Story } from "../model/storybook";
 import {
   type CommentAnchor,
   type PendingCounts,
@@ -110,6 +111,8 @@ type CanvasProps = {
    * 読み込んで高さを測らないと、長い画面の下の方のピンへ移れないため
    */
   focusStoryId?: string | null;
+  /** 画面の見出しの「既定のブランチと比べる」（既定のブランチを見ているとき・既定のブランチの目録を読み終える前は渡さない（useBranchCompare の canOpen）） */
+  onCompare?: ((story: Story) => void) | undefined;
 };
 
 type Point = { x: number; y: number };
@@ -143,6 +146,7 @@ export const Canvas = ({
   onFrameClick,
   onScreenChanged,
   focusStoryId = null,
+  onCompare,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
   const panRef = useRef<{
@@ -522,6 +526,7 @@ export const Canvas = ({
                   onPlace={place}
                   onLocate={onLocate}
                   onOpenThread={onOpenThread}
+                  onCompare={onCompare}
                   onCopyStoryLink={onCopyStoryLink}
                   linkHighlight={
                     linkHighlight?.storyId === placement.story.id

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { DeletedThreadNotice, NoMatchNotice } from "./Notices";
 
 afterEach(() => cleanup());
@@ -16,34 +16,63 @@ describe("DeletedThreadNotice", () => {
 
 describe("NoMatchNotice", () => {
   test.each([
-    {
-      query: "",
-      componentsOnly: true,
-      text: "表示する画面がありません（部品だけのページです）。",
-    },
+    [
+      "「変わった画面だけ」だけ",
+      "",
+      true,
+      false,
+      "既定のブランチから変わった画面はありません。",
+      "「変わった画面だけ」を外す",
+    ],
+    [
+      "「変わった画面だけ」と文字",
+      " Cart ",
+      true,
+      false,
+      "「Cart」に当たる、変わった画面はありません。",
+      "絞り込みを外す",
+    ],
+    [
+      "文字だけ",
+      "Cart",
+      false,
+      false,
+      "「Cart」に当たる画面はありません。",
+      "絞り込みを外す",
+    ],
+    [
+      "部品だけのページ",
+      "",
+      false,
+      true,
+      "表示する画面がありません（部品だけのページです）。",
+      "部品も表示する",
+    ],
     // 見せる範囲で空になったときは、部品だけのページとは言わない
-    {
-      query: "",
-      componentsOnly: false,
-      text: "絞り込みに合う画面はありません。",
-    },
-    {
-      query: " 注文 ",
-      componentsOnly: false,
-      text: "「注文」に当たる画面はありません。",
-    },
+    [
+      "部品だけの範囲",
+      "",
+      false,
+      false,
+      "絞り込みに合う画面はありません。",
+      "部品も表示する",
+    ],
   ])(
-    "[正常系]空になった理由に合わせて知らせる（$text）",
-    ({ query, componentsOnly, text }) => {
+    "[境界値]%s で 0 件のときの知らせと、外すボタン",
+    (_, query, changedOnly, componentsOnly, text, action) => {
+      const onClear = vi.fn();
       render(
         <NoMatchNotice
           query={query}
           componentsOnly={componentsOnly}
-          onClear={() => undefined}
+          changedOnly={changedOnly}
+          onClear={onClear}
         />,
       );
 
       expect(screen.getByRole("status").textContent).toContain(text);
+      fireEvent.click(screen.getByRole("button", { name: action }));
+      expect(onClear).toHaveBeenCalledOnce();
     },
   );
 });

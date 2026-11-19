@@ -71,9 +71,11 @@ const renderSidebar = (
 const storyButtons = () =>
   screen
     .getAllByRole("button")
-    .filter((button) => button.closest("li ul li") !== null)
     .filter((button) => !button.hasAttribute("aria-expanded"))
-    .filter((button) => !button.hasAttribute("aria-label"))
+    .filter(
+      (button) =>
+        !(button.getAttribute("aria-label") ?? "").endsWith(" だけを表示"),
+    )
     .map((button) => button.textContent);
 
 /** 開閉と範囲を本物の状態で持つ（覚えるのは呼ぶ側なので、ここでは React の状態に持つ） */
@@ -298,5 +300,62 @@ describe("StorySidebar", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("searchbox", { name: "画面名で絞り込む" }),
     );
+  });
+
+  test("[正常系]既定のブランチと比べた印を、木の中の状態の行の右に文字で出す", () => {
+    renderSidebar(rows, undefined, {
+      marks: new Map([
+        [filled.id, "changed"],
+        ["shop-cart--empty", "new"],
+      ]),
+    });
+
+    expect(storyButtons()).toEqual(["Default", "Filled変更", "Empty新しい"]);
+    // 読み上げでは名前と印をつなげない
+    expect(
+      screen.getByRole("button", { name: "Filled（変更）" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Empty（新しい）" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Default" })).not.toBeNull();
+  });
+
+  test("[正常系]「変わった画面だけ」は画面名の絞り込みの下に出し、切り替えを返す", () => {
+    const onChange = vi.fn();
+    renderSidebar(rows, undefined, {
+      changedOnly: { checked: false, onChange },
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "変わった画面だけ" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  test("[境界値]「変わった画面だけ」を入れて 1 件も無ければ、そう知らせる", () => {
+    renderSidebar([], undefined, {
+      changedOnly: { checked: true, onChange: () => undefined },
+    });
+
+    expect(
+      screen.getByText("既定のブランチから変わった画面はありません"),
+    ).not.toBeNull();
+  });
+
+  test("[境界値]「変わった画面だけ」と文字の絞り込みを重ねて 1 件も無ければ、その語を添えて知らせる", () => {
+    renderSidebar([], undefined, {
+      query: " Cart ",
+      changedOnly: { checked: true, onChange: () => undefined },
+    });
+
+    expect(
+      screen.getByText("「Cart」に当たる、変わった画面はありません"),
+    ).not.toBeNull();
+  });
+
+  test("[正常系]印・絞り込みを渡さない（既定のブランチ）ときは出さない", () => {
+    renderSidebar(rows);
+
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByText("変更")).toBeNull();
   });
 });

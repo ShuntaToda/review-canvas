@@ -37,8 +37,9 @@ import {
   STORY_SETTLE_TIMEOUT_MS,
 } from "../model/story-render";
 import { type ShotView, shotUrlAt } from "../model/story-shots";
-import { storybookUrl, storyIframeUrl } from "../model/storybook";
+import { type Story, storybookUrl, storyIframeUrl } from "../model/storybook";
 import type { CommentAnchor, ThreadStatus } from "../model/threads";
+import { CompareButton } from "./CompareButton";
 import { Pin } from "./Pin";
 import {
   focusCanvas,
@@ -108,6 +109,8 @@ type FrameProps = {
   /** 読み込んだ画面でピンの要素を探した結果（スレッドのIDごと。まだ分からないピンは含めない） */
   onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
   onOpenThread: (threadId: string) => void;
+  /** 見出しの「既定のブランチと比べる」（既定のブランチを見ているとき・既定のブランチの目録を読み終える前は渡さない（useBranchCompare の canOpen）。渡さなければボタンを出さない） */
+  onCompare?: ((story: Story) => void) | undefined;
   /** 見出しの「この画面のリンクをコピー」を押した */
   onCopyStoryLink: (storyId: string) => void;
   /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
@@ -175,6 +178,7 @@ export const Frame = ({
   pendingPlace,
   onPendingPlace,
   onScreenChanged,
+  onCompare,
 }: FrameProps) => {
   const storybookBase = useStorybookBase();
   const sources = useSources();
@@ -803,6 +807,9 @@ export const Frame = ({
           >
             <Link aria-hidden className="size-3.5" />
           </button>
+          {onCompare !== undefined && (
+            <CompareButton story={story} onCompare={onCompare} />
+          )}
         </div>
       )}
       {/* ピンは画面の端からはみ出せるよう、切り取る枠（iframe）の外に重ねる */}
