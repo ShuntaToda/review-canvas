@@ -61,6 +61,8 @@ export const compareMarksOf = (
 
 /** 比べる画面に出すもの */
 export type CompareView =
+  /** 比べる相手の目録を読み直している（相手を替えた直後に開いた） */
+  | { kind: "loading" }
   /** 比べる相手に画像の目録が無い */
   | { kind: "no-base-manifest" }
   /** 今のブランチに画像の目録が無い */
@@ -132,6 +134,15 @@ export const compareBaseOptions = ({
   buildBranchOptions({ current, defaultBranch, published, commented: [] })
     .filter((option) => option.published && option.branch !== current)
     .map((option) => option.branch);
+
+/** 比べる相手に選べるブランチを、打った文字で絞り込む（前後の空白は無視し、大文字・小文字を区別しない。空なら全部） */
+export const filterCompareBranches = (
+  options: ReadonlyArray<string>,
+  query: string,
+): string[] => {
+  const needle = query.trim().toLowerCase();
+  return options.filter((branch) => branch.toLowerCase().includes(needle));
+};
 
 /** URL の base= で「比較しない」を表す値（git のブランチ名は「-」で始められないので、ブランチと取り違えない） */
 export const NO_COMPARE = "-";

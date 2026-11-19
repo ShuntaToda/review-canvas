@@ -19,10 +19,11 @@ const NO_MARKS: ReadonlyMap<string, CompareMark> = new Map();
  * 「変わった画面だけ」は覚えず、ブランチ・ページ・幅・比べる相手を替えたら外す（入れたときの組み合わせと今が違えば、その場で外す。戻しても入り直さない）。
  * 比べる相手の目録を読み終えるまで（base が null）は、印・「変わった画面だけ」を出さない。
  * はじめて読み終えるまでは、比べるボタン・比べる画面も出さない（URL の compare= は捨てずに持ち、読み終えたら開く）。
- * 一度読み終えたあとに相手を替えて読み直すあいだは、比べるボタンは出したまま、比べる画面は開かない（相手はヘッダーで替え、比べる画面はモーダルなので、開いたまま替わることは無い）
+ * 一度読み終えたあとに相手を替えて読み直すあいだは、比べるボタンを出したままにし、押せば比べる画面をすぐ開いて「読み込み中…」を出す。
+ * 「比較しない」になったら、開いている（開くのを待っている）比べる画面は捨てる
  */
 export const useBranchCompare = ({
-  baseBranch,
+  compareBase,
   branch,
   page,
   width,
@@ -30,8 +31,8 @@ export const useBranchCompare = ({
   base,
   initialStoryId,
 }: {
-  /** 比べる相手（選べるものが無ければ undefined。比べない） */
-  baseBranch: string | undefined;
+  /** 比べる相手（「比較しない」・選べるものが無ければ undefined。比べない） */
+  compareBase: string | undefined;
   branch: string;
   /** いまのページと幅（「変わった画面だけ」はこの組み合わせにだけ効く） */
   page: StorySource;
@@ -43,19 +44,21 @@ export const useBranchCompare = ({
   /** 開いたときに比べる画面（URL の compare=。捨てるものは捨ててから渡す） */
   initialStoryId: string | undefined;
 }) => {
-  const enabled = baseBranch !== undefined;
+  const enabled = compareBase !== undefined;
   const loaded = base !== null;
   // はじめて読み終えたか（読み終えるまでは比べるボタン・比べる画面を出さない。相手を替えて読み直すあいだは出したまま）
   const [loadedOnce, setLoadedOnce] = useState(loaded);
   if (loaded && !loadedOnce) setLoadedOnce(true);
   const ready = enabled && (loaded || loadedOnce);
-  const key = JSON.stringify([branch, page, width, baseBranch]);
+  const key = JSON.stringify([branch, page, width, compareBase]);
   const [changedOnlyKey, setChangedOnlyKey] = useState<string | null>(null);
   // ブランチ・ページ・幅・相手を替えたら外す（描画の中で合わせる。React の「前の値から state を合わせる」形）
   if (changedOnlyKey !== null && changedOnlyKey !== key) {
     setChangedOnlyKey(null);
   }
   const [storyId, setStoryId] = useState(initialStoryId);
+  // 比べなくなったら、開いている（開くのを待っている）画面を捨てる（あとで相手を選び直しても、ひとりでに開かない）
+  if (!enabled && storyId !== undefined) setStoryId(undefined);
   const pairOf = (source: StorySource): ComparePair => ({
     base: base?.[source] ?? EMPTY_SHOT_CATALOG,
     head: head[source] ?? EMPTY_SHOT_CATALOG,
@@ -97,13 +100,13 @@ export const useBranchCompare = ({
       setChangedOnlyKey(null);
       return true;
     },
-    /** 比べる画面に出すもの（いまのページ・幅） */
+    /** 比べる画面に出すもの（いまのページ・幅。相手の目録を読み直しているあいだは読み込み中） */
     viewOf: (storyId: string): CompareView =>
-      compareViewOf(pair, storyId, width),
+      loaded ? compareViewOf(pair, storyId, width) : { kind: "loading" },
     /** URL に載せる比べる画面（読み終える前も載せたまま。比べる相手が無ければ載せない） */
     urlStoryId: enabled ? storyId : undefined,
-    /** 比べる画面を開いている画面（比べる相手が無い・相手の目録を読み終える前は開かない） */
-    openStoryId: enabled && loaded ? storyId : undefined,
+    /** 比べる画面を開いている画面（比べる相手が無い・はじめて読み終える前は開かない） */
+    openStoryId: ready ? storyId : undefined,
     open: (next: string) => setStoryId(next),
     close: () => setStoryId(undefined),
   };

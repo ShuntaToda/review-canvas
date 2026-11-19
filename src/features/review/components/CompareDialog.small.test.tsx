@@ -35,7 +35,7 @@ const renderDialog = (view: CompareView) =>
     <CompareDialog
       story={story}
       view={view}
-      baseBranch="main"
+      compareBase="main"
       branch="feature/a"
       onClose={() => undefined}
     />,
@@ -164,6 +164,15 @@ describe("CompareDialog", () => {
     },
   );
 
+  test("[正常系]相手の目録を読み直しているあいだは、左右に「読み込み中…」を出し、比べ方の切り替えは出さない", () => {
+    renderDialog({ kind: "loading" });
+
+    expect(screen.getAllByText("読み込み中…")).toHaveLength(2);
+    expect(screen.getByText("比べる相手（main）")).not.toBeNull();
+    expect(screen.queryAllByRole("img")).toStrictEqual([]);
+    expect(screen.queryByRole("button", { name: "重ねる" })).toBeNull();
+  });
+
   test("[異常系]画像を読み込めない側に、その旨と「読み込み直す」を出し、押すと読み込み直す", () => {
     renderDialog({ kind: "ready", base: BASE, head: HEAD, width: 375 });
 
@@ -196,7 +205,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
           <CompareDialog
             story={story}
             view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
-            baseBranch="main"
+            compareBase="main"
             branch="feature/a"
             onClose={() => {
               flushSync(() => setOpen(false));
@@ -261,7 +270,7 @@ describe("CompareButton と閉じたときのフォーカス", () => {
             <CompareDialog
               story={story}
               view={{ kind: "ready", base: BASE, head: HEAD, width: 375 }}
-              baseBranch="main"
+              compareBase="main"
               branch="feature/a"
               onClose={() => {
                 flushSync(() => setOpen(false));

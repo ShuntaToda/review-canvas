@@ -51,7 +51,7 @@ export const StorySidebar = ({
     checked: boolean;
     onChange: (checked: boolean) => void;
     /** 比べる相手（0 件の知らせに出す） */
-    baseBranch: string;
+    compareBase: string;
   };
   /** 下に出す表示の設定 */
   children: ReactNode;
@@ -139,7 +139,7 @@ export const StorySidebar = ({
         {rows.length === 0 ? (
           <p className="px-3 py-4 text-center text-sm text-muted">
             {changedOnly?.checked === true
-              ? messages.noChangedStories(query.trim(), changedOnly.baseBranch)
+              ? messages.noChangedStories(query.trim(), changedOnly.compareBase)
               : "絞り込みに合う画面はありません"}
           </p>
         ) : (

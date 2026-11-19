@@ -22,28 +22,32 @@ const compareMessages = {
   /** 新しい画面（比べる相手が無い）で、今の幅の画像も無い。幅を替えても比べられないので、切り替えは勧めない */
   missingWidthOnly: (width: number) => `${String(width)}px の画像がありません`,
   loadFailed: "画像を読み込めませんでした",
+  loading: "読み込み中…",
 } as const;
 
-/** 画像ごと（URL ごと）の読み込みの様子（読み込み直すたびに attempt を増やして img を作り直す。相手を替えたら別の画像として数える） */
+/**
+ * 画像ごと（URL ごと）の読み込みの様子（読み込み直すたびに attempt を増やして img を作り直す）。
+ * 開いているあいだに目録を読み直して（ブランチを置き直したなど）同じ側の画像の URL が替わったら、別の画像として数え、前の画像の失敗を持ち越さない
+ */
 type LoadState = { failed: boolean; attempt: number };
 const INITIAL_LOAD: LoadState = { failed: false, attempt: 0 };
 
 /**
  * 1 つの画面をほかのブランチ（比べる相手。上の帯の「比較するブランチ」で選ぶ）と比べる大きなダイアログ。左が比べる相手、右が今のブランチ。「並べる」（はじめ）と「重ねる」（色の差だけ。画素は読まず、CSS の
  * mix-blend-mode: difference で重ねる）を切り替える。コメントは置けず、ピンも出さない。
- * 画像は撮った幅より大きくしない（狭い画面では縮める）。比べられないとき（目録が無い・今の幅の画像が無い）は、その理由を出す
+ * 画像は撮った幅より大きくしない（狭い画面では縮める）。比べられないとき（目録が無い・今の幅の画像が無い）は、その理由を出す。比べる相手の目録を読み直しているあいだは、左右に「読み込み中…」を出す
  */
 export const CompareDialog = ({
   story,
   view,
-  baseBranch,
+  compareBase,
   branch,
   onClose,
 }: {
   story: Pick<Story, "title" | "name">;
   view: CompareView;
   /** 比べる相手（左） */
-  baseBranch: string;
+  compareBase: string;
   /** 今のブランチ（右） */
   branch: string;
   onClose: () => void;
@@ -65,7 +69,7 @@ export const CompareDialog = ({
       },
     }));
   const labels: Record<Side, string> = {
-    base: `比べる相手（${baseBranch}）`,
+    base: `比べる相手（${compareBase}）`,
     head: `このブランチ（${branch}）`,
   };
 
@@ -86,8 +90,16 @@ export const CompareDialog = ({
 
   const body = (() => {
     switch (view.kind) {
+      case "loading":
+        return (
+          <SideBySide
+            labels={labels}
+            base={<Message>{compareMessages.loading}</Message>}
+            head={<Message>{compareMessages.loading}</Message>}
+          />
+        );
       case "no-base-manifest":
-        return <Message>{compareMessages.noBaseManifest(baseBranch)}</Message>;
+        return <Message>{compareMessages.noBaseManifest(compareBase)}</Message>;
       case "no-head-manifest":
         return <Message>{compareMessages.noHeadManifest}</Message>;
       case "missing-width":
@@ -96,7 +108,7 @@ export const CompareDialog = ({
         return (
           <SideBySide
             labels={labels}
-            base={<Message>{compareMessages.notInBase(baseBranch)}</Message>}
+            base={<Message>{compareMessages.notInBase(compareBase)}</Message>}
             head={
               view.head === undefined ? (
                 <Message>

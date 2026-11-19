@@ -324,7 +324,7 @@ describe("StorySidebar", () => {
   test("[正常系]「変わった画面だけ」は画面名の絞り込みの下に出し、切り替えを返す", () => {
     const onChange = vi.fn();
     renderSidebar(rows, undefined, {
-      changedOnly: { checked: false, onChange, baseBranch: "main" },
+      changedOnly: { checked: false, onChange, compareBase: "main" },
     });
 
     fireEvent.click(screen.getByRole("checkbox", { name: "変わった画面だけ" }));
@@ -336,7 +336,7 @@ describe("StorySidebar", () => {
       changedOnly: {
         checked: true,
         onChange: () => undefined,
-        baseBranch: "feature/b",
+        compareBase: "feature/b",
       },
     });
 
@@ -351,7 +351,7 @@ describe("StorySidebar", () => {
       changedOnly: {
         checked: true,
         onChange: () => undefined,
-        baseBranch: "feature/b",
+        compareBase: "feature/b",
       },
     });
 

@@ -45,7 +45,7 @@ describe("CompareBranchPicker", () => {
       screen.getByRole("button", { name: "比較するブランチ 比較: main" }),
     ).toBe(button());
     expect(button().getAttribute("aria-expanded")).toBe("false");
-    expect(button().getAttribute("aria-haspopup")).toBe("listbox");
+    expect(button().getAttribute("aria-haspopup")).toBe("dialog");
     // 閉じているときは、指す先が無いので aria-controls を付けない
     expect(button().getAttribute("aria-controls")).toBeNull();
     cleanup();
@@ -205,34 +205,26 @@ describe("CompareBranchPicker", () => {
     expect(optionNames()).toHaveLength(4);
   });
 
-  test.each([
-    // 狭い画面（390px）で、ボタンが左寄りにある: 画面の左端から 8px 空けて置き、幅は 256px
-    [{ left: 100, right: 160 }, 390, { left: "-92px", width: "256px" }],
-    // 広い画面: ボタンの右端にそろえる
-    [{ left: 900, right: 1000 }, 1280, { left: "-156px", width: "256px" }],
-    // 画面がパネルより狭い: 画面の幅から左右 8px ずつ引いた幅にする
-    [{ left: 10, right: 60 }, 200, { left: "-2px", width: "184px" }],
-  ])(
-    "[境界値]パネルは画面の中に収める（ボタン %o・画面の幅 %i）",
-    (rect, viewportWidth, expected) => {
-      vi.spyOn(window, "innerWidth", "get").mockReturnValue(viewportWidth);
-      renderPicker();
-      // ボタンとパネルを包む要素（パネルの置き場所の基準）
-      const container = button().parentElement ?? document.body;
-      vi.spyOn(container, "getBoundingClientRect").mockReturnValue(
-        DOMRect.fromRect({
-          x: rect.left,
-          y: 0,
-          width: rect.right - rect.left,
-          height: 32,
-        }),
-      );
+  test("[境界値]パネルは画面の中に収め、開いているあいだに画面の幅が変わったら置き直す", () => {
+    const innerWidth = vi.spyOn(window, "innerWidth", "get");
+    innerWidth.mockReturnValue(1280);
+    renderPicker();
+    // ボタンとパネルを包む要素（パネルの置き場所の基準）。左寄りのボタン
+    const container = button().parentElement ?? document.body;
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 60, height: 32 }),
+    );
+    fireEvent.click(button());
+    const panel = screen.getByRole("dialog", { name: "比較するブランチ" });
+    // 広い画面: ボタンの右端にそろえても左にはみ出すので、画面の左端から 8px に置く
+    expect(panel.style.left).toBe("-92px");
+    expect(panel.style.width).toBe("256px");
 
-      fireEvent.click(button());
+    innerWidth.mockReturnValue(200);
+    fireEvent(window, new Event("resize"));
 
-      const panel = screen.getByRole("listbox").parentElement;
-      expect(panel?.style.left).toBe(expected.left);
-      expect(panel?.style.width).toBe(expected.width);
-    },
-  );
+    // 画面がパネルより狭い: 画面の幅から左右 8px ずつ引いた幅にし、画面の中に置く
+    expect(panel.style.left).toBe("-92px");
+    expect(panel.style.width).toBe("184px");
+  });
 });

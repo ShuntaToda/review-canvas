@@ -1089,5 +1089,47 @@ describe("ブランチの切り替え", () => {
         expect(window.location.search).not.toContain("compare="),
       );
     });
+
+    test("[正常系]相手を替えて読み直すあいだも比べるボタンを出し、押すと比べる画面をすぐ開いて左右に「読み込み中…」を出し、読み終えると画像に替わる。印と「変わった画面だけ」は読み終えてから出す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      let resolveBase: (response: Response) => void = () => undefined;
+      const baseManifest = new Promise<Response>((resolve) => {
+        resolveBase = resolve;
+      });
+      fetchMock.mockImplementation(
+        compareFetch({ baseManifest, delayed: FEATURE_B_MANIFEST }),
+      );
+      await renderApp("/?branch=feature%2Fa&page=shop");
+      await screen.findByRole("button", { name: compareButtonName });
+
+      await chooseBase("feature/b");
+      expect(statusRow("Shop/Order / Default")?.textContent).toBe("Default");
+      expect(
+        screen.queryByRole("checkbox", { name: "変わった画面だけ" }),
+      ).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: compareButtonName }));
+
+      const dialog = screen.getByRole("dialog", { name: compareButtonName });
+      expect(within(dialog).getAllByText("読み込み中…")).toHaveLength(2);
+      expect(within(dialog).getByText("比べる相手（feature/b）")).toBeTruthy();
+      expect(window.location.search).toContain("compare=shop-list--default");
+
+      await act(async () => {
+        resolveBase(Response.json(changedManifests[FEATURE_B_MANIFEST]));
+        await baseManifest;
+      });
+
+      await waitFor(() =>
+        expect(leftHeading("feature/b").src).toContain(
+          "/sb/feature~2Fb/shop/review-canvas-shots/",
+        ),
+      );
+      expect(within(dialog).queryByText("読み込み中…")).toBeNull();
+      expect(statusRow("Shop/Order / Default")?.textContent).toBe(
+        "Default新しい",
+      );
+      expect(changedOnlyBox()).toBeTruthy();
+    });
   });
 });

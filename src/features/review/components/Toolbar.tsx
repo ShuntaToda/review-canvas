@@ -138,7 +138,7 @@ export const Toolbar = ({
       </div>
 
       <div className="flex min-w-0 items-center justify-end gap-0.5 max-md:ml-auto md:flex-1">
-        {/* 置いてあるブランチが 1 つだけ（比べる相手が無い）なら出さない */}
+        {/* 選べる相手が無い（置いてあるブランチが 1 つだけ・今のブランチを置いていない）なら出さない */}
         {compareBaseOptions.length > 0 && (
           <CompareBranchPicker
             compareBase={compareBase}

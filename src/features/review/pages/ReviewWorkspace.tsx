@@ -173,7 +173,7 @@ type ReviewWorkspaceProps = {
   /** 比べる相手に選べるブランチ（置いてあるブランチから今のブランチを除いたもの） */
   compareBaseOptions: ReadonlyArray<string>;
   /** 比べる相手を選んだ（「比較しない」は NO_COMPARE） */
-  onCompareChoiceChange: (base: string) => void;
+  onCompareChoiceChange: (choice: string) => void;
   /** ページごとの、比べる相手の画像（見比べる。比べないとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
@@ -362,7 +362,7 @@ export const ReviewWorkspace = ({
   const canvas = useElementSize<HTMLDivElement>();
   // 比べる相手との見比べ（印・「変わった画面だけ」・比べる画面）
   const branchCompare = useBranchCompare({
-    baseBranch: compareBase,
+    compareBase,
     branch,
     page,
     width: widthOf(page),
@@ -1099,7 +1099,7 @@ export const ReviewWorkspace = ({
                     changedOnly: {
                       checked: branchCompare.changedOnly,
                       onChange: branchCompare.setChangedOnly,
-                      baseBranch: compareBase,
+                      compareBase,
                     },
                   }
                 : {})}
@@ -1422,7 +1422,7 @@ export const ReviewWorkspace = ({
         <CompareDialog
           story={compareStory}
           view={branchCompare.viewOf(compareStory.id)}
-          baseBranch={compareBase}
+          compareBase={compareBase}
           branch={branch}
           onClose={() => {
             // 閉じてから（ダイアログが開く前のフォーカスへ戻したあとで）、その画面のボタンへ戻す

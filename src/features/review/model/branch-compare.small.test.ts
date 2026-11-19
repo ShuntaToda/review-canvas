@@ -6,6 +6,7 @@ import {
   compareMarksOf,
   compareViewOf,
   filterChangedStories,
+  filterCompareBranches,
   keepCompareChoice,
   NO_COMPARE,
   resolveCompareBase,
@@ -208,7 +209,7 @@ describe("resolveCompareStoryId", () => {
   });
 });
 
-describe("compareBaseOptions・resolveCompareBase", () => {
+describe("比べる相手の選び方（compareBaseOptions・resolveCompareBase・compareBaseParam・keepCompareChoice）", () => {
   // ブランチを切り替える欄と同じ並び（既定のブランチが先頭、続いて置いてあるブランチの並び）
   const published = [
     { branch: "feature/b" },
@@ -306,5 +307,22 @@ describe("compareBaseOptions・resolveCompareBase", () => {
     );
     expect(keepCompareChoice(NO_COMPARE, ["main"])).toBe(NO_COMPARE);
     expect(keepCompareChoice(undefined, ["main"])).toBeUndefined();
+  });
+});
+
+describe("filterCompareBranches", () => {
+  const options = ["main", "feature/b", "fix/cart"];
+
+  test("[正常系]ブランチ名に打った文字を含むものだけを並びのまま残す（前後の空白は無視し、大文字・小文字を区別しない）", () => {
+    expect(filterCompareBranches(options, " F ")).toStrictEqual([
+      "feature/b",
+      "fix/cart",
+    ]);
+    expect(filterCompareBranches(options, "CART")).toStrictEqual(["fix/cart"]);
+  });
+
+  test("[境界値]空なら全部、当たらなければ空", () => {
+    expect(filterCompareBranches(options, "  ")).toStrictEqual(options);
+    expect(filterCompareBranches(options, "release")).toStrictEqual([]);
   });
 });

@@ -1,31 +1,19 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useDismissiblePopover } from "../hooks/useDismissiblePopover";
-import { NO_COMPARE } from "../model/branch-compare";
+import { filterCompareBranches, NO_COMPARE } from "../model/branch-compare";
+import { DROPDOWN_WIDTH, dropdownPlacement } from "../model/popover";
 import { isImeComposing } from "../model/shortcuts";
 
 const NOT_COMPARING_LABEL = "比較しない";
-/** パネルの幅と、画面の端から空ける幅（狭い画面では画面の中に収める） */
-const PANEL_WIDTH = 256;
-const VIEWPORT_MARGIN = 8;
-
 /** 動かしている行が無い（打った文字に当たるブランチが無い） */
 const NO_ACTIVE = -1;
 
-/**
- * パネルの置き場所（包む要素の左端から）と幅。ボタンの右端にそろえ、画面の左右からはみ出すときは画面の中へずらす
- */
-const panelPlacement = (
-  container: { left: number; right: number },
-  viewportWidth: number,
-): { left: number; width: number } => {
-  const width = Math.min(PANEL_WIDTH, viewportWidth - VIEWPORT_MARGIN * 2);
-  const left = Math.min(
-    Math.max(container.right - width, VIEWPORT_MARGIN),
-    viewportWidth - VIEWPORT_MARGIN - width,
-  );
-  return { left: left - container.left, width };
-};
+/** ボタンを包む要素から、パネルを画面の中に収める置き場所を測る（まだ置かれていなければ左端・上限の幅） */
+const placementOf = (container: HTMLElement | null) =>
+  container === null
+    ? { left: 0, width: DROPDOWN_WIDTH }
+    : dropdownPlacement(container.getBoundingClientRect(), window.innerWidth);
 
 /**
  * 上の帯の「比較するブランチ」。押すと小さなパネルを開き、上の検索欄（ブランチ名で絞り込む）と、
@@ -49,7 +37,7 @@ export const CompareBranchPicker = ({
   const [active, setActive] = useState(0);
   const [placement, setPlacement] = useState<{ left: number; width: number }>({
     left: 0,
-    width: PANEL_WIDTH,
+    width: DROPDOWN_WIDTH,
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -60,10 +48,7 @@ export const CompareBranchPicker = ({
   const listId = `${baseId}-list`;
   const optionId = (index: number) => `${baseId}-option-${String(index)}`;
 
-  const needle = query.trim().toLowerCase();
-  const branches = options.filter((branch) =>
-    branch.toLowerCase().includes(needle),
-  );
+  const branches = filterCompareBranches(options, query);
   // 「比較しない」はブランチではないので、絞り込んでも先頭に残す
   const items = [NO_COMPARE, ...branches];
   const current = compareBase ?? NO_COMPARE;
@@ -82,10 +67,7 @@ export const CompareBranchPicker = ({
   const openPanel = () => {
     setQuery("");
     setActive(currentIndex);
-    const container = containerRef.current?.getBoundingClientRect();
-    if (container !== undefined) {
-      setPlacement(panelPlacement(container, window.innerWidth));
-    }
+    setPlacement(placementOf(containerRef.current));
     setOpen(true);
   };
 
@@ -95,6 +77,14 @@ export const CompareBranchPicker = ({
     buttonRef,
     onClose: () => setOpen(false),
   });
+
+  // 開いているあいだに画面の幅が変わったら、置き場所を測り直す（画面からはみ出さない）
+  useEffect(() => {
+    if (!open) return;
+    const handleResize = () => setPlacement(placementOf(containerRef.current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open]);
 
   // 開いたら検索欄へフォーカスを移す
   useEffect(() => {
@@ -138,7 +128,7 @@ export const CompareBranchPicker = ({
         ref={buttonRef}
         type="button"
         title="比較するブランチ"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         className={[
@@ -162,6 +152,8 @@ export const CompareBranchPicker = ({
       {open && (
         <div
           id={panelId}
+          role="dialog"
+          aria-label="比較するブランチ"
           className="absolute top-full z-50 mt-1 flex flex-col gap-1 rounded-md border border-line bg-panel p-2 text-sm shadow-lg"
           style={placement}
         >
@@ -182,13 +174,13 @@ export const CompareBranchPicker = ({
             onChange={(event) => {
               const next = event.target.value;
               setQuery(next);
-              const nextNeedle = next.trim().toLowerCase();
-              const matched = options.some((branch) =>
-                branch.toLowerCase().includes(nextNeedle),
-              );
               // 打っているあいだは当たった最初のブランチから動かす（当たらなければどの行も動かさない）。消したら今の相手から
               setActive(
-                nextNeedle === "" ? currentIndex : matched ? 1 : NO_ACTIVE,
+                next.trim() === ""
+                  ? currentIndex
+                  : filterCompareBranches(options, next).length > 0
+                    ? 1
+                    : NO_ACTIVE,
               );
             }}
             onKeyDown={handleInputKeyDown}

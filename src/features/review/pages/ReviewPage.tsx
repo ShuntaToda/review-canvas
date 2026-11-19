@@ -100,14 +100,19 @@ export const ReviewPage = ({
           defaultBranch: meta.data.defaultBranch,
           published: meta.data.branches,
         });
-  // Storybook を置いていないブランチ（コメントだけ）では比べない
-  const baseOptions = published === null ? [] : baseOptionsOf(branch);
-  const baseContext = {
-    current: branch ?? "",
-    defaultBranch: meta.data?.defaultBranch ?? "",
-    options: baseOptions,
-  };
-  const compareBase = resolveCompareBase(compareChoice, baseContext);
+  // 比べる相手を決める材料（ブランチと置いてあるブランチが分かってから。Storybook を置いていないブランチ（コメントだけ）では比べない）
+  const compareContext =
+    meta.data === undefined || branch === undefined
+      ? undefined
+      : {
+          current: branch,
+          defaultBranch: meta.data.defaultBranch,
+          options: published === null ? [] : baseOptionsOf(branch),
+        };
+  const compareBase =
+    compareContext === undefined
+      ? undefined
+      : resolveCompareBase(compareChoice, compareContext);
   const basePublished =
     meta.data?.branches.find((b) => b.branch === compareBase) ?? null;
   // 比べる相手の画像の目録（相手を替えたら読み直す）
@@ -247,8 +252,12 @@ export const ReviewPage = ({
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
           compareBase={compareBase}
-          compareBaseParam={compareBaseParam(compareBase, baseContext)}
-          compareBaseOptions={baseOptions}
+          compareBaseParam={
+            compareContext === undefined
+              ? undefined
+              : compareBaseParam(compareBase, compareContext)
+          }
+          compareBaseOptions={compareContext?.options ?? []}
           onCompareChoiceChange={setCompareChoice}
           // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）
           baseShots={
