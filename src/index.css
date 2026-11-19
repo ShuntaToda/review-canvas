@@ -21,6 +21,17 @@
   --color-warn-soft: #fff4d6;
   --color-danger: #b42318;
 
+  /* 画面を指すリンクで開いたときの枠を消す（長さは model/story-link.ts の LINK_HIGHLIGHT_MS と同じ） */
+  --animate-link-highlight: link-highlight 2s ease-in forwards;
+  @keyframes link-highlight {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
   --font-sans:
     "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo,
     system-ui, sans-serif;

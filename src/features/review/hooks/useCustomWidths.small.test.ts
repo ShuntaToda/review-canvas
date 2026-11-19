@@ -82,4 +82,74 @@ describe("useCustomWidths", () => {
 
     expect(result.current.widthOf("shop")).toBe(1000);
   });
+
+  describe("リンクの幅（?width=）で開く", () => {
+    const remember = () => {
+      window.localStorage.setItem("review-canvas.widths", '{"shop":375}');
+      window.localStorage.setItem(
+        "review-canvas.customWidths",
+        '{"shop":[820]}',
+      );
+    };
+
+    test.each([
+      ["設定の幅", 1000],
+      ["自分で足した幅", 820],
+    ])(
+      "[正常系]選べる幅（%s）なら、その幅で開き、覚えた幅は書き換えない",
+      (_label, width) => {
+        remember();
+        const { result } = renderHook(() =>
+          useCustomWidths(sources, { source: "shop", width }),
+        );
+
+        expect(result.current.widthOf("shop")).toBe(width);
+        expect(remembered("review-canvas.widths")).toStrictEqual({
+          shop: 375,
+        });
+      },
+    );
+
+    test("[異常系]選べない幅なら、足さずにページの既定の幅で開く", () => {
+      remember();
+      const { result } = renderHook(() =>
+        useCustomWidths(sources, { source: "shop", width: 1440 }),
+      );
+
+      expect(result.current.widthOf("shop")).toBe(1000);
+      expect(result.current.optionsOf("shop")).not.toContainEqual({
+        width: 1440,
+        custom: true,
+      });
+      expect(remembered("review-canvas.customWidths")).toStrictEqual({
+        shop: [820],
+      });
+    });
+
+    test("[異常系]数でない値（null）なら、ページの既定の幅で開く", () => {
+      remember();
+      const { result } = renderHook(() =>
+        useCustomWidths(sources, { source: "shop", width: null }),
+      );
+
+      expect(result.current.widthOf("shop")).toBe(1000);
+    });
+
+    test("[正常系]幅の無いリンクなら、いままでどおり覚えた幅で開く", () => {
+      remember();
+      const { result } = renderHook(() =>
+        useCustomWidths(sources, { source: "shop", width: undefined }),
+      );
+
+      expect(result.current.widthOf("shop")).toBe(375);
+    });
+
+    test("[境界値]何も覚えていなくても、選べる幅ならその幅で開く", () => {
+      const { result } = renderHook(() =>
+        useCustomWidths(sources, { source: "shop", width: 375 }),
+      );
+
+      expect(result.current.widthOf("shop")).toBe(375);
+    });
+  });
 });

@@ -9,13 +9,16 @@ import {
   widthOptions,
 } from "../model/custom-widths";
 import type { SourceCatalog, StorySource } from "../model/sources";
+import { resolveLinkWidth } from "../model/story-link";
 import { useLocalSetting } from "./useLocalSetting";
 
 /**
- * ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）。どちらもブラウザに覚える
+ * ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）。どちらもブラウザに覚える。
+ * linkWidth は開いたリンクの幅（?width=）で、開いたときだけそのページの幅にする（覚えた幅は書き換えない）
  */
 export const useCustomWidths = (
   sources: SourceCatalog,
+  linkWidth?: { source: StorySource; width: number | null | undefined },
 ): {
   /** ページのいまの幅（覚えていなければ既定） */
   widthOf: (source: StorySource) => number;
@@ -34,11 +37,31 @@ export const useCustomWidths = (
       serialize: (value) => JSON.stringify(value),
     },
   );
+  const opened =
+    linkWidth === undefined
+      ? undefined
+      : resolveLinkWidth(
+          linkWidth.width,
+          widthOptions(
+            sources.get(linkWidth.source).widths,
+            custom[linkWidth.source],
+          ),
+          sources.get(linkWidth.source).defaultWidth,
+        );
+  const withLinkWidth = (
+    value: Record<StorySource, number>,
+  ): Record<StorySource, number> =>
+    linkWidth === undefined || opened === undefined
+      ? value
+      : { ...value, [linkWidth.source]: opened };
   const [widths, setWidths] = useLocalSetting(
     "review-canvas.widths",
-    defaultWidths(sources),
+    withLinkWidth(defaultWidths(sources)),
     {
-      parse: restoreWidths(sources, custom),
+      parse: (raw) => {
+        const restored = restoreWidths(sources, custom)(raw);
+        return restored === undefined ? undefined : withLinkWidth(restored);
+      },
       serialize: (value) => JSON.stringify(value),
     },
   );

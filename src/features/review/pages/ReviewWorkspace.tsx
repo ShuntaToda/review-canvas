@@ -24,8 +24,10 @@ import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
 import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
+import { useCopyLink } from "../hooks/useCopyLink";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
+import { useLinkHighlight } from "../hooks/useLinkHighlight";
 import { useLocalSetting } from "../hooks/useLocalSetting";
 import {
   commentsErrorMessage,
@@ -76,6 +78,7 @@ import {
   type Tool,
 } from "../model/shortcuts";
 import { mapSources, type StorySource } from "../model/sources";
+import { linkHighlightStory, storyLinkState } from "../model/story-link";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
 import {
@@ -214,6 +217,8 @@ export const ReviewWorkspace = ({
       showComponents:
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
+      // ?story= のリンクで開いた画面（寄せ終えたら枠で示す）
+      highlightStoryId: linkHighlightStory(initialUrl, story?.id),
     };
   });
 
@@ -222,7 +227,11 @@ export const ReviewWorkspace = ({
   const [query, setQuery] = useState("");
   const [showComponents, setShowComponents] = useState(initial.showComponents);
   // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
-  const pageWidths = useCustomWidths(sources);
+  // リンクの幅（?width=）は、開いたページにだけ当てる
+  const pageWidths = useCustomWidths(sources, {
+    source: initial.page,
+    width: initialUrl.width,
+  });
   const widthOf = pageWidths.widthOf;
   const [perRow, setPerRow] = useLocalSetting(
     "review-canvas.perRow",
@@ -356,6 +365,14 @@ export const ReviewWorkspace = ({
   const focusState = cameraStateOf(cameraStates, page);
   const focusStoryId = focusState.kind === "focus" ? focusState.storyId : null;
   const camera = resolveCamera(focusState, cameraContext);
+  // 画面を指すリンクで開いた画面の枠（開いたページで、画面の大きさが分かり、寄せ終えてから出す）
+  const linkHighlight = useLinkHighlight(
+    initial.highlightStoryId,
+    page === initial.page &&
+      viewport.width > 0 &&
+      initial.highlightStoryId !== null &&
+      findFrame(rows, initial.highlightStoryId) !== undefined,
+  );
 
   const updateCamera = (update: (current: Camera) => Camera) =>
     setCameraStates((previous) => ({
@@ -429,12 +446,22 @@ export const ReviewWorkspace = ({
       ...state,
       ...(status === "open" ? {} : { status }),
     })}`;
-  const copyLink = (state: UrlState) => {
-    navigator.clipboard
-      .writeText(shareUrl(state))
-      .then(() => showToast("リンクをコピーしました"))
-      .catch(() => showToast("リンクをコピーできませんでした"));
-  };
+  const copyUrl = useCopyLink(showToast);
+  const copyLink = (state: UrlState) => void copyUrl(shareUrl(state));
+  /** 画面の見出しの「この画面のリンクをコピー」（いまの幅も載せる） */
+  const copyStoryLink = (storyId: string) =>
+    void copyUrl(
+      `${window.location.origin}${window.location.pathname}${buildSearch(
+        storyLinkState({
+          branch,
+          defaultBranch,
+          page,
+          story: storyId,
+          width,
+          status,
+        }),
+      )}`,
+    );
 
   const changePage = (next: StorySource) => {
     setPage(next);
@@ -946,6 +973,8 @@ export const ReviewWorkspace = ({
                       ),
                     )
                   }
+                  onCopyLink={copyStoryLink}
+                  linkHighlight={page === initial.page ? linkHighlight : null}
                   onOpenThread={(threadId) => {
                     setActiveThreadId(threadId);
                     setDraft(null);
