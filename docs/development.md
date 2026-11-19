@@ -49,7 +49,7 @@ review-canvas/
 ├── eslint-rules/             # このリポジトリだけの ESLint ルール（層ごとのファイルの形など）
 ├── scripts/                  # 開発用のスクリプト（new-api.mjs: API の雛形）・リポジトリの決まりのテスト
 ├── .claude/                  # Claude Code の hook・スキル（dev-*: このリポジトリの開発用）・レビュー用のサブエージェント（agents/）
-├── .github/workflows/        # ci.yml（このリポジトリの CI）・publish.yml（使う側から呼ぶ再利用ワークフロー）
+├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）
 ├── .github/ISSUE_TEMPLATE/   # 親 Issue・PR 単位の Issue・不具合のテンプレート（pull_request_template.md は PR の本文）
 ├── review-canvas.config.json # サンプルの設定（並べる Storybook）。review-canvas.config.schema.json は生成物
 └── openapi.json              # API の契約（生成物）
@@ -105,6 +105,20 @@ flowchart LR
 - 注記つきの画面と画面の流れの 1 枚は `pnpm --dir infra run annotate-screen`（`points`・`flow`。Playwright は infra の依存。パスは絶対パスで渡す）で作ります。ブラウザは、開く画面のオリジン・`allow`（`--allow`）で足したオリジン・手元のファイルの外へ通信せず、リダイレクトで外へ出るのも止めます（キャンバスを撮るときは `--allow http://localhost:4102`）。制約: 要求はすべてスクリプトが取り直して返すので、大きい応答の多い重い画面では撮るのが遅くなります。許したオリジンのあいだを 3xx で移る `fetch` は CORS で落ちます（転送の先の要求は通信の止め方を通らないので、ブラウザに転送を追わせません）。通信の途中で閉じても、許したオリジンのサーバーが止まっていても、その要求が失敗するだけで、ほかの論点は書けます。見本は `.claude/skills/dev-write-issue/examples/`
 - 下書き・レビューの記録・画像・レビュー役の worktree は、リポジトリの外の作業フォルダ（既定は `../review-canvas-work/<テーマ>/`）に置き、コミットしません
 - push・PR の作成・Issue への投稿は、人が頼んだときだけ。マージと AWS へ出すのは人がします
+
+### main へのマージ
+
+main はルールセットで PR を必須にし、直に push しません。そのうえで、スキル・サブエージェント・hook のように手早く直したい `.claude/` の変更と、レビューを通したいコードの変更とで、マージの仕方を分けます。
+
+- 変更が `.claude/` の中だけの PR は、ワークフロー `auto-merge-claude.yml` が自動マージを付け、CI の必須のチェックが通るとマージされます（マージコミット）。付けるのは、リポジトリの持ち主が、このリポジトリのブランチから出した、下書きでない PR だけです（fork の PR・下書きには付けない）
+- 1 つでも `.claude/` の外のファイル（名前を変えたファイルは元の名前も見る）に触れていれば付けません。後から外に触れるコミットを積んだときや、下書きに戻したときは、ワークフローが付けた自動マージを外します。このジョブも必須のチェックに入れているので、外し終えるまでマージされません
+- それ以外の PR は、これまでどおり人が本文を読んでマージします
+- ワークフローがマージしたコミットでは、main への push の CI は動きません（`GITHUB_TOKEN` の操作は次のワークフローを起こさない）。PR の CI が同じ中身で通っています
+
+リポジトリの設定（人が GitHub の画面でする）:
+
+- Settings → General → Pull Requests で「Allow auto-merge」を入れる
+- Settings → Rules → Rulesets で、既定のブランチに「Require a pull request before merging」（承認の数は 0。持ち主は自分の PR を承認できないため）と「Require status checks to pass」（`commit-messages`・`lint`・`actionlint`・`build`・`test`・`scaffold`・`auto-merge-claude`）・「Block force pushes」を付ける
 
 ## 道具で縛っている仕組みと理由
 

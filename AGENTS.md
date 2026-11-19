@@ -13,14 +13,14 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形、`check-commit-message.mjs`: コミットメッセージの決まり、`check-issue-text.mjs`: Issue・PR の下書きの検査）
 - `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル（使う側に写すもの）。`dev-*` はこのリポジトリ自身の開発用のスキル、`.claude/agents/` は領域ごとのレビュー用のサブエージェント（読むだけ）、`.claude/hooks/` は編集のたびに検査を返す hook。`llms.txt` は AI 向けの文書の入口
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
-- `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー
+- `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー。`auto-merge-claude.yml` — `.claude/` だけの PR の自動マージ
 - `.github/ISSUE_TEMPLATE/`・`.github/pull_request_template.md` — 親 Issue・PR 単位の Issue・不具合と、PR の本文のテンプレート
 
 どこに何を置くか・足すときの順番は [docs/architecture.md](docs/architecture.md)、なぜこの形かは [docs/adr/](docs/adr/README.md) にあります。API を 1 本足すときは、雛形（`pnpm run new:api`）から始めます。
 
 ## Issue から PR までの流れ
 
-このリポジトリ自身の開発は、Issue で仕様を決める（スキル `dev-write-issue`）→ 実装（`dev-implement-issue`）→ 多視点レビュー（`dev-multi-perspective-review`）→ PR（`.github/pull_request_template.md`）の順に回します。仕様は人が決め、AI は実装しながら決めません。push・PR の作成・Issue への投稿は人が頼んだときだけ、マージは人がします（くわしくは [docs/development.md](docs/development.md#issue-から-pr-まで)）。
+このリポジトリ自身の開発は、Issue で仕様を決める（スキル `dev-write-issue`）→ 実装（`dev-implement-issue`）→ 多視点レビュー（`dev-multi-perspective-review`）→ PR（`.github/pull_request_template.md`）の順に回します。仕様は人が決め、AI は実装しながら決めません。push・PR の作成・Issue への投稿は人が頼んだときだけ、マージは人がします。ただし変更が `.claude/` の中だけの PR は、CI が通るとワークフローが自動でマージします（くわしくは [docs/development.md](docs/development.md#issue-から-pr-まで)・[main へのマージ](docs/development.md#main-へのマージ)）。
 
 ## 守ること
 

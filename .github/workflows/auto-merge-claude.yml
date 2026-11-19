@@ -1,0 +1,66 @@
+name: auto-merge-claude
+
+# 変更が .claude/ の中だけ（スキル・サブエージェント・hook・設定）の PR を、CI が通ったら自動でマージする。
+# main はルールセットで PR を必須にし、このジョブも必須のチェックに入れる（docs/development.md「main へのマージ」）。
+# 必須にしておくと、新しいコミットが積まれたとき、このジョブが自動マージを外し終えるまでマージされない
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # PR のコードは取り出さず、動かさない（変更したファイルの名前を API で読むだけ）
+  auto-merge-claude:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      # 自動でマージしてよいのは、リポジトリの持ち主が、このリポジトリのブランチから出した、下書きでない PR だけ
+      TRUSTED: ${{ github.event.pull_request.user.login == github.repository_owner && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
+      # fork の PR では書き込めない token が来るので、自動マージには触れない
+      SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Decide
+        id: decide
+        run: |
+          only_claude=false
+          if [[ "${TRUSTED}" == "true" ]]; then
+            # 名前を変えたファイルは、元の名前も見る（.claude/ の外から移したものを含めない）
+            outside=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files" \
+              --jq '.[] | .filename, (.previous_filename // empty)' | grep -cv '^\.claude/' || true)
+            if [[ "${outside}" == "0" ]]; then
+              only_claude=true
+            fi
+          fi
+          echo "only_claude=${only_claude}" >> "${GITHUB_OUTPUT}"
+          echo "TRUSTED=${TRUSTED} only_claude=${only_claude}"
+
+      - name: Enable auto-merge
+        if: steps.decide.outputs.only_claude == 'true'
+        run: gh pr merge "${PR_NUMBER}" --auto --merge
+
+      # .claude/ の外に触れるコミットが積まれた・下書きに戻したときは、このワークフローが付けた自動マージを外す
+      # （人が自分で付けた自動マージには触れない）
+      - name: Disable auto-merge
+        if: steps.decide.outputs.only_claude != 'true' && env.SAME_REPO == 'true'
+        run: |
+          enabled_by=$(gh pr view "${PR_NUMBER}" --json autoMergeRequest --jq '.autoMergeRequest.enabledBy.login // ""')
+          if [[ "${enabled_by}" == "github-actions" ]]; then
+            gh pr merge "${PR_NUMBER}" --disable-auto
+          fi
