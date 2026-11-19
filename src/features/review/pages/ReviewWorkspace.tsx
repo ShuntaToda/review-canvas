@@ -76,6 +76,7 @@ import {
   isTypingTarget,
   resolveShortcut,
   type Tool,
+  usesSpaceKey,
 } from "../model/shortcuts";
 import { mapSources, type StorySource } from "../model/sources";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
@@ -196,9 +197,15 @@ export const ReviewWorkspace = ({
       storyId === undefined
         ? undefined
         : storiesByKey.get(storyKey(page, storyId));
-    // 見せる範囲。合う画面が無ければ外して知らせる
-    const scope = resolveInitialScope(initialUrl.scope, {
-      stories: storiesOf(page),
+    const showComponents =
+      story !== undefined &&
+      isComponentStory(story, sources.excludeTitlePrefixes);
+    const initialScope = resolveInitialScope(initialUrl.scope, {
+      stories: filterStories(storiesOf(page), {
+        showComponents,
+        query: "",
+        excludeTitlePrefixes: sources.excludeTitlePrefixes,
+      }),
       focused: story,
     });
     const cameras = mapSources<CameraState>(sources.ids, () => ({
@@ -219,16 +226,14 @@ export const ReviewWorkspace = ({
     }
     return {
       page,
-      scope: scope.scope,
-      scopeMissing: scope.missing,
+      storyScope: initialScope.scope,
+      storyScopeMissing: initialScope.missing,
       cameras,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
       status: initialStatusFilter(initialUrl.status, thread?.root.status),
-      showComponents:
-        story !== undefined &&
-        isComponentStory(story, sources.excludeTitlePrefixes),
+      showComponents,
     };
   });
 
@@ -236,7 +241,7 @@ export const ReviewWorkspace = ({
   const [tool, setTool] = useState<Tool>("move");
   const [query, setQuery] = useState("");
   // 見せる範囲（画面の一覧のフォルダのパス）。キャンバス・画面の一覧・コメント一覧をその中の画面だけにする（見せ方だけで、守りではない）
-  const [scope, setScope] = useStoryScope(page, initial.scope);
+  const [storyScope, setStoryScope] = useStoryScope(page, initial.storyScope);
   const [collapsedFolders, toggleFolder] = useCollapsedFolders(page);
   const [showComponents, setShowComponents] = useState(initial.showComponents);
   // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
@@ -285,9 +290,7 @@ export const ReviewWorkspace = ({
   const [status, setStatus] = useState<StatusFilter>(initial.status);
   const [titleFilter, setTitleFilter] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogKind | null>(null);
-  const [toast, setToast] = useState<{ message: string } | null>(() =>
-    initial.scopeMissing ? { message: "この範囲の画面はありません" } : null,
-  );
+  const [toast, setToast] = useState<{ message: string } | null>(null);
   // 書き込みが 401 になった（ログインの期限切れ）。消えるお知らせではなく、ログインし直す操作と一緒に出しておく
   const [writeUnauthorized, setWriteUnauthorized] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -359,7 +362,7 @@ export const ReviewWorkspace = ({
       perRow,
     });
   };
-  const rows = rowsFor(page, { showComponents, query, scope });
+  const rows = rowsFor(page, { showComponents, query, scope: storyScope });
   const bounds = boundsOfRows(rows);
   const viewport = canvas.size;
   const cameraContext = {
@@ -394,6 +397,13 @@ export const ReviewWorkspace = ({
 
   // 同じ文言でも出し直せるよう、毎回新しいオブジェクトで持つ（表示時間のタイマーを掛け直すため）
   const showToast = (message: string) => setToast({ message });
+  // リンクの範囲に合う画面が無く、外して開いた。お知らせ（aria-live）を描いた後に出して読ませる。StrictMode の 2 回目では出し直さない
+  const storyScopeMissingShown = useRef(false);
+  useEffect(() => {
+    if (!initial.storyScopeMissing || storyScopeMissingShown.current) return;
+    storyScopeMissingShown.current = true;
+    setToast({ message: "この範囲の画面はありません" });
+  }, [initial.storyScopeMissing]);
   useEffect(() => {
     if (toast === null) return;
     const timer = window.setTimeout(() => setToast(null), 2500);
@@ -419,7 +429,7 @@ export const ReviewWorkspace = ({
     const search = buildSearch({
       ...(branch === defaultBranch ? {} : { branch }),
       page,
-      ...(scope === undefined ? {} : { scope }),
+      ...(storyScope === undefined ? {} : { scope: storyScope }),
       ...(urlCommentId === null && centerStoryId !== undefined
         ? { story: centerStoryId }
         : {}),
@@ -432,7 +442,15 @@ export const ReviewWorkspace = ({
       "",
       `${window.location.pathname}${search}`,
     );
-  }, [branch, defaultBranch, page, scope, urlCommentId, centerStoryId, status]);
+  }, [
+    branch,
+    defaultBranch,
+    page,
+    storyScope,
+    urlCommentId,
+    centerStoryId,
+    status,
+  ]);
 
   /**
    * API の失敗を、呼んだ側（入力欄・吹き出し）へそのまま伝える。失敗は消えるお知らせにせず、送った所に残して送り直せるようにする
@@ -451,7 +469,7 @@ export const ReviewWorkspace = ({
     `${window.location.origin}${window.location.pathname}${buildSearch({
       branch,
       ...state,
-      ...(scope === undefined ? {} : { scope }),
+      ...(storyScope === undefined ? {} : { scope: storyScope }),
       ...(status === "open" ? {} : { status }),
     })}`;
   const copyLink = (state: UrlState) => {
@@ -468,8 +486,8 @@ export const ReviewWorkspace = ({
   };
 
   /** 見せる範囲を替える（並びが変わるので、見え方は初めに戻す。範囲の外の画面で絞った一覧は外す） */
-  const changeScope = (next: string | undefined) => {
-    setScope(next);
+  const changeStoryScope = (next: string | undefined) => {
+    setStoryScope(next);
     setCameraStates((previous) => ({
       ...previous,
       [page]: { kind: "initial" },
@@ -512,9 +530,9 @@ export const ReviewWorkspace = ({
       // 範囲はいまのページの中だけ。ほかのページ・範囲の外の画面へ移るときは外す
       const nextScope =
         root.source === page &&
-        scope !== undefined &&
-        isTitleInScope(story.title, scope)
-          ? scope
+        storyScope !== undefined &&
+        isTitleInScope(story.title, storyScope)
+          ? storyScope
           : undefined;
       if (isComponentStory(story, sources.excludeTitlePrefixes)) {
         nextShowComponents = true;
@@ -530,7 +548,7 @@ export const ReviewWorkspace = ({
       }
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
-      setScope(nextScope);
+      setStoryScope(nextScope);
       const currentZoom = resolveCamera(
         cameraStateOf(cameraStates, root.source),
         {
@@ -686,7 +704,7 @@ export const ReviewWorkspace = ({
   // 一覧（いまのページ・見せる範囲・解決の状態・画面で絞り込む）
   const scopeThreads = filterThreads(pageThreads, {
     status: "all",
-    scope,
+    scope: storyScope,
     stories: storiesByKey,
   });
   const titleThreads = filterThreads(scopeThreads, {
@@ -713,7 +731,8 @@ export const ReviewWorkspace = ({
       // 日本語の変換中の Esc は変換の取り消し（書きかけを消したり閉じたりしない）
       if (isImeComposing(event)) return;
       const typing = isTypingTarget(event.target);
-      if (event.key === " " && !typing) {
+      // ボタン・リンクなどにいるときの Space は、そこでの操作（押す）に任せる
+      if (event.key === " " && !usesSpaceKey(event.target)) {
         event.preventDefault();
         setSpaceHeld(true);
         return;
@@ -913,7 +932,7 @@ export const ReviewWorkspace = ({
         branchOptions={branchOptions}
         onBranchChange={(next) => {
           if (next !== branch) {
-            onBranchChange(next, page, centerStoryId, scope);
+            onBranchChange(next, page, centerStoryId, storyScope);
           }
         }}
         userName={me.name}
@@ -933,8 +952,8 @@ export const ReviewWorkspace = ({
             onQueryChange={setQuery}
             searchRef={searchRef}
             onSelectStory={focusStory}
-            scope={scope}
-            onScopeChange={changeScope}
+            scope={storyScope}
+            onScopeChange={changeStoryScope}
             collapsed={collapsedFolders}
             onToggleFolder={toggleFolder}
           >
@@ -1098,6 +1117,13 @@ export const ReviewWorkspace = ({
               {rows.length === 0 && (
                 <NoMatchNotice
                   query={query}
+                  componentsOnly={
+                    filterStories(storiesOf(page), {
+                      showComponents: false,
+                      query: "",
+                      excludeTitlePrefixes: sources.excludeTitlePrefixes,
+                    }).length === 0
+                  }
                   onClear={() => {
                     if (query === "") setShowComponents(true);
                     else setQuery("");

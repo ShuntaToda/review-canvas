@@ -268,4 +268,35 @@ describe("StorySidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "すべて表示" }));
     expect(screen.getByRole("heading", { name: "Entry" })).not.toBeNull();
   });
+
+  test("[境界値]「すべて表示」の後に、範囲だったフォルダの行が閉じたフォルダの中で出ないときは、検索欄へフォーカスを移す", () => {
+    const props = {
+      rows: nested,
+      currentStoryId: undefined,
+      query: "",
+      onQueryChange: () => undefined,
+      searchRef: createRef<HTMLInputElement>(),
+      onSelectStory,
+      onScopeChange,
+      collapsed: new Set(["Shop"]),
+      onToggleFolder,
+    };
+    const view = render(
+      <StorySidebar {...props} scope="Shop/Order">
+        <p>表示の設定</p>
+      </StorySidebar>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "すべて表示" }));
+    expect(onScopeChange).toHaveBeenCalledExactlyOnceWith(undefined);
+    view.rerender(
+      <StorySidebar {...props} scope={undefined}>
+        <p>表示の設定</p>
+      </StorySidebar>,
+    );
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("searchbox", { name: "画面名で絞り込む" }),
+    );
+  });
 });

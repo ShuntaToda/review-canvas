@@ -155,9 +155,12 @@ export const DeletedThreadNotice = ({
  */
 export const NoMatchNotice = ({
   query,
+  componentsOnly,
   onClear,
 }: {
   query: string;
+  /** ページそのものが部品だけか（見せる範囲で空になったときは、部品だけのページとは言わない） */
+  componentsOnly: boolean;
   onClear: () => void;
 }) => (
   <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
@@ -166,9 +169,11 @@ export const NoMatchNotice = ({
       className="pointer-events-auto max-w-md rounded-xl border border-line bg-panel p-5 text-sm shadow-sm"
     >
       <p className="mb-3 text-ink">
-        {query.trim() === ""
-          ? "表示する画面がありません（部品だけのページです）。"
-          : `「${query.trim()}」に当たる画面はありません。`}
+        {query.trim() !== ""
+          ? `「${query.trim()}」に当たる画面はありません。`
+          : componentsOnly
+            ? "表示する画面がありません（部品だけのページです）。"
+            : "絞り込みに合う画面はありません。"}
       </p>
       <button
         type="button"

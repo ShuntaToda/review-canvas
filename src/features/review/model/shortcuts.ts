@@ -139,6 +139,50 @@ const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
   "image",
 ]);
 
+/** Space で押せる要素（ボタン・リンク・チェックボックスなど） */
+const SPACE_ACTIVATED_TAGS: ReadonlySet<string> = new Set([
+  "BUTTON",
+  "A",
+  "SUMMARY",
+  "INPUT",
+]);
+const SPACE_ACTIVATED_ROLES: ReadonlySet<string> = new Set([
+  "button",
+  "link",
+  "checkbox",
+  "switch",
+  "radio",
+  "tab",
+  "menuitem",
+  "option",
+]);
+
+/**
+ * Space をその要素の操作（押す・選ぶ・文字を打つ）に使うところか。そこでは Space でキャンバスを掴まない
+ * （奪うと、キーボードだけでボタンを押せなくなる）
+ */
+export const usesSpaceKey = (target: EventTarget | null): boolean => {
+  if (isTypingTarget(target)) return true;
+  if (target === null || typeof target !== "object" || !("tagName" in target)) {
+    return false;
+  }
+  const element = target as {
+    tagName: unknown;
+    getAttribute?: unknown;
+  };
+  if (
+    typeof element.tagName === "string" &&
+    SPACE_ACTIVATED_TAGS.has(element.tagName)
+  ) {
+    return true;
+  }
+  const role: unknown =
+    typeof element.getAttribute === "function"
+      ? Reflect.apply(element.getAttribute, target, ["role"])
+      : null;
+  return typeof role === "string" && SPACE_ACTIVATED_ROLES.has(role);
+};
+
 /** 画面に出すショートカットの一覧 */
 export const SHORTCUT_HELP: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "V", label: "移動（ドラッグで動かす）" },

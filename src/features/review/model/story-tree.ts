@@ -65,6 +65,15 @@ export const buildStoryTree = (
   return root;
 };
 
+/**
+ * 見せる範囲（フォルダのパス）を、一覧のフォルダのパスと同じ形にする（`Shop/`・`//Shop`・前後の空白 → `Shop`）。
+ * 段が残らなければ undefined（どの画面にも合わない）
+ */
+export const normalizeScope = (scope: string): string | undefined => {
+  const path = segmentsOf(scope).join("/");
+  return path === "" ? undefined : path;
+};
+
 /** タイトルが見せる範囲（フォルダのパス）の中か */
 export const isTitleInScope = (title: string, scope: string): boolean => {
   const folder = segmentsOf(scope);
@@ -127,23 +136,27 @@ export const toggleCollapsedFolder = (
 };
 
 /**
- * リンク（URL の scope）で開くときの見せる範囲。合う画面が無ければ外して知らせる（missing）。
- * リンクで開く画面（スレッド・story=）が範囲の外なら、その画面が見えるように黙って外す
+ * リンク（URL の scope）で開くときの見せる範囲。いま出せる画面（「部品も表示」の入り切りを反映したもの）に
+ * 合う画面が無ければ外して知らせる（missing）。リンクで開く画面（スレッド・story=）が範囲の外なら、その画面が見えるように黙って外す
  */
 export const resolveInitialScope = (
-  scope: string | undefined,
+  raw: string | undefined,
   {
     stories,
     focused,
   }: {
-    /** 開くページのストーリー */
+    /** 開くページの、いま出せるストーリー */
     stories: ReadonlyArray<Story>;
     /** リンクで開く画面 */
     focused: Story | undefined;
   },
 ): { scope: string | undefined; missing: boolean } => {
-  if (scope === undefined) return { scope: undefined, missing: false };
-  if (filterStoriesByScope(stories, scope).length === 0) {
+  if (raw === undefined) return { scope: undefined, missing: false };
+  const scope = normalizeScope(raw);
+  if (
+    scope === undefined ||
+    filterStoriesByScope(stories, scope).length === 0
+  ) {
     return { scope: undefined, missing: true };
   }
   return {

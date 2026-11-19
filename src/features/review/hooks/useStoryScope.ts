@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { StorySource } from "../model/sources";
+import { normalizeScope } from "../model/story-tree";
 
 /**
- * 見せる範囲（画面の一覧のフォルダのパス）。範囲はページの中のフォルダなので、ページを替えたら外す
+ * 見せる範囲（画面の一覧のフォルダのパス。フォルダのパスと同じ形に直して持つ）。範囲はページの中のフォルダなので、ページを替えたら外す
  */
 export const useStoryScope = (
   page: StorySource,
@@ -13,6 +14,10 @@ export const useStoryScope = (
   if (state.page !== page) setState({ page, scope: undefined });
   return [
     state.page === page ? state.scope : undefined,
-    (scope) => setState({ page, scope }),
+    (scope) =>
+      setState({
+        page,
+        scope: scope === undefined ? undefined : normalizeScope(scope),
+      }),
   ];
 };

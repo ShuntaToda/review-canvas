@@ -15,6 +15,16 @@ describe("useStoryScope", () => {
     expect(result.current[0]).toBeUndefined();
   });
 
+  test("[境界値]選んだ値はフォルダのパスの形に直して持ち、段が残らなければ外す", () => {
+    const { result } = renderHook(() => useStoryScope("shop", undefined));
+
+    act(() => result.current[1](" Shop/Order/ "));
+    expect(result.current[0]).toBe("Shop/Order");
+
+    act(() => result.current[1]("/"));
+    expect(result.current[0]).toBeUndefined();
+  });
+
   test("[正常系]ページを替えたら範囲を外し、元のページへ戻っても持ち越さない", () => {
     const { result, rerender } = renderHook(
       ({ page }: { page: StorySource }) => useStoryScope(page, "Shop"),

@@ -4,6 +4,7 @@ import {
   isImeComposing,
   isTypingTarget,
   resolveShortcut,
+  usesSpaceKey,
 } from "./shortcuts";
 
 const key = (
@@ -110,5 +111,30 @@ describe("isImeComposing", () => {
     [{ isComposing: false, keyCode: 27 }, false],
   ])("[正常系]%o は %s", (event, expected) => {
     expect(isImeComposing(event)).toBe(expected);
+  });
+});
+
+describe("usesSpaceKey", () => {
+  const element = (tagName: string, attributes: Record<string, string> = {}) =>
+    ({
+      tagName,
+      isContentEditable: false,
+      getAttribute: (name: string) => attributes[name] ?? null,
+    }) as unknown as EventTarget;
+
+  test("[正常系]ボタン・リンク・入力欄・押せる役の要素は Space を使う", () => {
+    expect(usesSpaceKey(element("BUTTON"))).toBe(true);
+    expect(usesSpaceKey(element("A"))).toBe(true);
+    expect(usesSpaceKey(element("INPUT"))).toBe(true);
+    expect(usesSpaceKey(element("TEXTAREA"))).toBe(true);
+    expect(usesSpaceKey(element("DIV", { role: "button" }))).toBe(true);
+  });
+
+  test("[正常系]キャンバス・何も無い所・DOM の無い値は Space を使わない（掴んで動かす）", () => {
+    expect(usesSpaceKey(element("DIV"))).toBe(false);
+    expect(usesSpaceKey(element("BODY"))).toBe(false);
+    expect(usesSpaceKey(element("DIV", { role: "region" }))).toBe(false);
+    expect(usesSpaceKey(null)).toBe(false);
+    expect(usesSpaceKey({} as EventTarget)).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import {
   buildStoryTree,
   filterStoriesByScope,
   isTitleInScope,
+  normalizeScope,
   parseCollapsedFolders,
   resolveInitialScope,
   type StoryTreeNode,
@@ -115,6 +116,19 @@ describe("isTitleInScope・filterStoriesByScope", () => {
   });
 });
 
+describe("normalizeScope", () => {
+  test.each([
+    ["Shop", "Shop"],
+    ["Shop/", "Shop"],
+    ["//Shop", "Shop"],
+    [" Shop / Order ", "Shop/Order"],
+    ["", undefined],
+    [" / ", undefined],
+  ])("[正常系]%j をフォルダのパスの形 %j にする", (raw, expected) => {
+    expect(normalizeScope(raw)).toBe(expected);
+  });
+});
+
 describe("resolveInitialScope", () => {
   const stories = [
     story("Shop/Cart"),
@@ -122,7 +136,10 @@ describe("resolveInitialScope", () => {
     story("Blog/Entry"),
   ];
 
-  test("[正常系]リンクの範囲に合う画面があれば、その範囲で開く", () => {
+  test("[正常系]リンクの範囲に合う画面があれば、フォルダのパスの形に直して、その範囲で開く", () => {
+    expect(
+      resolveInitialScope(" Shop/Order/ ", { stories, focused: undefined }),
+    ).toStrictEqual({ scope: "Shop/Order", missing: false });
     expect(
       resolveInitialScope("Shop/Order", { stories, focused: undefined }),
     ).toStrictEqual({ scope: "Shop/Order", missing: false });
@@ -131,9 +148,12 @@ describe("resolveInitialScope", () => {
     ).toStrictEqual({ scope: undefined, missing: false });
   });
 
-  test("[異常系]範囲に合う画面が無ければ、範囲を外して知らせる", () => {
+  test("[異常系]範囲に合う画面が無ければ（段の無い値も）、範囲を外して知らせる", () => {
     expect(
       resolveInitialScope("Shop/Payment", { stories, focused: undefined }),
+    ).toStrictEqual({ scope: undefined, missing: true });
+    expect(
+      resolveInitialScope("/", { stories, focused: undefined }),
     ).toStrictEqual({ scope: undefined, missing: true });
   });
 

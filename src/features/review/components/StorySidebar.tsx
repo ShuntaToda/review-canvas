@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Focus, Search } from "lucide-react";
-import type { ReactNode, Ref } from "react";
+import { type ReactNode, type Ref, useEffect, useRef } from "react";
 import type { RowPlacement } from "../model/layout";
 import { buildStoryTree, type StoryTreeNode } from "../model/story-tree";
 import type { Story } from "../model/storybook";
@@ -42,81 +42,111 @@ export const StorySidebar = ({
   onToggleFolder: (path: string) => void;
   /** 下に出す表示の設定 */
   children: ReactNode;
-}) => (
-  <aside
-    aria-label="画面の一覧"
-    data-story-list
-    // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（右のコメント一覧と同じ）
-    className="flex w-60 shrink-0 flex-col border-r border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-r-0"
-  >
-    <div className="flex flex-col gap-2 border-b border-line px-3 py-2">
-      <h2 className="text-sm font-bold">画面</h2>
-      <label className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-accent">
-        <Search aria-hidden className="size-4 shrink-0 text-muted" />
-        <input
-          ref={searchRef}
-          type="search"
-          aria-label="画面名で絞り込む"
-          placeholder="絞り込む（/）"
-          value={query}
-          className="w-full min-w-0 bg-transparent py-1 text-sm outline-none"
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            // 抜けた先をキャンバスにする（blur だと抜けた入力欄が「最後にいた所」に残り、画面の中に取られたフォーカスがそこへ戻るため）
-            if (event.key === "Escape") focusCanvas();
-          }}
-        />
-      </label>
-      {scope !== undefined && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="min-w-0 flex-1 truncate text-ink-sub" title={scope}>
-            表示: {scope}
-          </span>
-          <button
-            type="button"
-            className="shrink-0 rounded-md border border-line px-2 py-0.5 whitespace-nowrap text-ink-sub hover:bg-panel-sub"
-            onClick={() => onScopeChange(undefined)}
-          >
-            すべて表示
-          </button>
-        </div>
-      )}
-    </div>
+}) => {
+  const asideRef = useRef<HTMLElement>(null);
+  // 範囲を替えると押したボタンが消える（フォーカスが body へ落ちる）ので、替わった後に移す先のフォルダ（無ければ検索欄）
+  const pendingFocus = useRef<{
+    scope: string | undefined;
+    path: string;
+  } | null>(null);
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (pending === null || pending.scope !== scope) return;
+    pendingFocus.current = null;
+    const aside = asideRef.current;
+    if (aside === null) return;
+    const folder = [
+      ...aside.querySelectorAll<HTMLElement>("[data-folder-path]"),
+    ].find((element) => element.dataset["folderPath"] === pending.path);
+    (
+      folder ?? aside.querySelector<HTMLElement>('input[type="search"]')
+    )?.focus();
+  });
+  const changeScope = (next: string | undefined, focusPath: string) => {
+    pendingFocus.current = { scope: next, path: focusPath };
+    onScopeChange(next);
+  };
 
-    <nav className="min-h-0 flex-1 overflow-y-auto py-1">
-      {rows.length === 0 ? (
-        <p className="px-3 py-4 text-center text-sm text-muted">
-          絞り込みに合う画面はありません
-        </p>
-      ) : (
-        <TreeList
-          nodes={buildStoryTree(rows)}
-          depth={0}
-          currentStoryId={currentStoryId}
-          onSelectStory={onSelectStory}
-          scope={scope}
-          onScopeChange={onScopeChange}
-          // 文字で絞り込んでいるあいだは、閉じたフォルダも開いて出す（消すと覚えた開閉に戻る）
-          isOpen={(path) => query.trim() !== "" || !collapsed.has(path)}
-          onToggleFolder={(path) => {
-            // 開いて出しているあいだに押しても、見えない所で覚えた開閉を変えない
-            if (query.trim() === "") onToggleFolder(path);
-          }}
-        />
-      )}
-    </nav>
+  return (
+    <aside
+      ref={asideRef}
+      aria-label="画面の一覧"
+      data-story-list
+      // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（右のコメント一覧と同じ）
+      className="flex w-60 shrink-0 flex-col border-r border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-r-0"
+    >
+      <div className="flex flex-col gap-2 border-b border-line px-3 py-2">
+        <h2 className="text-sm font-bold">画面</h2>
+        <label className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-accent">
+          <Search aria-hidden className="size-4 shrink-0 text-muted" />
+          <input
+            ref={searchRef}
+            type="search"
+            aria-label="画面名で絞り込む"
+            placeholder="絞り込む（/）"
+            value={query}
+            className="w-full min-w-0 bg-transparent py-1 text-sm outline-none"
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              // 抜けた先をキャンバスにする（blur だと抜けた入力欄が「最後にいた所」に残り、画面の中に取られたフォーカスがそこへ戻るため）
+              if (event.key === "Escape") focusCanvas();
+            }}
+          />
+        </label>
+        {scope !== undefined && (
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className="min-w-0 flex-1 truncate text-ink-sub"
+              title={scope}
+            >
+              表示: {scope}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 rounded-md border border-line px-2 py-0.5 whitespace-nowrap text-ink-sub hover:bg-panel-sub"
+              onClick={() => changeScope(undefined, scope)}
+            >
+              すべて表示
+            </button>
+          </div>
+        )}
+      </div>
 
-    {/* 狭い幅では、幅や並べ方を変える欄は出さない（閲覧・返信・解決ができれば足りる） */}
-    <div className="max-md:hidden">{children}</div>
-  </aside>
-);
+      <nav className="min-h-0 flex-1 overflow-y-auto py-1">
+        {rows.length === 0 ? (
+          <p className="px-3 py-4 text-center text-sm text-muted">
+            絞り込みに合う画面はありません
+          </p>
+        ) : (
+          <TreeList
+            nodes={buildStoryTree(rows)}
+            depth={0}
+            currentStoryId={currentStoryId}
+            onSelectStory={onSelectStory}
+            scope={scope}
+            onScopeChange={(path) => changeScope(path, path)}
+            // 文字で絞り込んでいるあいだは、閉じたフォルダも開いて出す（消すと覚えた開閉に戻る）
+            isOpen={(path) => query.trim() !== "" || !collapsed.has(path)}
+            onToggleFolder={(path) => {
+              // 開いて出しているあいだに押しても、見えない所で覚えた開閉を変えない
+              if (query.trim() === "") onToggleFolder(path);
+            }}
+          />
+        )}
+      </nav>
+
+      {/* 狭い幅では、幅や並べ方を変える欄は出さない（閲覧・返信・解決ができれば足りる） */}
+      <div className="max-md:hidden">{children}</div>
+    </aside>
+  );
+};
 
 /** 木の各段で引き継ぐもの */
 type TreeProps = {
   currentStoryId: string | undefined;
   onSelectStory: (story: Story) => void;
   scope: string | undefined;
-  onScopeChange: (scope: string | undefined) => void;
+  onScopeChange: (scope: string) => void;
   isOpen: (path: string) => boolean;
   onToggleFolder: (path: string) => void;
 };
@@ -168,6 +198,7 @@ const FolderItem = ({
         <button
           type="button"
           aria-expanded={open}
+          data-folder-path={node.path}
           className="flex min-w-0 flex-1 items-center gap-1 py-1 text-left text-xs font-bold text-ink hover:bg-panel-sub"
           style={{ paddingLeft: 8 + depth * INDENT }}
           title={node.path}
