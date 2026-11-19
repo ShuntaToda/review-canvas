@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Link } from "lucide-react";
 import {
   type RefObject,
   useEffect,
@@ -28,6 +28,7 @@ import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
 import { pinPointFromClick } from "../model/pin-point";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
+import { LINK_HIGHLIGHT_MS, type LinkHighlight } from "../model/story-link";
 import {
   isRenderBusy,
   isRenderPreviewReady,
@@ -107,6 +108,10 @@ type FrameProps = {
   /** 読み込んだ画面でピンの要素を探した結果（スレッドのIDごと。まだ分からないピンは含めない） */
   onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
   onOpenThread: (threadId: string) => void;
+  /** 見出しの「この画面のリンクをコピー」を押した */
+  onCopyStoryLink: (storyId: string) => void;
+  /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
+  linkHighlight: LinkHighlight | null;
 };
 
 /** 外すと決めた画面を about:blank へ移してから、実際に外すまでの待ちの上限(ms) */
@@ -164,6 +169,8 @@ export const Frame = ({
   onPlace,
   onLocate,
   onOpenThread,
+  onCopyStoryLink,
+  linkHighlight,
   onActivate,
   pendingPlace,
   onPendingPlace,
@@ -784,6 +791,18 @@ export const Frame = ({
           >
             <ExternalLink aria-hidden className="size-3.5" />
           </a>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center rounded p-0.5 text-muted hover:bg-panel hover:text-accent"
+            aria-label={`${story.title} / ${story.name} のリンクをコピー`}
+            title="この画面のリンクをコピー"
+            // 「Storybook で開く」と同じく、キャンバスの中を Tab で巡らせない
+            tabIndex={-1}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onCopyStoryLink(story.id)}
+          >
+            <Link aria-hidden className="size-3.5" />
+          </button>
         </div>
       )}
       {/* ピンは画面の端からはみ出せるよう、切り取る枠（iframe）の外に重ねる */}
@@ -866,6 +885,25 @@ export const Frame = ({
               height: highlightBox.height,
               outline: `${2 / zoom}px solid var(--color-accent)`,
               zIndex: 5,
+            }}
+          />
+        )}
+        {linkHighlight !== null && (
+          // リンクで開いた画面の枠。クリックは下へ通す（消えるまで待たせない）
+          <div
+            aria-hidden
+            data-link-highlight={linkHighlight.motion}
+            className={[
+              "pointer-events-none absolute inset-0 rounded-sm",
+              linkHighlight.motion === "fade" ? "animate-link-highlight" : "",
+            ].join(" ")}
+            style={{
+              outline: `${3 / zoom}px solid var(--color-accent)`,
+              outlineOffset: 4 / zoom,
+              zIndex: 6,
+              ...(linkHighlight.motion === "fade"
+                ? { animationDuration: `${LINK_HIGHLIGHT_MS}ms` }
+                : {}),
             }}
           />
         )}
