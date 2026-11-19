@@ -1,6 +1,7 @@
 import type { StoryContext } from "@storybook/react-vite";
+import { expect, waitFor } from "storybook/test";
 import { BRIDGE_CONNECT_TIMEOUT_MS } from "../bridge/frame-bridge";
-import { PLACE_WAIT_MS } from "../hooks/usePendingPlace";
+import type { StorybookWindow } from "../model/story-render";
 
 type Canvas = StoryContext["canvas"];
 
@@ -19,22 +20,36 @@ export const waitForText = (canvas: Canvas, text: string | RegExp) =>
   canvas.findByText(text, undefined, { timeout: LOAD_TIMEOUT });
 
 /**
- * 画像の画面に置いたコメントの下書きが出るのを待つ。動く画面（iframe）はストーリーでは読み込まないので、
- * 画面の側が橋渡しを待ちきって（または置くのを待ちきって）、手がかりなしで置くまで待つ
+ * 置いたコメントの下書きが出るのを待つ。画面の側は、動く画面（置き場に写したサンプルのショップ）の橋渡しがつながってから、
+ * 指した要素を手がかりにして置く（手元では 1 秒ほど）。上限は橋渡しを待つ上限まで（つながらないときは下の waitForLiveFrame が落とす）
  */
 export const waitForDraft = (canvas: Canvas) =>
   canvas.findByPlaceholderText("コメントを書く", undefined, {
-    timeout: Math.max(PLACE_WAIT_MS, BRIDGE_CONNECT_TIMEOUT_MS) + MARGIN_MS,
+    timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS,
   });
 
 /**
- * 動く画面に切り替えようとした画面が、落ち着いた見た目になるまで待つ。ストーリーでは iframe を読み込まない（.storybook/main.ts の CSP）ので、
- * 橋渡しを待ちきった印（「一部の機能が使えません」）が出たところで落ち着く。待たないと、撮る時間で見た目が変わる
+ * 画面（storyId）が動く画面に切り替わり、中のストーリー（サンプルのショップ）が描き終えるのを待つ。
+ * 待たないと、撮る時間で中身が変わる。橋渡しがつながらない（「一部の機能が使えません」）ときは、切り替わらないので落ちる
  */
-export const waitForLiveFrameSettled = (canvas: Canvas) =>
-  canvas.findByText("一部の機能が使えません", undefined, {
-    timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS,
-  });
+export const waitForLiveFrame = (canvasElement: HTMLElement, storyId: string) =>
+  waitFor(
+    async () => {
+      const frame = canvasElement.querySelector(
+        `[data-story-frame="${storyId}"][data-frame-mode="live"] iframe`,
+      );
+      const phase =
+        frame instanceof HTMLIFrameElement
+          ? (frame.contentWindow as StorybookWindow | null)
+              ?.__STORYBOOK_PREVIEW__?.currentRender?.phase
+          : undefined;
+      await expect(
+        { storyId, phase },
+        "動く画面に切り替わり、中のストーリーが描き終える",
+      ).toStrictEqual({ storyId, phase: "finished" });
+    },
+    { timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS },
+  );
 
 /** settle() を呼んだ印（html の data-story-settled）。scripts/check-app-storybook.mjs が同じ名前で見る */
 const SETTLED_MARK = "storySettled";

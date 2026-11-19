@@ -10,7 +10,7 @@ import { reviewHandlers } from "../stories/story-handlers";
 import {
   settle,
   waitForDraft,
-  waitForLiveFrameSettled,
+  waitForLiveFrame,
   waitForShot,
   waitForText,
 } from "../stories/story-play";
@@ -60,14 +60,14 @@ export const WithComments: Story = {
 export const SharedThread: Story = {
   name: "スレッドを開いた",
   parameters: { reviewUrl: `?branch=main&comment=${THREAD_WITH_REPLIES_ID}` },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
     await waitForText(
       canvas,
       "お願いします。ほかの画面のボタンも合わせてください",
     );
-    // スレッドを開くと、その画面を動く画面に切り替えようとする（ストーリーでは読み込まないので、待ちきった見た目で止める）
-    await waitForLiveFrameSettled(canvas);
+    // スレッドを開くと、その画面を動く画面（置き場に写したサンプルのショップ）に切り替える
+    await waitForLiveFrame(canvasElement, "shop-productlist--default");
     await settle();
   },
 };
@@ -75,7 +75,7 @@ export const SharedThread: Story = {
 /** コメントのモードで画面を押し、文字を入れたところ（送らない） */
 export const Drafting: Story = {
   name: "コメントを書いている",
-  play: async ({ canvas, userEvent }) => {
+  play: async ({ canvas, canvasElement, userEvent }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
     await userEvent.click(
       canvas.getByRole("button", { name: "コメント（C）" }),
@@ -87,7 +87,7 @@ export const Drafting: Story = {
     );
     const input = await waitForDraft(canvas);
     await userEvent.type(input, "送るボタンの上に、合計の金額も出してください");
-    await waitForLiveFrameSettled(canvas);
+    await waitForLiveFrame(canvasElement, "shop-orderform--default");
     await settle();
   },
 };

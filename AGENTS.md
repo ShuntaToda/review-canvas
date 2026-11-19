@@ -10,7 +10,7 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 - `src/` — 画面（React・vite・Tailwind CSS）。`src/features/review/bridge/` は Storybook の iframe に差し込む橋渡し。`.storybook/` と `src/features/*/{pages,components}/*.stories.tsx`・`src/features/*/stories/` は review-canvas 自身の画面の Storybook（docs/development.md「review-canvas 自身の Storybook」）
 - `infra/` — CDK（コンストラクト `ReviewCanvas`・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト
 - `bin/` — CLI（`review-canvas.mjs`）と、AI がコメントを読んで返すための MCP サーバー（`review-canvas-mcp.mjs`。依存を持たない JavaScript。docs/ai.md）
-- `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形、`check-commit-message.mjs`: コミットメッセージの決まり、`check-issue-text.mjs`: Issue・PR の下書きの検査、`issue-images.mjs`: 下書きの画像を `issue-images` ブランチに置いて埋め込む、`check-app-storybook.mjs`: 自身の画面の Storybook の検査）
+- `eslint-rules/` — このリポジトリだけの ESLint ルール。`scripts/` — 開発用のスクリプト（`new-api.mjs`: API の雛形、`check-commit-message.mjs`: コミットメッセージの決まり、`check-issue-text.mjs`: Issue・PR の下書きの検査、`issue-images.mjs`: 下書きの画像を `issue-images` ブランチに置いて埋め込む、`check-app-storybook.mjs`: 自身の画面の Storybook の検査、`stage-story-storybooks.mjs`: 自身の画面の Storybook の動く画面に、サンプルのショップを写す）
 - `.claude/skills/fix-review-comments/` — 使う側で AI がコメントを直して返すためのスキル（使う側に写すもの）。`dev-*` はこのリポジトリ自身の開発用のスキル、`.claude/agents/` は領域ごとのレビュー用のサブエージェント（読むだけ）、`.claude/hooks/` は編集のたびに検査を返す hook。`llms.txt` は AI 向けの文書の入口
 - `examples/sample-storybook/` — 架空のショップのサンプル Storybook（手元で動かすときに並べる）
 - `.github/workflows/publish.yml` — 使う側のリポジトリから呼ぶ再利用ワークフロー。`auto-merge-claude.yml` — `.claude/` だけの PR の自動マージ

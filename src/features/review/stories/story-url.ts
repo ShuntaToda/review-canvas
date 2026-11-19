@@ -61,7 +61,9 @@ export const applyStoryUrl = (search: string): void => {
 
 /**
  * ストーリーの通信のうち、MSW を通して（そのまま）読ませてよいもの。この Storybook の置き場の中の、Storybook 自身のファイル
- * （ビルドの読み込み・ストーリーの一覧など）だけで、API（api/）と置いてあるブランチの置き場（basePrefix）は含めない
+ * （ビルドの読み込み・ストーリーの一覧など）と、置いてあるブランチの置き場（basePrefix）に置いたサンプルのショップの Storybook のファイル
+ * （動く画面で開く iframe.html・その読み込み。.storybook/main.ts の staticDirs）。
+ * API（api/）と、置き場の画像の目録・画像（review-canvas-shots）は含めない（ストーリーの handler に無ければ止める）
  */
 export const isStorybookOwnFile = (
   requestUrl: string,
@@ -70,10 +72,11 @@ export const isStorybookOwnFile = (
 ): boolean => {
   const dir = new URL(".", storybookUrl);
   const url = new URL(requestUrl);
-  return (
-    url.origin === dir.origin &&
-    url.pathname.startsWith(dir.pathname) &&
-    !url.pathname.startsWith(`${dir.pathname}api/`) &&
-    !url.pathname.startsWith(basePrefix)
-  );
+  if (url.origin !== dir.origin || !url.pathname.startsWith(dir.pathname)) {
+    return false;
+  }
+  if (url.pathname.startsWith(basePrefix)) {
+    return !/\/review-canvas-shots(\.json$|\/)/.test(url.pathname);
+  }
+  return !url.pathname.startsWith(`${dir.pathname}api/`);
 };

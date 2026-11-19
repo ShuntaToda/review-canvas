@@ -62,17 +62,34 @@ describe("isStorybookOwnFile", () => {
     ).toBe(true);
   });
 
-  test("API と、置いてあるブランチの置き場は通さない（ストーリーの handler に無ければ止める）", () => {
+  test("API と、置き場の画像の目録・画像は通さない（ストーリーの handler に無ければ止める）", () => {
     expect(
       isStorybookOwnFile("http://localhost:6006/api/comments", storybook, base),
     ).toBe(false);
-    expect(
-      isStorybookOwnFile(
-        "http://localhost:6006/review-canvas-story/main/shop/index.json",
-        storybook,
-        base,
-      ),
-    ).toBe(false);
+    for (const file of [
+      "review-canvas-shots.json",
+      "review-canvas-shots/shop-productlist--default-768-0123.png",
+    ]) {
+      expect(
+        isStorybookOwnFile(
+          `http://localhost:6006/review-canvas-story/main/shop/${file}`,
+          storybook,
+          base,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("置き場に置いたサンプルのショップの Storybook（動く画面）のファイルは通す", () => {
+    for (const file of ["iframe.html", "assets/iframe-abc.js", "index.json"]) {
+      expect(
+        isStorybookOwnFile(
+          `http://localhost:6006/review-canvas-story/main/shop/${file}`,
+          storybook,
+          base,
+        ),
+      ).toBe(true);
+    }
   });
 
   test("ほかのオリジンと、置き場の外のパスは通さない", () => {

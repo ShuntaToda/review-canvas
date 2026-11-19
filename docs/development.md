@@ -84,15 +84,17 @@ pnpm --dir examples/sample-storybook run validate
 review-canvas の作業の画面を、状態ごとに描いたストーリーです。設定ファイルの 2 つ目の Storybook（`id` は `app`、名前は「review canvas」）として、手元のキャンバスのサンプルのショップの後ろに並びます。
 
 ```bash
+pnpm run build:storybook:shop   # 先にサンプルのショップを組み立てる（動く画面で開く。下）
 pnpm run storybook              # 開発しながら見る（http://localhost:6007）
-pnpm run build:storybook:app    # 組み立てる（storybook-static）。build:storybook はサンプルのショップと両方を組み立てる
+pnpm run build:storybook:app    # 組み立てる（storybook-static）。build:storybook はサンプルのショップ → app の順に両方を組み立てる
 pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つずつ開いて確かめる（下）
 ```
 
 - 設定は `.storybook/`（`main.ts`・`preview.tsx`）、ストーリーは画面・部品のコードの隣（`src/features/*/pages/*.stories.tsx`・`src/features/*/components/*.stories.tsx`。置ける場所はこの 2 つだけで、`.storybook/main.ts` の `stories` と eslint の `STORY_GLOB` が同じ）、ストーリーが使う固定のデータ・MSW の handler・描き方は `src/features/review/stories/` に置きます。画面と同じ vite の設定（React Compiler・`@/` の別名）と Tailwind（`src/index.css`）を使います
 - 1 つのストーリーは、画面の入口と同じ `App` を、ストーリー用の偽のログイン（`src/support/auth/fake`。山田 太郎でログイン済み、または未ログイン）で描きます（`stories/ReviewStory.tsx`）。`pnpm dev` の擬似ログイン（`src/support/auth/dev`。名前を入れてログインする）とは別のもので、ストーリーでは使いません。どちらも置く版のビルドには入りません。SWR のキャッシュはストーリーごとに作り直します
 - API（`/api/*`）と、置いてあるブランチの Storybook（ストーリーの一覧・画像の目録・画像）は MSW が返します（`stories/story-handlers.ts`）。置いてあるブランチは `main` と `feature/new-cart`（架空）、キャンバスの中身はサンプルのショップを撮った画像と目録（`stories/fixtures/`。幅 375 だけ）です。画像を撮り直すときは、サンプルの Storybook を組み立ててから `pnpm --dir infra run screenshots --repo-root <根> --config <shop だけの設定>` で撮り、要る画面を写します
-- ストーリーの handler に無い道への通信（Storybook の外・API の知らない道）は、`.storybook/preview.tsx` が最後の handler で止めて失敗にし、コンソールに `[MSW]` で出します。iframe の読み込みは MSW を通らないので、`.storybook/main.ts` の CSP（`frame-src 'none'` など。プレビューの `<head>` に入れる）が止めます。動く画面（操作のモードで開く iframe）は読み込まず、橋渡しを待ちきった見た目（「一部の機能が使えません」）で止まります
+- 動く画面（スレッドを開いた・コメントを置いたとき、画像の無い幅で開く iframe）は、本物のサンプルのショップです。`build:storybook:app`・`storybook` は、組み立てたサンプルのショップ（設定の shop の outDir）を、橋渡し（`pnpm run build:bridge`）を差し込んでブランチごとに写し（`scripts/stage-story-storybooks.mjs`。写す先は `node_modules/.cache/review-canvas-story`）、`.storybook/main.ts` の `staticDirs` が置き場（`<Storybook の置き場>/review-canvas-story/<ブランチのキー>/shop/`。`stories/story-branches.ts`）として出します。差し込む印・script は手元の配信・置くスクリプトと同じで、つないでよいオリジンだけを開いたときの `location.origin` にします（どこで開くかは組み立てのときに分からないため）。サンプルのショップの中の通信（`/api/products` など）は、サンプル自身の MSW が返します（サービスワーカーは同じオリジンに 1 つ。msw の版は catalog で同じ）
+- ストーリーの handler に無い道への通信（Storybook の外・API の知らない道・置き場の画像の目録と画像）は、`.storybook/preview.tsx` が最後の handler で止めて失敗にし、コンソールに `[MSW]` で出します。iframe の読み込みは MSW を通らないので、`.storybook/main.ts` の CSP（`frame-src` を置き場の `review-canvas-story/` だけにする。オリジンは開いたときに入れる）が止めます
 - URL の状態（`?branch=`・`?comment=`・`?scope=` など）は、ストーリーの `parameters.reviewUrl` に書きます。描く前に iframe の URL へ入れ、キャンバスが URL を書き換えても Storybook のクエリ（`?id=`・`?viewMode=`）を残します（`stories/story-url.ts`）
 - 押して開く状態（コメントを書いている・ヘルプを開いた・変わった画面だけ）は、play 関数で押して作ります。置くときの撮影は play 関数の終わりを待ちます
 - play 関数は、終わりに `settle()`（`stories/story-play.ts`）を呼びます。動きが止まるのを待ち、画面を 1 度まるごと描き直して、撮るたびに同じ画素にします（見比べは画像のハッシュで比べるので、角丸のふちが 1 段ずれても「変更」になる）。Storybook の `afterEach` では呼べません（置くときの撮影は、`afterEach` より前の段階 `completed` で撮る）。呼び忘れは `check:storybook:app` が落とします
@@ -105,7 +107,7 @@ pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つず
 - 足したら `scripts/check-app-storybook.mjs` の `APP_STORY_IDS` に ID を足します
 - Storybook・MSW・ストーリー用の偽のログイン（`src/support/auth/fake`）と、ストーリーの置き場（`src/features/*/stories/`・`*.stories.tsx`）を import できるのは、ストーリー（`src/features/*/{pages,components}/*.stories.tsx`）・`src/features/*/stories/`・`.storybook/` だけです（eslint の `no-restricted-imports`。動的 import（`import("msw")`）は `no-restricted-syntax`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
 
-`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、play 関数（一覧の tags の `play-fn` で見る）の終わりに `settle()` を呼んでいること（最後の文であることは `scripts/repo-rules.small.test.mjs` が見る）、Storybook の外・MSW に無い道へ通信しないこと（iframe.html の外へのページの移動も含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
+`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、play 関数（一覧の tags の `play-fn` で見る）の終わりに `settle()` を呼んでいること（最後の文であることは `scripts/repo-rules.small.test.mjs` が見る）、Storybook の外・MSW に無い道へ通信しないこと（iframe.html と、置き場に写したサンプルのショップの iframe.html の外へのページの移動、CSP が止めた読み込みも含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
 
 ## Issue から PR まで
 

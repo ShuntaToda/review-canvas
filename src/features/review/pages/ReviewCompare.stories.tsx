@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ReviewStory } from "../stories/ReviewStory";
-import {
-  FEATURE_BRANCH,
-  featureComments,
-  mixedComments,
-} from "../stories/story-fixtures";
+import { FEATURE_BRANCH } from "../stories/story-branches";
+import { featureComments, mixedComments } from "../stories/story-fixtures";
 import { reviewHandlers } from "../stories/story-handlers";
 import { settle, waitForShot } from "../stories/story-play";
 

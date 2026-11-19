@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FEATURE_BRANCH,
+  storyBranchKey,
+} from "../src/features/review/stories/story-branches.ts";
+import {
   APP_STORY_IDS,
   checkStoryIndex,
   isOutsideDocument,
@@ -66,7 +70,15 @@ describe("isOutsideDocument", () => {
 
   it.each([
     [`${origin}/iframe.html?id=review-help--opened&viewMode=story`, false],
-    [`${origin}/review-canvas-story/main/shop/iframe.html?id=x`, true],
+    [`${origin}/review-canvas-story/main/shop/iframe.html?id=x`, false],
+    // ブランチのキーに ~XX を含むもの（feature/new-cart）
+    [
+      `${origin}/review-canvas-story/${storyBranchKey(FEATURE_BRANCH)}/shop/iframe.html`,
+      false,
+    ],
+    [`${origin}/review-canvas-story/main/shop/index.html`, true],
+    [`${origin}/review-canvas-story/main/admin/iframe.html`, true],
+    [`${origin}/review-canvas-story/iframe.html`, true],
     [`${origin}/api/meta`, true],
     ["https://example.com/iframe.html", true],
   ])("%s → %s", (url, outside) => {

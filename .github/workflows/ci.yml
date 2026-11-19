@@ -152,12 +152,14 @@ jobs:
           pnpm run build:deployed
           pnpm run check:deployed-bundle
 
-      # サンプルのショップと、review-canvas 自身の画面の Storybook（設定の storybooks の 2 つ）を組み立てる
+      # サンプルのショップと、review-canvas 自身の画面の Storybook（設定の storybooks の 2 つ）を組み立てる。
+      # 自身の画面の Storybook には、動く画面で開くサンプルのショップを写す（先にサンプルを組み立てる。scripts/stage-story-storybooks.mjs）
       - name: Build Storybooks
         run: |
           pnpm run build:storybook
           test -s examples/sample-storybook/storybook-static/index.json
           test -s storybook-static/index.json
+          grep -q review-canvas-bridge storybook-static/review-canvas-story/main/shop/iframe.html
 
       # 置くときと同じ手順で、設定の Storybook（サンプルのショップ・review-canvas 自身）の全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）。
       # 撮影のスクリプトは 10 分（CAPTURE_TIME_LIMIT_MS）で打ち切るので、step の上限はブラウザを入れる分だけ長くする

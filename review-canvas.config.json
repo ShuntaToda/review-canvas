@@ -13,7 +13,7 @@
     {
       "id": "app",
       "label": "review canvas",
-      "build": "pnpm exec storybook build --quiet --test",
+      "build": "pnpm run build:storybook:app --test",
       "outDir": "storybook-static",
       "widths": [1280, 1440],
       "defaultWidth": 1280,

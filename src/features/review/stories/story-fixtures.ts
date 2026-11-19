@@ -1,5 +1,11 @@
 import type { BranchItem, ReviewMeta } from "../api/review-api";
 import type { Comment } from "../model/threads";
+import {
+  DEFAULT_BRANCH,
+  FEATURE_BRANCH,
+  storyBasePrefixOf,
+  storyBranchKey,
+} from "./story-branches";
 import type { AuthUser } from "@/support/auth";
 
 /**
@@ -11,23 +17,8 @@ export const STORY_ME: AuthUser = { sub: "auth0|yamada", name: "山田 太郎" }
 const SATO = { author: "佐藤 花子", authorId: "auth0|sato" } as const;
 const YAMADA = { author: STORY_ME.name, authorId: STORY_ME.sub } as const;
 
-export const DEFAULT_BRANCH = "main";
-export const FEATURE_BRANCH = "feature/new-cart";
-
-/** 置いてあるブランチの置き場の頭。どのサーバーにも無い道にし、MSW だけが返す（./story-handlers.ts） */
-export const STORY_BASE_PREFIX = "/review-canvas-story/";
-
-/**
- * ブランチごとの置き場のキー。本物の置き場（sb/<キー>/）と同じ変換にする（api/infrastructure/published-storybooks/branch-key.ts の encodeBranchKey。
- * 画面から api/ は読めないので写す）。英数字と . _ - はそのまま、ほかのバイトは ~XX（例: / は ~2F）
- */
-export const storyBranchKey = (branch: string): string =>
-  Array.from(new TextEncoder().encode(branch), (byte) => {
-    const char = String.fromCharCode(byte);
-    return /^[A-Za-z0-9._-]$/.test(char)
-      ? char
-      : `~${byte.toString(16).toUpperCase().padStart(2, "0")}`;
-  }).join("");
+/** 置いてあるブランチの置き場の頭（この Storybook の置き場の下。.storybook/main.ts の staticDirs が、サンプルのショップをここへ置く） */
+export const STORY_BASE_PREFIX = storyBasePrefixOf(window.location.href);
 
 const published = (branch: string, commit: string, builtAt: string) => ({
   branch,

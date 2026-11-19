@@ -20,7 +20,7 @@
     "build:bridge": "vite build --config vite.bridge.config.ts",
     "prebuild:deployed": "pnpm run codegen",
     "build:deployed": "vite build --mode deployed",
-    "build:storybook": "run-s build:storybook:*",
+    "build:storybook": "pnpm run build:storybook:shop && pnpm run build:storybook:app --test",
     "check:deployed-bundle": "test -f dist-deployed/index.html && ! grep -rlF -e 'review-canvas.devAuth.name' -e '\"擬似ログイン\"' -e 'review-canvas.fakeAuth' -e 'mockServiceWorker.js' -e 'msw-storybook-addon' -e '[MSW]' -e 'review-canvas-story' dist-deployed",
     "codegen": "openapi-typescript ./openapi.json -o src/generated/api-types.ts",
     "config:local": "node bin/copy-env.mjs",
@@ -67,9 +67,10 @@
     "validate:tsc:app": "tsc --noEmit",
     "validate:tsc:node": "tsc -p tsconfig.node.json --noEmit",
     "build:storybook:shop": "pnpm --dir examples/sample-storybook run build-storybook --test",
-    "build:storybook:app": "storybook build --quiet --test",
-    "storybook": "storybook dev -p 6007",
-    "check:storybook:app": "node scripts/check-app-storybook.mjs"
+    "build:storybook:app": "pnpm run build:bridge && pnpm run stage:storybook:app && storybook build --quiet",
+    "stage:storybook:app": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/stage-story-storybooks.mjs",
+    "storybook": "pnpm run build:bridge && pnpm run stage:storybook:app && storybook dev -p 6007",
+    "check:storybook:app": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/check-app-storybook.mjs"
   },
   "dependencies": {
     "@auth0/auth0-react": "2.28.2",

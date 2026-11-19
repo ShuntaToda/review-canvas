@@ -2,7 +2,8 @@
 // review-canvas 自身の画面の Storybook（pnpm run build:storybook:app の storybook-static）を確かめる。
 // - 決めた状態のストーリーが、組み立てた一覧（index.json）にそろって載り、ID が英字のまま
 // - どのストーリーも、描画と play 関数が失敗せずに終わり、play 関数の終わりに settle() を呼んでいる
-// - どのストーリーも、Storybook の外（配っているオリジンの外）へ通信せず、MSW に無い道へも出ない（MSW の失敗がコンソールに出ない）
+// - どのストーリーも、Storybook の外（配っているオリジンの外）へ通信せず、MSW に無い道へも出ない（MSW の失敗がコンソールに出ない）。
+//   動く画面（iframe）は、置き場に写したサンプルのショップ（scripts/stage-story-storybooks.mjs）の iframe.html だけ（CSP が止めたものも数える）
 // ビルド結果を自分の端末（127.0.0.1）で配り、ヘッドレスの Chromium（Playwright）で 1 つずつ開く。
 //
 //   node scripts/check-app-storybook.mjs [--dir storybook-static] [--shots <撮った画像を書く場所>]
@@ -11,6 +12,10 @@ import http from "node:http";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
+import {
+  STORY_BASE_DIR,
+  STORY_SOURCE,
+} from "../src/features/review/stories/story-branches.ts";
 
 /**
  * そろって載るストーリーの ID（Issue #29 の 10 状態。開けないときは 3 つ）。
@@ -97,13 +102,23 @@ export const checkStoryIndex = (index, expected = APP_STORY_IDS) => {
   };
 };
 
+/** 動く画面で開いてよい、置き場に写したサンプルのショップの iframe.html（/<STORY_BASE_DIR><ブランチのキー>/<STORY_SOURCE>/iframe.html） */
+const STAGED_FRAME_PATH = new RegExp(
+  `^/${STORY_BASE_DIR}[^/]+/${STORY_SOURCE}/iframe\\.html$`,
+  "u",
+);
+
 /**
- * ページの移動（document の要求）が、Storybook 自身の画面（iframe.html）の外へ出ていないか。
+ * ページの移動（document の要求）が、Storybook 自身の画面（iframe.html）と、置き場に写したサンプルのショップの iframe.html の外へ出ていないか。
  * iframe の読み込みは MSW を通らないので、同じオリジンでもここで見る（ストーリーでは .storybook/main.ts の CSP が止める）
  */
 export const isOutsideDocument = (url, origin) => {
   const parsed = new URL(url);
-  return parsed.origin !== origin || parsed.pathname !== "/iframe.html";
+  return (
+    parsed.origin !== origin ||
+    (parsed.pathname !== "/iframe.html" &&
+      !STAGED_FRAME_PATH.test(parsed.pathname))
+  );
 };
 
 const serve = async (dir) => {
@@ -218,8 +233,13 @@ const main = async () => {
         }
       });
       page.on("console", (message) => {
-        if (message.type() === "error" && message.text().includes("[MSW]")) {
+        if (message.type() !== "error") return;
+        if (message.text().includes("[MSW]")) {
           mswErrors.push(message.text().split("\n").slice(0, 4).join(" "));
+        }
+        // CSP（.storybook/main.ts）が止めた読み込み（置き場の外の iframe など）。止まった読み込みは上の request に出ないので、ここで数える
+        if (message.text().includes("Content Security Policy")) {
+          outside.push(`（CSP が止めた）${message.text().split("\n")[0]}`);
         }
       });
       // 外へは出さない（出ようとしたことは上で数える）

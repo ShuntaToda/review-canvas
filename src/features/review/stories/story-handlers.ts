@@ -11,13 +11,11 @@ import shopIndex from "./fixtures/shop-index.json";
 import featureShots from "./fixtures/shots-feature-new-cart.json";
 import mainShots from "./fixtures/shots-main.json";
 import {
-  branchItemsOf,
   DEFAULT_BRANCH,
   FEATURE_BRANCH,
-  STORY_BASE_PREFIX,
   storyBranchKey,
-  storyMeta,
-} from "./story-fixtures";
+} from "./story-branches";
+import { branchItemsOf, STORY_BASE_PREFIX, storyMeta } from "./story-fixtures";
 import { isStorybookOwnFile } from "./story-url";
 
 /**

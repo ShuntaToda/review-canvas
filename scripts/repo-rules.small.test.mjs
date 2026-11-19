@@ -208,7 +208,7 @@ describe("review-canvas 自身の画面の Storybook", () => {
     const files = [
       "api/infrastructure/published-storybooks/branch-key.small.test.ts",
       "infra/test/branch-key.small.test.ts",
-      "src/features/review/stories/story-fixtures.small.test.ts",
+      "src/features/review/stories/story-branches.small.test.ts",
     ];
     const [first, ...rest] = files.map(vectorsOf);
 
@@ -290,15 +290,23 @@ describe("review-canvas 自身の画面の Storybook", () => {
     expect(size).toBeLessThanOrEqual(1024 * 1024);
   });
 
-  // 置くとき（設定の build）と手元・CI（pnpm run build:storybook:app）で、同じ組み立て方にする
-  test("[正常系]設定の app の build は、package.json の build:storybook:app と同じコマンド", () => {
+  // 置くとき（設定の build）と手元・CI（pnpm run build:storybook）で、同じ組み立て方にする。
+  // app は、サンプルのショップ（設定で前に並ぶ shop）を組み立てた後に、それを写して組み立てる（scripts/stage-story-storybooks.mjs）
+  test("[正常系]設定の app の build・package.json の build:storybook は、どれも build:storybook:app に --test を付けて呼ぶ", () => {
     const config = JSON.parse(read("review-canvas.config.json"));
     const manifest = JSON.parse(read("package.json"));
+    const ids = config.storybooks.map((storybook) => storybook.id);
     const app = config.storybooks.find((storybook) => storybook.id === "app");
 
-    expect(app?.build).toBe(
-      `pnpm exec ${manifest.scripts["build:storybook:app"]}`,
+    expect(app?.build).toBe("pnpm run build:storybook:app --test");
+    expect(manifest.scripts["build:storybook"]).toBe(
+      "pnpm run build:storybook:shop && pnpm run build:storybook:app --test",
     );
+    // 付けた --test が storybook build に届く（最後のコマンドが storybook build）
+    expect(manifest.scripts["build:storybook:app"]).toMatch(
+      /&& storybook build --quiet$/u,
+    );
+    expect(ids.indexOf("shop")).toBeLessThan(ids.indexOf("app"));
   });
 });
 
