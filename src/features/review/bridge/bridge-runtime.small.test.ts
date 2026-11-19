@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { measureContentHeight } from "../model/story-shots";
+import {
+  MAX_MEASURED_ELEMENTS,
+  measureContentHeight,
+} from "../model/story-shots";
 import { installBridge } from "./bridge-runtime";
 import { decideSize, type MeasureState } from "./measure";
 import {
@@ -7,6 +10,9 @@ import {
   type ParentMessage,
   toParentEnvelope,
 } from "./protocol";
+
+// 橋渡しが測るときの引数を確かめるため、実装はそのままで呼び出しだけを見る
+vi.mock("../model/story-shots", { spy: true });
 
 const CANVAS = "https://canvas.example.com";
 
@@ -334,6 +340,8 @@ describe("measureContentHeight", () => {
     display?: string;
     overflow?: number | (() => number);
     paddingBottom?: string;
+    /** 中に直に置く文字（それぞれの矩形の下端） */
+    texts?: number[];
     children?: FakeElement[];
   };
   const read = (value: number | (() => number)) =>
@@ -352,6 +360,20 @@ describe("measureContentHeight", () => {
     doc.body.innerHTML = "";
     doc.body.style.margin = "8px";
     doc.body.style.paddingBottom = "16px";
+    // jsdom の Range は矩形を持たないので、文字ごとに決めた下端を返す
+    const textBottoms = new WeakMap<Node, number>();
+    doc.createRange = () => {
+      let target: Node | null = null;
+      return {
+        selectNodeContents: (node: Node) => {
+          target = node;
+        },
+        getBoundingClientRect: () => {
+          const bottom = target === null ? 0 : (textBottoms.get(target) ?? 0);
+          return new DOMRect(0, bottom - 20, 100, 20);
+        },
+      } as unknown as Range;
+    };
     const build = (spec: FakeElement, topLevel: boolean): HTMLElement => {
       const { bottom, height = 100, position, overflowY, display } = spec;
       const element = doc.createElement("div");
@@ -384,6 +406,11 @@ describe("measureContentHeight", () => {
         configurable: true,
         get: () => height + read(spec.overflow ?? 0),
       });
+      (spec.texts ?? []).forEach((bottom) => {
+        const text = doc.createTextNode("長い文章");
+        textBottoms.set(text, bottom);
+        element.append(text);
+      });
       (spec.children ?? []).forEach((child) =>
         element.append(build(child, false)),
       );
@@ -399,11 +426,9 @@ describe("measureContentHeight", () => {
 
   // body の余白 8・内側の余白 16・body の子要素の余白 4 の分（body の子要素の下端に足される）
   const BODY_AND_CHILD_SPACING = 28;
-  // body の余白 8・内側の余白 16 の分（中へ降りて数えた下端に足される）
-  const BODY_SPACING = 24;
 
-  const measure = (children: FakeElement[]) =>
-    measureContentHeight(setUpDocument(children).doc);
+  const measure = (children: FakeElement[], limit = MAX_MEASURED_ELEMENTS) =>
+    measureContentHeight(setUpDocument(children).doc, limit);
 
   test("[正常系]子要素の下端（下の余白まで）と body の下の余白から測り、iframe より低くても低い高さを返す", () => {
     // 420.2 + 子の余白 4 + body の内側の余白 16 + body の余白 8
@@ -431,7 +456,7 @@ describe("measureContentHeight", () => {
     ).toBe(500 + BODY_AND_CHILD_SPACING);
   });
 
-  test("[正常系]高さを画面に合わせた入れ物（100vh）から中身が下へはみ出すときは、中へ降りてはみ出した中身を数える（入れ物の内側の下の余白は足さない）", () => {
+  test("[正常系]高さを画面に合わせた入れ物（100vh）から中身が下へはみ出すときは、中へ降りてはみ出した中身を数える（入れ物の内側と body の下の余白は足さない）", () => {
     expect(
       measure([
         {
@@ -454,7 +479,17 @@ describe("measureContentHeight", () => {
           ],
         },
       ]),
-    ).toBe(2352 + BODY_SPACING);
+    ).toBe(2352);
+  });
+
+  test("[正常系]body の下の余白は body の子要素の箱の下にだけ足し、箱からはみ出した中身の下には足さない", () => {
+    const tree = (contentBottom: number): FakeElement[] => [
+      { bottom: 784, overflow: 1600, children: [{ bottom: contentBottom }] },
+    ];
+    // はみ出した中身のほうが下
+    expect(measure(tree(2000))).toBe(2000);
+    // はみ出した中身の下端が、箱に余白を足した高さより上なら、箱の下端（余白まで）
+    expect(measure(tree(800))).toBe(784 + BODY_AND_CHILD_SPACING);
   });
 
   test("[正常系]スクロール・切り取りをする入れ物（overflow-y が visible でない）の中身は数えず、入れ物の矩形だけを数える", () => {
@@ -505,7 +540,7 @@ describe("measureContentHeight", () => {
       { bottom: 300, overflow, children: [{ bottom: 900 }] },
     ];
     expect(measure(tree(1))).toBe(300 + BODY_AND_CHILD_SPACING);
-    expect(measure(tree(2))).toBe(900 + BODY_SPACING);
+    expect(measure(tree(2))).toBe(900);
   });
 
   test("[正常系]大きさの無い要素も、中身がはみ出していれば（display: contents も）中へ降りる", () => {
@@ -514,7 +549,7 @@ describe("measureContentHeight", () => {
         { bottom: 300 },
         { bottom: 0, height: 0, overflow: 500, children: [{ bottom: 500 }] },
       ]),
-    ).toBe(500 + BODY_SPACING);
+    ).toBe(500);
     expect(
       measure([
         { bottom: 300 },
@@ -525,7 +560,45 @@ describe("measureContentHeight", () => {
           children: [{ bottom: 600 }],
         },
       ]),
-    ).toBe(600 + BODY_SPACING);
+    ).toBe(600);
+  });
+
+  test("[正常系]100vh の入れ物に文字が直にはみ出すときは、文字の下端を数える（空白だけの文字は数えない）", () => {
+    expect(
+      measure([
+        {
+          bottom: 784,
+          overflow: 6000,
+          children: [{ bottom: 784, overflow: 6000, texts: [7000, 7300] }],
+        },
+      ]),
+    ).toBe(7300);
+  });
+
+  test("[境界値]中へ降りる数が上限に届いたら、それより先へは降りずに低く測る", () => {
+    const tree: FakeElement[] = [
+      {
+        bottom: 784,
+        overflow: 1600,
+        children: [
+          { bottom: 784, overflow: 1600, children: [{ bottom: 2352 }] },
+        ],
+      },
+    ];
+    expect(measure(tree, 2)).toBe(2352);
+    // 入れ物を 1 つ数えたところで尽き、中の 2352 までは降りない
+    expect(measure(tree, 1)).toBe(784 + BODY_AND_CHILD_SPACING);
+  });
+
+  test("[正常系]橋渡しは、撮影と同じ上限（MAX_MEASURED_ELEMENTS）で測る", () => {
+    vi.mocked(measureContentHeight).mockClear();
+    const { send, uninstall } = setUp();
+    send({ type: "hello", interactive: false });
+    expect(measureContentHeight).toHaveBeenCalledWith(
+      expect.anything(),
+      MAX_MEASURED_ELEMENTS,
+    );
+    uninstall();
   });
 
   /** 画面の高さを変えながら、測った高さを decideSize に通す。pageHeight はページ全体の高さ（中身のはみ出しまで） */
@@ -553,7 +626,11 @@ describe("measureContentHeight", () => {
       measure: (force = false) => {
         const decided = decideSize(
           state,
-          { height: measureContentHeight(doc), width: 375, viewport },
+          {
+            height: measureContentHeight(doc, MAX_MEASURED_ELEMENTS),
+            width: 375,
+            viewport,
+          },
           force,
         );
         state = decided.state;
@@ -575,7 +652,7 @@ describe("measureContentHeight", () => {
             {
               bottom: fills,
               overflow,
-              children: [{ bottom: 2400 - BODY_SPACING }],
+              children: [{ bottom: 2400 }],
             },
           ],
         },
@@ -596,7 +673,7 @@ describe("measureContentHeight", () => {
     expect(frame.measure().report).toBeNull();
   });
 
-  test("[異常系]短い中身から絶対配置の要素がはみ出す画面は、iframe の高さが変わっても測った高さが行き来しない", () => {
+  test("[正常系]短い中身から絶対配置の要素がはみ出す画面は、iframe の高さが変わっても測った高さが行き来しない", () => {
     // 中身は 54 まで。絶対配置の要素が 700 から 1016 まで出る（ページの scrollHeight は 1016 まで伸びる）
     const frame = scenario(1016, () => [
       {

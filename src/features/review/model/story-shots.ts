@@ -95,70 +95,115 @@ export const SHOT_ELEMENT_SELECTOR = [
 ].join(", ");
 
 /**
- * 中身の高さ（px）を測る。橋渡し（bridge/bridge-runtime.ts）と撮影（infra/scripts/story-screenshots.ts）が同じ測り方をする。
- * scrollHeight は画面の高さより小さくならないので、中身が縮んでも縮んだと分からない。
- * body の子要素の下端（下の余白まで）の最も下を中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
- * 子要素から中身が下へはみ出している（高さを画面に合わせた入れ物（height: 100vh）の中の長い中身など）ときは、
- * 中へ降りて、はみ出した要素の下端（下の余白まで）も数える。入れ物の内側の下の余白は足さない（スクロールしない入れ物のはみ出しには含まれず、撮った画像（fullPage）の高さとそろう）。
- * どれも矩形で測り、画面の高さによらない
- * （画面の高さで測り方が変わると、知らせた高さを iframe に付けるたびに測った高さが行き来する）。
- * 数えないもの: 画面に固定した要素、子要素の内の絶対配置の要素（その中身も。body の子要素そのものが絶対配置なら、その矩形だけを数える）、
- * スクロール・切り取りをする入れ物（overflow-y が visible でない）の中身（入れ物の矩形だけ）。
- * 測れる子要素が無いときは scrollHeight に戻る。
- * 撮影ではこの関数の文字列をブラウザへ渡すので、外の値を読まない
+ * 中身の高さを測るときに中へ降りる要素（文字を含む）の数の上限。
+ * 測って決めた値ではなく、要素の多い画面で重くしないための目安。尽きたら、それより先へは降りない（低く測る）。
+ * 降りるかどうかは中身のはみ出しで決まり、はみ出しは画面の高さで変わるので、尽きる場所も画面の高さで変わりうる
  */
-export const measureContentHeight = (doc: Document): number => {
+export const MAX_MEASURED_ELEMENTS = 5_000;
+
+/**
+ * 中身の高さ（px）を測る。橋渡し（bridge/bridge-runtime.ts）と撮影（infra/scripts/story-screenshots.ts）が同じ測り方をする
+ * （どちらも上限に MAX_MEASURED_ELEMENTS を渡す）。
+ * scrollHeight は画面の高さより小さくならないので、中身が縮んでも縮んだと分からない。
+ * body の子要素の箱の下端（下の余白まで）に body の下の余白を足したものを中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
+ * 子要素の箱から中身が下へはみ出している（高さを画面に合わせた入れ物（height: 100vh）の中の長い中身など）ときは、
+ * 中へ降りて、はみ出した要素の下端（下の余白まで）と、はみ出した文字の下端も数え、大きい方を中身の高さとする。
+ * はみ出した中身の下には、入れ物の内側の下の余白も body の下の余白も足さない
+ * （Chromium のページの高さ（撮影の fullPage の画像の高さ）でも足されない。手元で測ると、サンプルの Storybook の 100vh の画面で画像の高さと同じになった。
+ * 文字の矩形は行の高さより少し低いので、文字がはみ出す画面では数 px 低くなることがある）。
+ * どれも矩形で測るので、画面の高さが変わっても、同じ中身なら同じ高さになる
+ * （画面の高さで測り方が変わると、知らせた高さを iframe に付けるたびに測った高さが行き来する）。
+ * 数えないもの: 画面に固定した要素、子要素の内の絶対配置の要素（その中身も。body の子要素そのものが絶対配置なら、その箱だけを数える）、
+ * スクロール・切り取りをする入れ物（overflow-y が visible でない）の中身（入れ物の箱だけ）。
+ * 測れる子要素が無いときは scrollHeight に戻る。
+ * 撮影ではこの関数の文字列をブラウザへ渡すので、外の値を読まない（上限は引数で受ける）
+ */
+export const measureContentHeight = (doc: Document, limit: number): number => {
   const body = doc.body;
-  const fallback = () =>
+  const scrollHeightOf = () =>
     Math.max(doc.documentElement.scrollHeight, body?.scrollHeight ?? 0);
-  if (body === null) return fallback();
+  if (body === null) return scrollHeightOf();
   const view = doc.defaultView;
-  if (view === null) return fallback();
+  if (view === null) return scrollHeightOf();
   const px = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
   };
-  // 降りる要素の数の上限（要素の多い画面で重くしない。超えたら、それより先へは降りない）
-  let budget = 5000;
-  /** 要素の下端（下の余白まで。数えなければ 0）。中身が下へはみ出していれば中へ降りる */
-  const bottomOf = (element: Element, topLevel: boolean): number => {
+  let budget = limit;
+  /** 文字の下端（数えなければ 0） */
+  const textBottomOf = (node: Node): number => {
+    if ((node.nodeValue ?? "").trim() === "") return 0;
+    const range = doc.createRange();
+    range.selectNodeContents(node);
+    const rect = range.getBoundingClientRect();
+    return rect.width === 0 && rect.height === 0 ? 0 : rect.bottom;
+  };
+  /** 数える要素なら、その計算済みのスタイル（画面に固定した要素と、子要素の内の絶対配置の要素は数えない） */
+  const styleOf = (element: Element, topLevel: boolean) => {
     const style = view.getComputedStyle(element);
-    if (style.position === "fixed") return 0;
-    const absolute = style.position === "absolute";
-    if (absolute && !topLevel) return 0;
+    if (style.position === "fixed") return null;
+    if (style.position === "absolute" && !topLevel) return null;
+    return style;
+  };
+  /** 要素の箱の下端（下の余白まで。大きさが無ければ 0） */
+  const boxBottomOf = (element: Element, style: CSSStyleDeclaration) => {
     const rect = element.getBoundingClientRect();
-    const own =
-      rect.width === 0 && rect.height === 0
-        ? 0
-        : rect.bottom + px(style.marginBottom);
-    // display: contents は自分の箱を持たないので、大きさによらず中へ降りる
+    return rect.width === 0 && rect.height === 0
+      ? 0
+      : rect.bottom + px(style.marginBottom);
+  };
+  /** 要素の箱から下へはみ出した中身の下端（はみ出していなければ 0）。中へ降りて測る */
+  const overflowBottomOf = (
+    element: Element,
+    style: CSSStyleDeclaration,
+  ): number => {
+    // display: contents は自分の箱を持たないので、大きさによらず中へ降りる。
+    // はみ出しの 1px までは測り方の端数とみなす（bridge/measure.ts の TOLERANCE と同じ幅。端数で降りる・降りないが揺れないように）
     const descend =
-      !absolute &&
+      style.position !== "absolute" &&
       (style.display === "contents" ||
         (style.overflowY === "visible" &&
           element.scrollHeight > element.clientHeight + 1));
-    if (!descend) return own;
-    let inner = 0;
-    for (const child of Array.from(element.children)) {
+    if (!descend) return 0;
+    let bottom = 0;
+    for (const child of Array.from(element.childNodes)) {
+      if (child.nodeType !== 1 && child.nodeType !== 3) continue;
       if (budget <= 0) break;
       budget -= 1;
-      inner = Math.max(inner, bottomOf(child, false));
+      if (child.nodeType === 3) {
+        bottom = Math.max(bottom, textBottomOf(child));
+        continue;
+      }
+      const childElement = child as Element;
+      const childStyle = styleOf(childElement, false);
+      if (childStyle === null) continue;
+      bottom = Math.max(
+        bottom,
+        boxBottomOf(childElement, childStyle),
+        overflowBottomOf(childElement, childStyle),
+      );
     }
-    return Math.max(own, inner);
+    return bottom;
   };
-  let bottom = 0;
+  let boxBottom = 0;
+  let overflowBottom = 0;
   for (const child of Array.from(body.children)) {
-    bottom = Math.max(bottom, bottomOf(child, true));
+    const style = styleOf(child, true);
+    if (style === null) continue;
+    boxBottom = Math.max(boxBottom, boxBottomOf(child, style));
+    overflowBottom = Math.max(overflowBottom, overflowBottomOf(child, style));
   }
-  if (bottom <= 0) return fallback();
+  if (boxBottom <= 0 && overflowBottom <= 0) return scrollHeightOf();
   const bodyStyle = view.getComputedStyle(body);
-  return Math.ceil(
-    bottom +
-      view.scrollY +
-      px(bodyStyle.paddingBottom) +
-      px(bodyStyle.borderBottomWidth) +
-      px(bodyStyle.marginBottom),
-  );
+  // body の下の余白は、body の子要素の箱の下にだけ足す（箱からはみ出した中身の下には、Chromium のページの高さでも足されない）
+  const boxed =
+    boxBottom <= 0
+      ? 0
+      : boxBottom +
+        px(bodyStyle.paddingBottom) +
+        px(bodyStyle.borderBottomWidth) +
+        px(bodyStyle.marginBottom);
+  return Math.ceil(Math.max(boxed, overflowBottom) + view.scrollY);
 };
 
 /**

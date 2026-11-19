@@ -11,6 +11,7 @@ import {
 import {
   collectShotElements,
   isShotPath,
+  MAX_MEASURED_ELEMENTS,
   MAX_SHOT_ELEMENTS,
   MAX_SHOT_HEIGHT,
   measureContentHeight,
@@ -326,7 +327,10 @@ export const withTimeout = async <T>(
 export const SHOT_CONTENT_SCRIPT = `(() => {
   const __name = (fn) => fn;
   return {
-    contentHeight: (${measureContentHeight.toString()})(document),
+    contentHeight: (${measureContentHeight.toString()})(
+      document,
+      ${String(MAX_MEASURED_ELEMENTS)},
+    ),
     elements: (${collectShotElements.toString()})(
       document,
       ${JSON.stringify(SHOT_ELEMENT_SELECTOR)},
