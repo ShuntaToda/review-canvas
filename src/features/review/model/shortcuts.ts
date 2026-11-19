@@ -139,6 +139,54 @@ const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
   "image",
 ]);
 
+/** Space で押せる要素（ボタン・リンク・チェックボックスなど） */
+const SPACE_ACTIVATED_TAGS: ReadonlySet<string> = new Set([
+  "BUTTON",
+  "A",
+  "SUMMARY",
+  "INPUT",
+]);
+const SPACE_ACTIVATED_ROLES: ReadonlySet<string> = new Set([
+  "button",
+  "link",
+  "checkbox",
+  "switch",
+  "radio",
+  "tab",
+  "menuitem",
+  "option",
+]);
+
+/** model は DOM に頼らないので、要素かどうかは形で見る */
+const isElementLike = (
+  target: object,
+): target is { tagName: string; getAttribute: (name: string) => unknown } =>
+  "tagName" in target &&
+  typeof target.tagName === "string" &&
+  "getAttribute" in target &&
+  typeof target.getAttribute === "function";
+
+/**
+ * Space をその要素の操作（押す・選ぶ・文字を打つ）に使うところか。そこでは Space でキャンバスを掴まない
+ * （奪うと、キーボードだけでボタンを押せなくなる）。
+ * ボタンなどは、キーボードで移ってきたフォーカスのときだけ譲る（focusedByPointer。model/focus-origin）。
+ * マウスで押したボタンにはフォーカスが残るので、譲るとキャンバスを押した後も Space で掴めず、そのボタンがもう一度押される
+ */
+export const usesSpaceKey = (
+  target: EventTarget | null,
+  { focusedByPointer }: { focusedByPointer: boolean },
+): boolean => {
+  if (isTypingTarget(target)) return true;
+  if (focusedByPointer || target === null || !isElementLike(target)) {
+    return false;
+  }
+  const role = target.getAttribute("role");
+  return (
+    SPACE_ACTIVATED_TAGS.has(target.tagName) ||
+    (typeof role === "string" && SPACE_ACTIVATED_ROLES.has(role))
+  );
+};
+
 /** 画面に出すショートカットの一覧 */
 export const SHORTCUT_HELP: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "V", label: "移動（ドラッグで動かす）" },

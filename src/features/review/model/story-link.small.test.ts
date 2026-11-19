@@ -17,6 +17,7 @@ describe("storyLinkState", () => {
     branch: "main",
     defaultBranch: "main",
     page: "shop",
+    scope: undefined,
     story: "pages-cart--empty",
     width: 375,
     status: "open",
@@ -31,6 +32,12 @@ describe("storyLinkState", () => {
   test("[正常系]ほかのブランチなら、ブランチを載せる", () => {
     expect(buildSearch(storyLinkState({ ...base, branch: "feature/a" }))).toBe(
       "?branch=feature%2Fa&page=shop&story=pages-cart--empty&width=375",
+    );
+  });
+
+  test("[正常系]見せる範囲で絞っていれば、範囲も載せる（スレッド・コメント一覧の「リンク」と同じ）", () => {
+    expect(buildSearch(storyLinkState({ ...base, scope: "Shop/Order" }))).toBe(
+      "?page=shop&scope=Shop%2FOrder&story=pages-cart--empty&width=375",
     );
   });
 
@@ -49,6 +56,7 @@ describe("storyLinkState", () => {
     const state = storyLinkState({
       ...base,
       branch: "feature/a",
+      scope: "Shop",
       width: 820,
       status: "resolved",
     });
@@ -134,6 +142,7 @@ describe("storyLinkUrl", () => {
           branch: "feature/a",
           defaultBranch: "main",
           page: "shop",
+          scope: undefined,
           story: "pages-cart--empty",
           width: 820,
           status: "all",

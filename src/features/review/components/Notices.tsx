@@ -155,10 +155,13 @@ export const DeletedThreadNotice = ({
  */
 export const NoMatchNotice = ({
   query,
+  componentsOnly,
   changedOnly = false,
   onClear,
 }: {
   query: string;
+  /** ページそのものが部品だけか（見せる範囲で空になったときは、部品だけのページとは言わない） */
+  componentsOnly: boolean;
   /** 「変わった画面だけ」を入れている（文字が空なら、押すとそれを外す） */
   changedOnly?: boolean;
   onClear: () => void;
@@ -170,7 +173,12 @@ export const NoMatchNotice = ({
         trimmed === "" ? "「変わった画面だけ」を外す" : "絞り込みを外す",
       ]
     : trimmed === ""
-      ? ["表示する画面がありません（部品だけのページです）。", "部品も表示する"]
+      ? [
+          componentsOnly
+            ? "表示する画面がありません（部品だけのページです）。"
+            : "絞り込みに合う画面はありません。",
+          "部品も表示する",
+        ]
       : [`「${trimmed}」に当たる画面はありません。`, "絞り込みを外す"];
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">

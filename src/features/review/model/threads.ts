@@ -1,4 +1,5 @@
 import type { StorySource } from "./sources";
+import { isTitleInScope } from "./story-tree";
 import { type Story, storyKey } from "./storybook";
 import type { components } from "@/generated/api-types";
 
@@ -157,12 +158,15 @@ export const filterThreads = (
     status,
     source,
     title,
+    scope,
     stories,
   }: {
     status: StatusFilter;
     source?: StorySource | undefined;
     /** 画面（Storybook のタイトル）。指定したときは、その画面のストーリーのスレッドだけ */
     title?: string | undefined;
+    /** 見せる範囲（フォルダのパス）。指定したときは、その中の画面のストーリーのスレッドだけ（いまの Storybook に無い画面のものは外す） */
+    scope?: string | undefined;
     /** storyKey で引くストーリー */
     stories: ReadonlyMap<string, Story>;
   },
@@ -172,7 +176,12 @@ export const filterThreads = (
       (status === "all" || root.status === status) &&
       (source === undefined || root.source === source) &&
       (title === undefined ||
-        stories.get(storyKey(root.source, root.storyId))?.title === title),
+        stories.get(storyKey(root.source, root.storyId))?.title === title) &&
+      (scope === undefined ||
+        isTitleInScope(
+          stories.get(storyKey(root.source, root.storyId))?.title ?? "",
+          scope,
+        )),
   );
 
 /**

@@ -4,6 +4,7 @@ import {
   isImeComposing,
   isTypingTarget,
   resolveShortcut,
+  usesSpaceKey,
 } from "./shortcuts";
 
 const key = (
@@ -110,5 +111,47 @@ describe("isImeComposing", () => {
     [{ isComposing: false, keyCode: 27 }, false],
   ])("[正常系]%o は %s", (event, expected) => {
     expect(isImeComposing(event)).toBe(expected);
+  });
+});
+
+describe("usesSpaceKey", () => {
+  const element = (tagName: string, attributes: Record<string, string> = {}) =>
+    ({
+      tagName,
+      isContentEditable: false,
+      getAttribute: (name: string) => attributes[name] ?? null,
+    }) as unknown as EventTarget;
+  const keyboard = { focusedByPointer: false };
+  const pointer = { focusedByPointer: true };
+
+  test("[正常系]キーボードで移ってきたボタン・リンク・押せる役の要素と、入力欄は Space を使う", () => {
+    expect(usesSpaceKey(element("BUTTON"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("A"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("SUMMARY"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("TEXTAREA"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("DIV", { role: "button" }), keyboard)).toBe(
+      true,
+    );
+  });
+
+  test("[正常系]ポインタで押してフォーカスが残ったボタンでは Space を使わない（掴んで動かす）。文字を打つ欄は使う", () => {
+    expect(usesSpaceKey(element("BUTTON"), pointer)).toBe(false);
+    expect(usesSpaceKey(element("DIV", { role: "button" }), pointer)).toBe(
+      false,
+    );
+    expect(usesSpaceKey(element("TEXTAREA"), pointer)).toBe(true);
+  });
+
+  test("[正常系]キャンバス・何も無い所・要素の形でない値は Space を使わない（掴んで動かす）", () => {
+    expect(usesSpaceKey(element("DIV"), keyboard)).toBe(false);
+    expect(usesSpaceKey(element("BODY"), keyboard)).toBe(false);
+    expect(usesSpaceKey(element("DIV", { role: "region" }), keyboard)).toBe(
+      false,
+    );
+    expect(usesSpaceKey(null, keyboard)).toBe(false);
+    expect(usesSpaceKey({} as EventTarget, keyboard)).toBe(false);
+    expect(
+      usesSpaceKey({ tagName: "BUTTON" } as unknown as EventTarget, keyboard),
+    ).toBe(false);
   });
 });
