@@ -10,7 +10,7 @@ import {
   widthOptions,
 } from "../model/custom-widths";
 import type { SourceCatalog, StorySource } from "../model/sources";
-import { resolveLinkWidth } from "../model/story-link";
+import { type LinkWidth, resolveLinkWidth } from "../model/story-link";
 import { useLocalSetting } from "./useLocalSetting";
 
 /**
@@ -20,7 +20,7 @@ import { useLocalSetting } from "./useLocalSetting";
  */
 export const useCustomWidths = (
   sources: SourceCatalog,
-  link?: { source: string; width: number | null | undefined },
+  link?: LinkWidth,
 ): {
   /** ページのいまの幅（リンクの幅を重ねていればその幅。覚えていなければ既定） */
   widthOf: (source: StorySource) => number;

@@ -239,10 +239,12 @@ export const ReviewWorkspace = ({
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
       // ?story= のリンクで開いた画面（寄せ終えたら枠で示す）
-      highlightStoryId: linkHighlightStory(initialUrl, story?.id, {
-        by: openedBy,
-        navigationType: readNavigationType(),
-      }),
+      highlightStoryId: linkHighlightStory(
+        initialUrl,
+        story?.id,
+        openedBy,
+        readNavigationType(),
+      ),
     };
   });
 

@@ -82,10 +82,12 @@ describe("resolveLinkWidth", () => {
 describe("linkHighlightStory", () => {
   test("[正常系]?story= のリンクで、その画面があれば枠で示す", () => {
     expect(
-      linkHighlightStory({ page: "shop", story: "a--b" }, "a--b", {
-        by: "url",
-        navigationType: "navigate",
-      }),
+      linkHighlightStory(
+        { page: "shop", story: "a--b" },
+        "a--b",
+        "url",
+        "navigate",
+      ),
     ).toBe("a--b");
   });
 
@@ -94,29 +96,31 @@ describe("linkHighlightStory", () => {
       linkHighlightStory(
         { page: "shop", story: "a--b", comment: "01" },
         "a--b",
-        { by: "url", navigationType: "navigate" },
+        "url",
+        "navigate",
       ),
     ).toBeNull();
     expect(
-      linkHighlightStory({ page: "shop", comment: "01" }, "a--b", {
-        by: "url",
-        navigationType: "navigate",
-      }),
+      linkHighlightStory(
+        { page: "shop", comment: "01" },
+        "a--b",
+        "url",
+        "navigate",
+      ),
     ).toBeNull();
   });
 
   test("[境界値]画面が見つからない・?story= の無いリンクでは示さない", () => {
     expect(
-      linkHighlightStory({ page: "shop", story: "x--y" }, undefined, {
-        by: "url",
-        navigationType: "navigate",
-      }),
+      linkHighlightStory(
+        { page: "shop", story: "x--y" },
+        undefined,
+        "url",
+        "navigate",
+      ),
     ).toBeNull();
     expect(
-      linkHighlightStory({ page: "shop" }, undefined, {
-        by: "url",
-        navigationType: "navigate",
-      }),
+      linkHighlightStory({ page: "shop" }, undefined, "url", "navigate"),
     ).toBeNull();
   });
 });
@@ -179,27 +183,22 @@ describe("linkHighlightStory の開き方", () => {
   test.each([["reload"], ["back_forward"]] as const)(
     "[正常系]再読み込み・戻る／進む（%s）では示さない（アドレスの欄がいつも ?story= を持つため）",
     (navigationType) => {
-      expect(
-        linkHighlightStory(url, "a--b", { by: "url", navigationType }),
-      ).toBeNull();
+      expect(linkHighlightStory(url, "a--b", "url", navigationType)).toBeNull();
     },
   );
 
   test.each([["navigate"], [undefined]] as const)(
     "[正常系]新しく開いた・開き方が読めない（%s）なら示す",
     (navigationType) => {
-      expect(
-        linkHighlightStory(url, "a--b", { by: "url", navigationType }),
-      ).toBe("a--b");
+      expect(linkHighlightStory(url, "a--b", "url", navigationType)).toBe(
+        "a--b",
+      );
     },
   );
 
   test("[正常系]ブランチを切り替えて作り直したときは、真ん中に見えていた画面が story にあっても示さない", () => {
     expect(
-      linkHighlightStory(url, "a--b", {
-        by: "branch-switch",
-        navigationType: "navigate",
-      }),
+      linkHighlightStory(url, "a--b", "branch-switch", "navigate"),
     ).toBeNull();
   });
 });

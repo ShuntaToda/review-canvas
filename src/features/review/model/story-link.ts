@@ -58,14 +58,14 @@ export const resolveLinkWidth = (
 };
 
 /**
- * ?story= のリンクで開いたときに寄せる点（画面の左上から）。横はリンクの幅（選べる幅のとき）の真ん中、
+ * ?story= のリンクで開いたときに寄せる点（画面の左上から）。横は openedLinkWidth（リンクの幅で開いた幅。選べない幅なら既定の幅）の真ん中、
  * それ以外（幅が無い・選べない・数でない）は、いままでどおりページの既定の幅の真ん中。縦は画面の上の方
  */
 export const storyLinkFocusPoint = (
-  linkWidth: number | undefined,
+  openedLinkWidth: number | undefined,
   defaultWidth: number,
 ): { x: number; y: number } => ({
-  x: (linkWidth ?? defaultWidth) / 2,
+  x: (openedLinkWidth ?? defaultWidth) / 2,
   y: 300,
 });
 
@@ -75,14 +75,17 @@ export const storyLinkFocusPoint = (
  */
 export type WorkspaceOpening = "url" | "branch-switch";
 
+/** リンクの幅（?width=）と、それを当てるページ（width は URL の値のまま。数でなければ null、無ければ undefined） */
+export type LinkWidth = { source: string; width: number | null | undefined };
+
 /**
  * リンクの幅（?width=）を当てるページと幅。URL から開いた最初の 1 回だけ（ブランチを切り替えたら、覚えた幅に戻す）
  */
 export const linkWidthToApply = (
   url: UrlState,
-  opening: WorkspaceOpening,
-): { source: string; width: number | null | undefined } | undefined =>
-  opening === "url" && url.page !== undefined
+  openedBy: WorkspaceOpening,
+): LinkWidth | undefined =>
+  openedBy === "url" && url.page !== undefined
     ? { source: url.page, width: url.width }
     : undefined;
 
@@ -94,14 +97,11 @@ export const linkWidthToApply = (
 export const linkHighlightStory = (
   url: UrlState,
   foundStoryId: string | undefined,
-  opening: {
-    by: WorkspaceOpening;
-    navigationType: NavigationTimingType | undefined;
-  },
+  openedBy: WorkspaceOpening,
+  navigationType: NavigationTimingType | undefined,
 ): string | null =>
-  opening.by === "url" &&
-  (opening.navigationType === undefined ||
-    opening.navigationType === "navigate") &&
+  openedBy === "url" &&
+  (navigationType === undefined || navigationType === "navigate") &&
   url.comment === undefined &&
   url.story !== undefined
     ? (foundStoryId ?? null)
