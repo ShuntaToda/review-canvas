@@ -23,6 +23,20 @@ export const Default: Story = {
     msw: {
       handlers: [http.get("/api/products", () => HttpResponse.json(products))],
     },
+    // キャンバスで、ボタンから行き先の画面へつなぐ（同じ文言のボタンが並ぶので、見出しで絞る）
+    reviewCanvas: {
+      transitions: [
+        {
+          from: {
+            role: "button",
+            name: "カートに入れる",
+            heading: "木のマグカップ",
+          },
+          to: "shop-orderform--default",
+          label: "在庫があるとき",
+        },
+      ],
+    },
   },
 };
 

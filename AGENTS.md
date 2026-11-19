@@ -86,6 +86,7 @@ pnpm run test:small      # 外につながないテストだけ（Docker なし�
 pnpm run docker:up       # medium テストの DynamoDB Local
 pnpm run test:coverage   # すべてのテストと、層ごとのカバレッジの下限
 pnpm run openapi:check
+pnpm --dir infra exec playwright install chromium   # infra:test の撮影のテストが使う（docs/development.md「検証」）
 pnpm run infra:validate && pnpm run infra:test
 pnpm run build && pnpm run build:bridge && pnpm run build:deployed && pnpm run check:deployed-bundle
 ```

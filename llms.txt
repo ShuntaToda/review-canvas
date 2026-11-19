@@ -28,7 +28,7 @@ Issue で仕様を決める → 実装 → 多視点レビュー → PR の順�
 ## 使う
 
 - [README.md](README.md): しくみ・手元で試す・できること
-- [docs/host-setup.md](docs/host-setup.md): 使う側のリポジトリでの準備（設定ファイル・CLI・ワークフロー・CDK に組み込む）
+- [docs/host-setup.md](docs/host-setup.md): 使う側のリポジトリでの準備（設定ファイル・ストーリーに遷移を書く・CLI・ワークフロー・CDK に組み込む）
 - [review-canvas.config.schema.json](review-canvas.config.schema.json): 設定ファイル（`review-canvas.config.json`）の JSON Schema（項目の説明と例つき。生成物）
 - [docs/deploy.md](docs/deploy.md): AWS へ出す・片付ける
 - [docs/auth0.md](docs/auth0.md): Auth0 の設定・AI が呼ぶための M2M の client

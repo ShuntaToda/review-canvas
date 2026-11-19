@@ -6,6 +6,7 @@ import {
   MAX_MEASURED_NODES,
   measureContentHeight,
 } from "../../src/features/review/model/story-shots";
+import { shotDirs } from "../scripts/branch-storybooks";
 import {
   browserEnv,
   createCaptureGuard,
@@ -267,6 +268,19 @@ describe("withTimeout", () => {
     ).catch((reason: unknown) => reason);
     expect(error).toMatchObject({ name: "TimeoutError" });
   });
+
+  test("残りの時間で打ち切るときも、知らせには上限の秒数を出す", async () => {
+    const error: unknown = await withTimeout(
+      new Promise(() => undefined),
+      10,
+      "遷移のボタン探し",
+      30_000,
+    ).catch((reason: unknown) => reason);
+    expect(error).toMatchObject({
+      name: "TimeoutError",
+      message: "遷移のボタン探しが 30 秒で終わりませんでした",
+    });
+  });
 });
 
 describe("withContent・SHOT_CONTENT_SCRIPT", () => {
@@ -466,6 +480,76 @@ describe("stageShots", () => {
       version: 1,
       shots: [withFile, withoutThumb],
       playFunctions: {},
+    });
+  });
+
+  test("撮らずに置くとき（--skip-screenshots・--shots-root）も、確かめ直した遷移とボタンの矩形を置く（形の違う行だけを捨てる）", () => {
+    const repoRoot = path.join(root, "repo");
+    const shotsRoot = path.join(root, "shots-root");
+    const outDirs = shotDirs(
+      { shop: path.join(repoRoot, "apps/shop/storybook-static") },
+      repoRoot,
+      shotsRoot,
+    );
+    const dir = outDirs["shop"] ?? "";
+    expect(dir).toBe(path.join(shotsRoot, "apps/shop/storybook-static"));
+    fs.mkdirSync(path.join(dir, "review-canvas-shots"), { recursive: true });
+    const file =
+      "review-canvas-shots/shop-list--default-375-0123456789abcdef.png";
+    fs.writeFileSync(path.join(dir, file), pngHead(375, 812));
+    const rect = { index: 0, x: 16, y: 200, width: 120, height: 40 };
+    fs.writeFileSync(
+      path.join(dir, "review-canvas-shots.json"),
+      JSON.stringify({
+        version: 1,
+        shots: [
+          {
+            storyId: "shop-list--default",
+            width: 375,
+            height: 812,
+            path: file,
+            transitions: [
+              rect,
+              // 画像の外・行の無い位置は捨てる
+              { index: 2, x: 16, y: 800, width: 120, height: 40 },
+              { index: 9, x: 16, y: 100, width: 120, height: 40 },
+            ],
+          },
+        ],
+        playFunctions: {},
+        transitions: {
+          "shop-list--default": [
+            { index: 0, to: "shop-form--default", label: "在庫があるとき" },
+            { index: 1, to: "https://example.com/" },
+            { index: 2, to: "shop-form--filled" },
+          ],
+        },
+      }),
+    );
+    const outDir = fs.mkdtempSync(path.join(root, "out-"));
+
+    const staged = stageShots({ dirs: outDirs, outDir });
+
+    expect(
+      JSON.parse(fs.readFileSync(staged["shop"]?.manifestFile ?? "", "utf8")),
+    ).toStrictEqual({
+      version: 1,
+      shots: [
+        {
+          storyId: "shop-list--default",
+          width: 375,
+          height: 812,
+          path: file,
+          transitions: [rect],
+        },
+      ],
+      playFunctions: {},
+      transitions: {
+        "shop-list--default": [
+          { index: 0, to: "shop-form--default", label: "在庫があるとき" },
+          { index: 2, to: "shop-form--filled" },
+        ],
+      },
     });
   });
 });

@@ -67,6 +67,7 @@ export const OrderForm = () => {
           ))}
           {sent && <p role="status">ご注文を受け付けました（サンプル）</p>}
           <Button type="submit">注文する</Button>
+          {sent && <Button>買い物を続ける</Button>}
         </form>
       </main>
       {/* 画面の高さに合わせて伸びる下の帯（100vh の画面の高さの測り方を試す） */}
