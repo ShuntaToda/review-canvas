@@ -1,31 +1,26 @@
 import { useEffect, useRef } from "react";
-import { nextFocusedByPointer } from "../model/focus-origin";
+import { INITIAL_FOCUS_ORIGIN, nextFocusOrigin } from "../model/focus-origin";
 
 /**
  * いまのフォーカスがポインタで押して移ったものかを覚え、読む関数を返す（model/focus-origin）。
- * ほかのキーの処理より先に見るよう、捕捉（capture）で聞く
+ * ピン・ミニマップ・画面の枠などが pointerdown の伝播を止めるので、届く前（捕捉）で聞く。
+ * keydown・focusin も、ほかの処理（Space の処理・フォーカスを移す処理）より先に覚えを更新するよう、捕捉で聞く
  */
 export const useFocusedByPointer = (): (() => boolean) => {
-  const focusedByPointer = useRef(false);
+  const origin = useRef(INITIAL_FOCUS_ORIGIN);
   useEffect(() => {
-    const handlePointerDown = () => {
-      focusedByPointer.current = nextFocusedByPointer(
-        focusedByPointer.current,
-        { type: "pointerdown" },
-      );
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      focusedByPointer.current = nextFocusedByPointer(
-        focusedByPointer.current,
-        { type: "keydown", key: event.key },
-      );
-    };
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("keydown", handleKeyDown, true);
+    const listeners = (["pointerdown", "keydown", "focusin"] as const).map(
+      (type) => {
+        const listener = () => {
+          origin.current = nextFocusOrigin(origin.current, type);
+        };
+        window.addEventListener(type, listener, true);
+        return () => window.removeEventListener(type, listener, true);
+      },
+    );
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("keydown", handleKeyDown, true);
+      for (const remove of listeners) remove();
     };
   }, []);
-  return () => focusedByPointer.current;
+  return () => origin.current.focusedByPointer;
 };

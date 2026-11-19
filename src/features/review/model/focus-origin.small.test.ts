@@ -1,24 +1,37 @@
-import { isFocusVisible, nextFocusedByPointer } from "./focus-origin";
+import {
+  type FocusOrigin,
+  INITIAL_FOCUS_ORIGIN,
+  isFocusVisible,
+  nextFocusOrigin,
+} from "./focus-origin";
 
-describe("nextFocusedByPointer", () => {
-  test("[正常系]ポインタで押したら、ポインタで移ったフォーカスとして覚える", () => {
-    expect(nextFocusedByPointer(false, { type: "pointerdown" })).toBe(true);
+const run = (
+  events: ReadonlyArray<"pointerdown" | "keydown" | "focusin">,
+  start: FocusOrigin = INITIAL_FOCUS_ORIGIN,
+): boolean => events.reduce(nextFocusOrigin, start).focusedByPointer;
+
+describe("nextFocusOrigin", () => {
+  test("[正常系]はじめはキーボードとみなす", () => {
+    expect(run([])).toBe(false);
   });
 
-  test.each(["Tab", "Enter", "ArrowDown", "a"])(
-    "[正常系]%j を押したら、キーボードで操作したとして外す",
-    (key) => {
-      expect(nextFocusedByPointer(true, { type: "keydown", key })).toBe(false);
-    },
-  );
+  test("[正常系]ポインタで押して移ったフォーカスは、フォーカスを動かさないキーを押してもポインタのまま", () => {
+    expect(run(["pointerdown", "focusin"])).toBe(true);
+    expect(run(["pointerdown", "focusin", "keydown", "keydown"])).toBe(true);
+  });
 
-  test.each([" ", "Shift", "Control", "Alt", "Meta"])(
-    "[境界値]%j は掴む操作・修飾キーなので、覚えた値を変えない",
-    (key) => {
-      expect(nextFocusedByPointer(true, { type: "keydown", key })).toBe(true);
-      expect(nextFocusedByPointer(false, { type: "keydown", key })).toBe(false);
-    },
-  );
+  test("[正常系]キーで移ったフォーカス（Tab など）はキーボード。先にポインタで押していても同じ", () => {
+    expect(run(["pointerdown", "focusin", "keydown", "focusin"])).toBe(false);
+  });
+
+  test("[正常系]ポインタで押した後にプログラムで移したフォーカスはポインタ、キーで押した後ならキーボード", () => {
+    expect(run(["pointerdown", "focusin", "focusin"])).toBe(true);
+    expect(run(["keydown", "focusin"])).toBe(false);
+  });
+
+  test("[境界値]すでにフォーカスのある要素をポインタで押す（focusin が来ない）と、ポインタとみなす", () => {
+    expect(run(["keydown", "focusin", "pointerdown"])).toBe(true);
+  });
 });
 
 describe("isFocusVisible", () => {

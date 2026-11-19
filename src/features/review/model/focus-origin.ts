@@ -2,32 +2,44 @@
  * フォーカスがポインタ（マウス・タッチ）で移ったか、キーボードで移ったか。
  * Space をボタンに譲るか（押す）・キャンバスを掴むかを決めるのに使う。Chromium は、マウスでフォーカスした要素でも
  * キーを押すと keydown を配る前に :focus-visible に合う状態へ切り替えるので、keydown の時点の :focus-visible では見分けられない。
- * そのため、フォーカスが移った時の手段を覚えておく
+ * そのため、フォーカスが移った時に、直前の入力（ポインタかキーか）で決めて覚えておく。
+ * isFocusVisible は、フォーカスが移った時点で読むもの（ピンの枠を、キーボードで移ってきたときだけ出す）
  */
+export type FocusOrigin = {
+  /** 直前の入力 */
+  lastInput: "pointer" | "keyboard";
+  /** いまのフォーカスがポインタで押して移ったものか */
+  focusedByPointer: boolean;
+};
 
-/** 押しても「キーボードで操作した」ことにしないキー（Space は掴む操作そのもの。修飾キーは Space と一緒に押されうる） */
-const KEYS_KEEPING_ORIGIN: ReadonlySet<string> = new Set([
-  " ",
-  "Shift",
-  "Control",
-  "Alt",
-  "Meta",
-]);
-
-/**
- * いまのフォーカスがポインタで押して移ったものか（true）を、イベントごとに更新する。
- * ポインタで押したら true、Tab など（Space・修飾キー以外）のキーを押したら false。はじめは false（キーボードとみなす）
- */
-export const nextFocusedByPointer = (
-  current: boolean,
-  event: { type: "pointerdown" } | { type: "keydown"; key: string },
-): boolean => {
-  if (event.type === "pointerdown") return true;
-  return KEYS_KEEPING_ORIGIN.has(event.key) ? current : false;
+/** はじめはキーボードとみなす */
+export const INITIAL_FOCUS_ORIGIN: FocusOrigin = {
+  lastInput: "keyboard",
+  focusedByPointer: false,
 };
 
 /**
- * キーボードで移ってきたフォーカスか（フォーカスが移った時に読む。:focus-visible を読めない環境では、そうとみなす）
+ * イベントごとに更新する。
+ * - pointerdown: ポインタで押した（押した要素にすでにフォーカスがあって focusin が来なくても、ポインタで操作しているとみなす）
+ * - keydown: 直前の入力をキーにするだけ。フォーカスを動かさないショートカット（-・]・Esc など）では、いまのフォーカスの手段を変えない
+ * - focusin: フォーカスが移った。直前の入力で手段を決める（ポインタで押した後にプログラムで移した先も、ポインタ由来）
+ */
+export const nextFocusOrigin = (
+  current: FocusOrigin,
+  event: "pointerdown" | "keydown" | "focusin",
+): FocusOrigin => {
+  switch (event) {
+    case "pointerdown":
+      return { lastInput: "pointer", focusedByPointer: true };
+    case "keydown":
+      return { ...current, lastInput: "keyboard" };
+    case "focusin":
+      return { ...current, focusedByPointer: current.lastInput === "pointer" };
+  }
+};
+
+/**
+ * キーボードで移ってきたフォーカスか（:focus-visible を読めない環境では、そうとみなす）
  */
 export const isFocusVisible = (element: {
   matches: (selector: string) => boolean;

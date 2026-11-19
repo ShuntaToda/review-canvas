@@ -325,37 +325,23 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     expect(within(storyList()).getByText("表示: Shop")).not.toBeNull();
   });
 
-  /**
-   * Chromium の順を写す: マウスで押してフォーカスした時は :focus-visible に合わず、キーを押すと keydown を配る前に合う状態へ切り替わる。
-   * jsdom はキーボードかを見分けないので、そのボタンの matches(":focus-visible") を、この順に差し替える
-   */
-  const chromiumFocusVisible = (button: HTMLElement) => {
-    const original = button.matches.bind(button);
-    let visible = false;
-    const flip = () => {
-      visible = true;
-    };
-    button.addEventListener("keydown", flip, true);
-    vi.spyOn(button, "matches").mockImplementation((selector) =>
-      selector === ":focus-visible" ? visible : original(selector),
-    );
-  };
-
   // jsdom は Space でボタンを押さないので、押されないこと（掴むこと）は、既定の動作を止めたか（fireEvent が false を返す）で確かめる
-  test("[正常系]マウスで押したボタンにフォーカスが残っていても、Space はボタンを押さずにキャンバスを掴む", () => {
+  test("[正常系]マウスで押したボタンにフォーカスが残っていても、ショートカットを打った後でも、Space はボタンを押さずにキャンバスを掴む", () => {
     open("?page=shop");
     const zoomIn = screen.getByRole("button", { name: "拡大" });
     const folder = within(storyList()).getByRole("button", { name: "Shop" });
     for (const button of [zoomIn, folder]) {
-      chromiumFocusVisible(button);
       fireEvent.pointerDown(button);
       button.focus();
       fireEvent.click(button);
 
       expect(fireEvent.keyDown(button, { key: " " })).toBe(false);
       fireEvent.keyUp(button, { key: " " });
-      // 修飾キーと一緒に押しても同じ
-      fireEvent.keyDown(button, { key: "Shift" });
+      // フォーカスを動かさないショートカットを打った後も、修飾キーと一緒に押しても同じ
+      for (const key of ["-", "]", "Escape", "Shift"]) {
+        fireEvent.keyDown(button, { key });
+        fireEvent.keyUp(button, { key });
+      }
       expect(fireEvent.keyDown(button, { key: " ", shiftKey: true })).toBe(
         false,
       );
@@ -373,7 +359,6 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     fireEvent.pointerDown(folder);
 
     for (const button of [folder, only]) {
-      chromiumFocusVisible(button);
       fireEvent.keyDown(document.activeElement ?? document.body, {
         key: "Tab",
       });
