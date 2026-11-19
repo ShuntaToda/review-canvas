@@ -183,7 +183,7 @@ jobs:
                 exit 1
               fi
             done
-          # ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を、ビルドした Storybook でも読み、どの幅でもボタンが見つかる（遷移を書いているのはサンプルのショップ）
+          # ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を、ビルドした Storybook でも読み、どの幅でもボタンが見つかる（サンプルのショップは使う側の書き方の見本なので、ここではサンプルだけを見る。app の遷移は下の Check app Storybook（--require-shots）が行ごとに確かめる）
           out=examples/sample-storybook/storybook-static
           missing="$(jq '(.transitions // {} | keys) as $ids | [.shots[] | select(.storyId as $s | $ids | index($s)) | select((.transitions // []) | length == 0)] | length' "$out/review-canvas-shots.json")"
           stories_with_transitions="$(jq '.transitions // {} | length' "$out/review-canvas-shots.json")"
@@ -195,7 +195,7 @@ jobs:
       # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
       # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）。
       # ストーリーに書いた遷移が、上の Screenshots で撮った目録にすべて残り、どの幅でもボタンが見つかり、行き先があることも確かめる（目録が無ければ落とす）
-      # 上限は、スクリプト全体の締め切り（6 分。CHECK_TIME_LIMIT_MS）と、最後の 1 本の上限（開くのと描くのを 30 秒ずつ待つ）に、ブラウザを立ち上げる分を足したもの
+      # 上限は、スクリプト全体の締め切り（6 分。CHECK_TIME_LIMIT_MS）と、締め切りの前に始めた最後の 1 本（1 本ずつの確かめか、設定を持ち越さないことの確かめ。開くのと描くのを 30 秒ずつ待つ）に、ブラウザを立ち上げる分を足したもの
       - name: Check app Storybook
         timeout-minutes: 8
         run: pnpm run check:storybook:app --require-shots

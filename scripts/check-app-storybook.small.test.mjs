@@ -8,6 +8,7 @@ import {
   APP_STORY_IDS,
   checkStoryIndex,
   checkStoryTransitions,
+  manifestShapeProblem,
   isOutsideDocument,
 } from "./check-app-storybook.mjs";
 
@@ -89,6 +90,7 @@ describe("isOutsideDocument", () => {
 
 describe("checkStoryTransitions", () => {
   const storyIds = ["a--one", "b--two"];
+  const widths = [1280, 1440];
   const shot = (storyId, width, indexes) => ({
     storyId,
     width,
@@ -116,6 +118,7 @@ describe("checkStoryTransitions", () => {
         writtenCounts: { "a--one": 2, "b--two": 0 },
         manifest,
         storyIds,
+        widths,
       }),
     ).toStrictEqual([]);
   });
@@ -126,6 +129,7 @@ describe("checkStoryTransitions", () => {
         writtenCounts: { "a--one": 3 },
         manifest,
         storyIds,
+        widths,
       }),
     ).toStrictEqual([
       "a--one: 書いた遷移は 3 行ですが、目録には 2 行しかありません",
@@ -141,6 +145,7 @@ describe("checkStoryTransitions", () => {
           shots: [shot("a--one", 1280, [0, 1]), shot("a--one", 1440, [0])],
         },
         storyIds,
+        widths,
       }),
     ).toStrictEqual([
       "a--one（幅 1440）の 2 行目: 遷移のボタンが見つかりません",
@@ -153,9 +158,65 @@ describe("checkStoryTransitions", () => {
         writtenCounts: { "a--one": 2 },
         manifest,
         storyIds: ["a--one"],
+        widths,
       }),
     ).toStrictEqual([
       "a--one の 1 行目: 行き先のストーリー b--two が一覧にありません",
     ]);
+  });
+
+  it("設定の幅の画像が目録に無い、遷移のあるストーリーを挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest: { ...manifest, shots: [shot("a--one", 1280, [0, 1])] },
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "a--one（幅 1440）: 目録に画像がありません（遷移のボタンを確かめられません）",
+    ]);
+  });
+
+  it("transitions が並びでないストーリーを挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "b--two": null },
+        manifest,
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "b--two: parameters.reviewCanvas.transitions が並び（配列）ではありません",
+    ]);
+  });
+});
+
+describe("manifestShapeProblem", () => {
+  it("読む形がそろっていれば null（transitions が無い目録も）", () => {
+    expect(
+      manifestShapeProblem({
+        shots: [{ storyId: "a--one", width: 1280 }],
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [null, "目録が JSON のオブジェクトではありません"],
+    [{ shots: {} }, "shots が並びではありません"],
+    [
+      { shots: [], transitions: [] },
+      "transitions がオブジェクトではありません",
+    ],
+    [
+      { shots: [], transitions: { "a--one": [{ index: "0", to: "b--two" }] } },
+      "transitions の a--one の行の形が違います",
+    ],
+    [
+      { shots: [{ storyId: "a--one", width: 1280, transitions: {} }] },
+      "shots の行の形が違います",
+    ],
+  ])("%j → %s", (manifest, problem) => {
+    expect(manifestShapeProblem(manifest)).toBe(problem);
   });
 });

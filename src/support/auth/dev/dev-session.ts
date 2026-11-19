@@ -1,5 +1,6 @@
 import {
   readLocalStorage,
+  removeLocalStorage,
   writeLocalStorage,
 } from "@/support/storage/local-storage";
 
@@ -35,11 +36,7 @@ export const writeDevSession = (name: string): void => {
 };
 
 export const clearDevSession = (): void => {
-  try {
-    window.localStorage.removeItem(DEV_SESSION_STORAGE_KEY);
-  } catch {
-    // 使えない環境では置かれてもいない
-  }
+  removeLocalStorage(DEV_SESSION_STORAGE_KEY);
 };
 
 /** 擬似ログインの画面の名前の初期値（名前を決めるダイアログで決めた名前があればそれ） */

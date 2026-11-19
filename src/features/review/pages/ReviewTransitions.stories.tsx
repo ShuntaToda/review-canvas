@@ -6,7 +6,9 @@ import { reviewHandlers } from "../stories/story-handlers";
 import {
   settle,
   waitForButton,
-  waitForIframeFrames,
+  scrollCanvas,
+  waitForFramesWithoutShots,
+  waitForLiveFrame,
   waitForShot,
   waitForText,
 } from "../stories/story-play";
@@ -16,6 +18,18 @@ const FILLED_LABEL = "入力したとき → Shop/OrderForm／Filled";
 const VALIDATION_LABEL =
   "入力が足りないとき → Shop/OrderForm／Validation Error";
 const AFTER_ORDER_LABEL = "注文を受け付けた後 → Shop/ProductList／Default";
+
+/** 幅 768px で、選んだ画面（Shop/OrderForm／Default）のまわりの読み込む範囲に入る画面 */
+const SHOWN_AT_768: [string, ...string[]] = [
+  "shop-productlist--default",
+  "shop-productlist--empty",
+  "shop-orderform--default",
+  "shop-orderform--filled",
+];
+
+/** 下の段の画面と、読み込む範囲に入れるために動かす量(px) */
+const ADMIN_ORDERS = "shop-adminorders--default";
+const ADMIN_ORDERS_SCROLL = 400;
 
 /** 上の帯の「画面のつながり」（名前は「画面のつながり: <いまの出し方>」） */
 const PICKER_NAME = /^画面のつながり/;
@@ -53,10 +67,12 @@ export const Selected: Story = {
       ],
     },
   },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
     await waitForButton(canvas, FILLED_LABEL);
     await waitForButton(canvas, VALIDATION_LABEL);
+    // 選んだ画面は動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
+    await waitForLiveFrame(canvasElement, "shop-orderform--default");
     await settle();
   },
 };
@@ -77,12 +93,14 @@ export const All: Story = {
       ],
     },
   },
-  play: async ({ canvas, userEvent }) => {
+  play: async ({ canvas, canvasElement, userEvent }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
     await userEvent.click(await waitForButton(canvas, PICKER_NAME));
     const all = canvas.getByRole("radio", { name: "すべて" });
     await userEvent.click(all);
     await expect(all).toBeChecked();
+    // 選んだ画面は動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
+    await waitForLiveFrame(canvasElement, "shop-orderform--default");
     await settle();
   },
 };
@@ -101,11 +119,20 @@ export const Jumped: Story = {
       ],
     },
   },
-  play: async ({ canvas, userEvent }) => {
+  play: async ({ canvas, canvasElement, userEvent }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
     await userEvent.click(await waitForButton(canvas, FILLED_LABEL));
-    await waitForButton(canvas, "Shop/OrderForm／Defaultへ戻る");
+    const back = await waitForButton(canvas, "Shop/OrderForm／Defaultへ戻る");
     await waitForButton(canvas, AFTER_ORDER_LABEL);
+    // 飛ぶ前に選んでいた画面と行き先は、動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
+    await waitForLiveFrame(
+      canvasElement,
+      "shop-orderform--default",
+      "shop-orderform--filled",
+    );
+    // 動く画面が読み込みのあいだにフォーカスを取ることがあるので、飛んだ後のフォーカスの先（「戻る」）に置き直して撮る
+    back.focus();
+    await expect(back).toHaveFocus();
     await settle();
   },
 };
@@ -114,7 +141,7 @@ export const Jumped: Story = {
 export const ReachableOnly: Story = {
   name: "つながる画面だけ",
   parameters: { reviewUrl: "?story=shop-productlist--default" },
-  play: async ({ canvas, userEvent }) => {
+  play: async ({ canvas, canvasElement, userEvent }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
     const picker = await waitForButton(canvas, PICKER_NAME);
     await userEvent.click(picker);
@@ -139,6 +166,8 @@ export const ReachableOnly: Story = {
     ]) {
       await expect(canvas.queryByRole("img", { name })).not.toBeInTheDocument();
     }
+    // 選んだ画面は動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
+    await waitForLiveFrame(canvasElement, "shop-productlist--default");
     await settle();
   },
 };
@@ -158,7 +187,21 @@ export const Unavailable: Story = {
       canvasElement.querySelectorAll("[data-transition-label]"),
       "札が無い",
     ).toHaveLength(0);
-    await waitForIframeFrames(canvasElement);
+    // 読み込む範囲の端にある AdminOrders は、動く画面の高さを測る前の並びで読み込まれるかが回ごとに違う。
+    // いちど読み込む範囲に入れてから同じだけ戻し、撮るたびに同じ画面を読み込んだ形にする（戻した見え方は動かす前と同じ）
+    await waitForFramesWithoutShots(canvasElement, ...SHOWN_AT_768);
+    await scrollCanvas(canvasElement, ADMIN_ORDERS_SCROLL);
+    await waitForFramesWithoutShots(
+      canvasElement,
+      ...SHOWN_AT_768,
+      ADMIN_ORDERS,
+    );
+    await scrollCanvas(canvasElement, -ADMIN_ORDERS_SCROLL);
+    await waitForFramesWithoutShots(
+      canvasElement,
+      ...SHOWN_AT_768,
+      ADMIN_ORDERS,
+    );
     await settle();
   },
 };
