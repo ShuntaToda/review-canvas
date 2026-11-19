@@ -148,6 +148,40 @@ describe("ソースの拡張子（api/・src/）", () => {
   });
 });
 
+describe("review-canvas 自身の画面の Storybook", () => {
+  // ストーリーの画像は、ビルドの中に埋め込む（MSW が返す）。大きくすると、リポジトリと置く Storybook が重くなる
+  test("[正常系]ストーリーの固定のデータ（src/features/review/stories/fixtures/）は、合わせて 1MB 以下", () => {
+    const sizeOf = (dir) =>
+      fs
+        .readdirSync(dir, { withFileTypes: true })
+        .reduce(
+          (sum, entry) =>
+            sum +
+            (entry.isDirectory()
+              ? sizeOf(path.join(dir, entry.name))
+              : fs.statSync(path.join(dir, entry.name)).size),
+          0,
+        );
+    const size = sizeOf(
+      path.join(root, "src/features/review/stories/fixtures"),
+    );
+
+    expect(size).toBeGreaterThan(0);
+    expect(size).toBeLessThanOrEqual(1024 * 1024);
+  });
+
+  // 置くとき（設定の build）と手元・CI（pnpm run build:storybook:app）で、同じ組み立て方にする
+  test("[正常系]設定の app の build は、package.json の build:storybook:app と同じコマンド", () => {
+    const config = JSON.parse(read("review-canvas.config.json"));
+    const manifest = JSON.parse(read("package.json"));
+    const app = config.storybooks.find((storybook) => storybook.id === "app");
+
+    expect(app?.build).toBe(
+      `pnpm exec ${manifest.scripts["build:storybook:app"]}`,
+    );
+  });
+});
+
 describe("幅・高さの上限（壊れないためだけの値。場所ごとに食い違わせない）", () => {
   test("幅の上限は、設定の widths・自分用に足す幅・画像の目録・コメントの API（frameWidth）で同じ", () => {
     const openapi = JSON.parse(read("openapi.json"));

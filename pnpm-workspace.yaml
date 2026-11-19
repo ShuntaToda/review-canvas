@@ -5,8 +5,15 @@ packages:
 minimumReleaseAge: 30240
 # 複数のパッケージで宣言する依存だけを揃える
 catalog:
+  "@storybook/react-vite": 10.4.6
   "@types/node": 24.13.2
   esbuild-register: 3.6.0
+  # サンプルのショップと review-canvas 自身の Storybook で同じ版にする（msw のサービスワーカーは、置き場の直下の 1 つを両方が読む）
+  msw: 2.15.0
+  msw-storybook-addon: 2.0.7
+  # ルートの検査（scripts/check-app-storybook.mjs）と infra の撮影で、同じ Chromium のリビジョンを使う
+  playwright: 1.63.0
+  storybook: 10.4.6
   typescript: 6.0.3
   vitest: 4.1.10
   zod: 4.4.3

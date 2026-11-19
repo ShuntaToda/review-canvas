@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ReviewStory } from "../stories/ReviewStory";
 import { mixedComments } from "../stories/story-fixtures";
 import { reviewHandlers } from "../stories/story-handlers";
-import { waitForText } from "../stories/story-play";
+import { settle, waitForText } from "../stories/story-play";
 import { messages } from "@/constants/messages";
 
 const meta = {
@@ -23,6 +23,7 @@ export const BranchMissing: Story = {
   },
   play: async ({ canvas }) => {
     await waitForText(canvas, /の画面は、まだ置かれていません/);
+    await settle();
   },
 };
 
@@ -32,6 +33,7 @@ export const NotAllowed: Story = {
   parameters: { msw: { handlers: reviewHandlers({ mode: "not-allowed" }) } },
   play: async ({ canvas }) => {
     await waitForText(canvas, messages.notAllowed);
+    await settle();
   },
 };
 
@@ -41,5 +43,6 @@ export const SessionExpired: Story = {
   parameters: { msw: { handlers: reviewHandlers({ mode: "unauthorized" }) } },
   play: async ({ canvas }) => {
     await waitForText(canvas, messages.unauthorized);
+    await settle();
   },
 };

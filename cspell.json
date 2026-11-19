@@ -10,7 +10,8 @@
     "dist*",
     "infra/cdk.out",
     "infra/cdk.json",
-    "examples/sample-storybook/public/mockServiceWorker.js"
+    "examples/sample-storybook/public/mockServiceWorker.js",
+    ".storybook/public/mockServiceWorker.js"
   ],
   "words": [
     "argjson",
@@ -53,6 +54,7 @@
     "unstub",
     "valuenow",
     "valuetext",
+    "vite",
     "vitest",
     "webacl"
   ],

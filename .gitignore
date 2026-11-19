@@ -19,7 +19,7 @@ node_modules/
 .env.local
 .env.*.local
 
-# サンプルの Storybook のビルド結果
+# Storybook のビルド結果（サンプルの Storybook と、根の review-canvas 自身の画面の Storybook）
 storybook-static/
 
 # CDK

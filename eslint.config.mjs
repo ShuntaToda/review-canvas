@@ -15,7 +15,8 @@ import tseslint from "typescript-eslint";
 
 // API（api/）と画面（src/）を1つのパッケージに持つ。API は層の規約、画面は React の規約を当てる
 const apiFiles = ["api/**/*.ts"];
-const appFiles = ["src/**/*.{ts,tsx}"];
+// Storybook の設定（.storybook/）も画面と同じブラウザで動くので、画面の決まりを当てる
+const appFiles = ["src/**/*.{ts,tsx}", ".storybook/*.{ts,tsx}"];
 
 const API_PROCESS_ENV_MESSAGE =
   "環境変数（process.env）を読めるのは api/di-container と api/handler/api/entrypoint だけです。値は di-container で読み（必須なら unwrapEnv）、クラス・関数には props・引数で渡してください。";
@@ -223,15 +224,20 @@ const APP_IMPORT_PATTERNS = [
 
 /** ストーリー（STORY_FILES）だけが import するもの。画面のコードから読むと、置く版のビルドに MSW・偽のログインが入る */
 const STORY_ONLY_IMPORTS = {
-  // パッケージの名前（storybook・@storybook/*・msw・msw-storybook-addon）と、偽のログインの置き場（別名・相対パスのどちらでも）
+  // パッケージの名前（storybook・@storybook/*・msw・msw-storybook-addon）、偽のログインの置き場、
+  // ストーリーの置き場（stories/）とストーリーのファイル（*.stories.tsx）。別名・相対パスのどちらでも
   regex:
-    "^(storybook|msw|msw-storybook-addon)(/.*)?$|^@storybook/|(^|/)support/auth/fake(/|$)",
+    "^(storybook|msw|msw-storybook-addon)(/.*)?$|^@storybook/|(^|/)support/auth/fake(/|$)|(^|/)stories(/|$)|\\.stories(\\.tsx?)?$",
   message:
-    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）は、ストーリー（*.stories.tsx）と src/**/stories/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
+    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）・ストーリーの置き場（src/features/*/stories/・*.stories.tsx）は、ストーリー（src/features/*/pages/*.stories.tsx）・src/features/*/stories/・.storybook/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
 };
 
-// ストーリーと、その固定のデータ・MSW の handler・描き方（src の下の stories/）
-const STORY_FILES = ["src/**/*.stories.tsx", "src/**/stories/**/*.{ts,tsx}"];
+// ストーリーと、その固定のデータ・MSW の handler・描き方（src/features の下の stories/）と、Storybook の設定
+const STORY_FILES = [
+  "src/features/*/pages/*.stories.tsx",
+  "src/features/*/stories/**/*.{ts,tsx}",
+  ".storybook/*.{ts,tsx}",
+];
 
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
@@ -281,13 +287,13 @@ const restrictedSyntax = [
     ],
   },
   {
-    files: "src/**/*.{ts,tsx}",
+    files: appFiles,
     ignores: ["src/**/*.test.{ts,tsx}"],
     selectors: [DOUBLE_ASSERTION],
   },
   {
     // window・document などを別名にすると、通信・保存を「名前で見る」決まりから外れる
-    files: "src/**/*.{ts,tsx}",
+    files: appFiles,
     ignores: ["src/support/**", "src/config/**", "src/**/*.test.{ts,tsx}"],
     selectors: [
       wrappedGlobalOf(
@@ -324,7 +330,7 @@ const restrictedSyntaxBlocks = restrictedSyntax
   )
   .sort((a, b) => a.length - b.length)
   .map((subset) => ({
-    files: [subset[0].files],
+    files: [subset[0].files].flat(),
     ignores: [...new Set(subset.flatMap((entry) => entry.ignores))],
     rules: {
       "no-restricted-syntax": [

@@ -58,3 +58,22 @@ export const applyStoryUrl = (search: string): void => {
     storyUrlOf(search, window.location.href),
   );
 };
+
+/**
+ * ストーリーの通信のうち、MSW を通して（そのまま）読ませてよいもの。この Storybook の置き場の中の、Storybook 自身のファイル
+ * （ビルドの読み込み・ストーリーの一覧など）だけで、API（api/）と置いてあるブランチの置き場（basePrefix）は含めない
+ */
+export const isStorybookOwnFile = (
+  requestUrl: string,
+  storybookUrl: string,
+  basePrefix: string,
+): boolean => {
+  const dir = new URL(".", storybookUrl);
+  const url = new URL(requestUrl);
+  return (
+    url.origin === dir.origin &&
+    url.pathname.startsWith(dir.pathname) &&
+    !url.pathname.startsWith(`${dir.pathname}api/`) &&
+    !url.pathname.startsWith(basePrefix)
+  );
+};

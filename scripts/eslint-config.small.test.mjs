@@ -61,6 +61,8 @@ describe("no-restricted-syntax の掛かる場所", () => {
       [],
     ],
     ["src/support/api/example.ts", [DOUBLE_ASSERTION], [WINDOW_ALIAS]],
+    // Storybook の設定も画面と同じブラウザで動く
+    [".storybook/preview.tsx", [DOUBLE_ASSERTION, WINDOW_ALIAS], []],
     [
       "src/features/review/model/example.small.test.ts",
       [],
@@ -97,6 +99,16 @@ const refusedBy = async (linter, file, importPath) => {
   );
 };
 
+it("Storybook の設定（.storybook/）にも、画面の通信・保存の決まりが掛かる", async () => {
+  const config = await eslint.calculateConfigForFile(
+    path.join(root, ".storybook/preview.tsx"),
+  );
+  const [, ...globals] = config.rules["no-restricted-globals"] ?? [];
+  expect(globals.map((entry) => entry.name)).toEqual(
+    expect.arrayContaining(["fetch", "localStorage"]),
+  );
+});
+
 describe("ストーリーだけが読むもの（Storybook・MSW・偽のログイン）", () => {
   const STORY_ONLY = [
     "storybook/test",
@@ -106,7 +118,13 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
     "msw-storybook-addon",
     "@/support/auth/fake",
     "../../support/auth/fake/FakeAuthProvider",
+    "../stories/story-handlers",
+    "../stories/fixtures/shots-main.json",
+    "@/features/review/stories/story-fixtures",
+    "./ReviewWorkspace.stories",
+    "./ReviewWorkspace.stories.tsx",
   ];
+  const STORY_ONLY_MESSAGE = "からだけ import します";
 
   it.each([
     "src/features/review/pages/ReviewPage.tsx",
@@ -116,13 +134,14 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
     for (const importPath of STORY_ONLY) {
       expect(
         (await refusedBy(eslint, path.join(root, file), importPath)).join(),
-      ).toContain("ストーリー（*.stories.tsx）");
+      ).toContain(STORY_ONLY_MESSAGE);
     }
   });
 
   it.each([
     "src/features/review/pages/ReviewWorkspace.stories.tsx",
     "src/features/review/stories/story-handlers.ts",
+    ".storybook/preview.tsx",
   ])("ストーリー（%s）からは読める", async (file) => {
     for (const importPath of STORY_ONLY) {
       expect(
@@ -131,14 +150,31 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
     }
   });
 
-  it("名前の似た画面のファイル（model/storybook.ts）には掛からない", async () => {
-    expect(
-      await refusedBy(
-        eslint,
-        path.join(root, "src/features/review/model/markdown.ts"),
-        "./storybook",
-      ),
-    ).toStrictEqual([]);
+  it("名前の似た画面のファイル（model/storybook.ts・story-tree.ts）には掛からない", async () => {
+    for (const importPath of [
+      "./storybook",
+      "../model/story-tree",
+      "./story-shots",
+    ]) {
+      expect(
+        await refusedBy(
+          eslint,
+          path.join(root, "src/features/review/model/markdown.ts"),
+          importPath,
+        ),
+      ).toStrictEqual([]);
+    }
+  });
+
+  it("ストーリーの置き場の外（src の直下・ほかの置き場の stories/）は、ストーリーとして扱わない", async () => {
+    for (const file of [
+      "src/stories/example.ts",
+      "src/support/stories/example.ts",
+    ]) {
+      expect(
+        (await refusedBy(eslint, path.join(root, file), "msw")).join(),
+      ).toContain(STORY_ONLY_MESSAGE);
+    }
   });
 });
 

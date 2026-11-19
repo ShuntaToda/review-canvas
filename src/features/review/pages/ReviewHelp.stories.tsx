@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ReviewStory } from "../stories/ReviewStory";
 import { mixedComments } from "../stories/story-fixtures";
 import { reviewHandlers } from "../stories/story-handlers";
-import { waitForShot } from "../stories/story-play";
+import { settle, waitForShot } from "../stories/story-play";
 
 const meta = {
   id: "review-help",
@@ -25,5 +25,6 @@ export const Opened: Story = {
       canvas.getByRole("button", { name: "使い方・ショートカット（?）" }),
     );
     await canvas.findByRole("dialog", { name: "使い方・ショートカット" });
+    await settle();
   },
 };

@@ -1,4 +1,8 @@
-import { storyUrlOf, withStorybookParams } from "./story-url";
+import {
+  isStorybookOwnFile,
+  storyUrlOf,
+  withStorybookParams,
+} from "./story-url";
 
 const current =
   "http://localhost:6006/iframe.html?id=review-workspace--empty&viewMode=story&comment=old";
@@ -37,5 +41,57 @@ describe("storyUrlOf", () => {
     expect(storyUrlOf("", current)).toBe(
       "/iframe.html?id=review-workspace--empty&viewMode=story",
     );
+  });
+});
+
+describe("isStorybookOwnFile", () => {
+  const storybook =
+    "http://localhost:6006/iframe.html?id=review-login--before-login";
+  const base = "/review-canvas-story/";
+
+  test("Storybook の置き場の中のファイル（ビルドの読み込み・一覧）は通す", () => {
+    expect(
+      isStorybookOwnFile(
+        "http://localhost:6006/assets/iframe-abc.js",
+        storybook,
+        base,
+      ),
+    ).toBe(true);
+    expect(
+      isStorybookOwnFile("http://localhost:6006/index.json", storybook, base),
+    ).toBe(true);
+  });
+
+  test("API と、置いてあるブランチの置き場は通さない（ストーリーの handler に無ければ止める）", () => {
+    expect(
+      isStorybookOwnFile("http://localhost:6006/api/comments", storybook, base),
+    ).toBe(false);
+    expect(
+      isStorybookOwnFile(
+        "http://localhost:6006/review-canvas-story/main/shop/index.json",
+        storybook,
+        base,
+      ),
+    ).toBe(false);
+  });
+
+  test("ほかのオリジンと、置き場の外のパスは通さない", () => {
+    expect(
+      isStorybookOwnFile("https://example.com/assets/a.js", storybook, base),
+    ).toBe(false);
+    expect(
+      isStorybookOwnFile(
+        "http://localhost:6006/other/a.js",
+        "http://localhost:6006/sb/iframe.html",
+        base,
+      ),
+    ).toBe(false);
+    expect(
+      isStorybookOwnFile(
+        "http://localhost:6006/sb/api/meta",
+        "http://localhost:6006/sb/iframe.html",
+        base,
+      ),
+    ).toBe(false);
   });
 });

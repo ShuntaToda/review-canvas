@@ -24,7 +24,7 @@ export const APP_STORY_IDS = [
   "review-workspace--shared-thread",
   "review-workspace--drafting",
   "review-workspace--scoped",
-  "review-compare--changed-only",
+  "review-compare--compare-with-default",
   "review-help--opened",
   "review-error--branch-missing",
   "review-error--not-allowed",
@@ -59,7 +59,7 @@ const CONTENT_TYPES = {
   ".woff2": "font/woff2",
 };
 
-/** 一覧（index.json）から、足りないストーリーと英字でない ID を挙げる */
+/** 一覧（index.json）から、足りない・決めていない（多い）ストーリーと、英字でない ID を挙げる */
 export const checkStoryIndex = (index, expected = APP_STORY_IDS) => {
   const ids = Object.values(index?.entries ?? {})
     .filter((entry) => entry.type === "story")
@@ -67,8 +67,18 @@ export const checkStoryIndex = (index, expected = APP_STORY_IDS) => {
   return {
     ids,
     missing: expected.filter((id) => !ids.includes(id)),
+    unexpected: ids.filter((id) => !expected.includes(id)),
     nonAscii: ids.filter((id) => !STORY_ID_PATTERN.test(id)),
   };
+};
+
+/**
+ * ページの移動（document の要求）が、Storybook 自身の画面（iframe.html）の外へ出ていないか。
+ * iframe の読み込みは MSW を通らないので、同じオリジンでもここで見る（ストーリーでは .storybook/main.ts の CSP が止める）
+ */
+export const isOutsideDocument = (url, origin) => {
+  const parsed = new URL(url);
+  return parsed.origin !== origin || parsed.pathname !== "/iframe.html";
 };
 
 const serve = async (dir) => {
@@ -111,9 +121,13 @@ const main = async () => {
   const index = JSON.parse(
     fs.readFileSync(path.join(values.dir, "index.json"), "utf8"),
   );
-  const { ids, missing, nonAscii } = checkStoryIndex(index);
+  const { ids, missing, unexpected, nonAscii } = checkStoryIndex(index);
   const problems = [
     ...missing.map((id) => `一覧（index.json）にありません: ${id}`),
+    ...unexpected.map(
+      (id) =>
+        `決めていないストーリーがあります（足したなら APP_STORY_IDS にも足す）: ${id}`,
+    ),
     ...nonAscii.map((id) => `ストーリーの ID が英字ではありません: ${id}`),
   ];
   if (values.shots !== undefined)
@@ -147,6 +161,13 @@ const main = async () => {
       const mswErrors = [];
       page.on("request", (request) => {
         const url = new URL(request.url());
+        if (
+          request.resourceType() === "document" &&
+          isOutsideDocument(request.url(), server.origin)
+        ) {
+          outside.push(`（ページの移動）${request.url()}`);
+          return;
+        }
         if (
           url.origin !== server.origin &&
           !["data:", "blob:", "about:"].includes(url.protocol)

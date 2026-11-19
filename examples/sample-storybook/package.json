@@ -14,13 +14,13 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@storybook/react-vite": "10.4.6",
+    "@storybook/react-vite": "catalog:",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.2.0",
-    "msw": "2.15.0",
-    "msw-storybook-addon": "2.0.7",
-    "storybook": "10.4.6",
+    "msw": "catalog:",
+    "msw-storybook-addon": "catalog:",
+    "storybook": "catalog:",
     "typescript": "catalog:",
     "vite": "6.4.3"
   },

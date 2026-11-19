@@ -115,7 +115,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,26 +158,28 @@ jobs:
           test -s examples/sample-storybook/storybook-static/index.json
           test -s storybook-static/index.json
 
-      # 置くときと同じ手順で、サンプルの全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）
+      # 置くときと同じ手順で、設定の Storybook（サンプルのショップ・review-canvas 自身）の全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）。
+      # 撮影のスクリプトは 10 分（CAPTURE_TIME_LIMIT_MS）で打ち切るので、step の上限はブラウザを入れる分だけ長くする
       - name: Screenshots
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           pnpm --dir infra exec playwright install --with-deps --only-shell chromium
           pnpm --dir infra run screenshots
-          out=examples/sample-storybook/storybook-static
-          stories="$(jq '[.entries[] | select(.type == "story")] | length' "$out/index.json")"
-          widths="$(jq '.storybooks[0].widths | unique | length' review-canvas.config.json)"
-          shots="$(jq '.shots | length' "$out/review-canvas-shots.json")"
-          if [ "$shots" -ne $((stories * widths)) ]; then
-            echo "::error::スクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
-            exit 1
-          fi
-          # ブラウザへ文字列で渡す読み取り（中身の高さ・主な要素）が、ビルドした形でも動いている
-          measured="$(jq '[.shots[] | select((.contentHeight | type) == "number" and (.elements | type) == "array")] | length' "$out/review-canvas-shots.json")"
-          if [ "$measured" -ne "$shots" ]; then
-            echo "::error::中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
-            exit 1
-          fi
+          jq -r '.storybooks[] | "\(.outDir) \(.widths | unique | length)"' review-canvas.config.json |
+            while read -r out widths; do
+              stories="$(jq '[.entries[] | select(.type == "story")] | length' "$out/index.json")"
+              shots="$(jq '.shots | length' "$out/review-canvas-shots.json")"
+              if [ "$shots" -ne $((stories * widths)) ]; then
+                echo "::error::$out のスクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
+                exit 1
+              fi
+              # ブラウザへ文字列で渡す読み取り（中身の高さ・主な要素）が、ビルドした形でも動いている
+              measured="$(jq '[.shots[] | select((.contentHeight | type) == "number" and (.elements | type) == "array")] | length' "$out/review-canvas-shots.json")"
+              if [ "$measured" -ne "$shots" ]; then
+                echo "::error::$out に、中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
+                exit 1
+              fi
+            done
 
       # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
       # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）

@@ -18,6 +18,7 @@ import {
   storyBranchKey,
   storyMeta,
 } from "./story-fixtures";
+import { isStorybookOwnFile } from "./story-url";
 
 /**
  * ストーリーの API と Storybook の配信を、MSW で返す。ストーリーの外へは通信しない（ここに無い道は .storybook/preview.tsx で失敗にする）
@@ -153,15 +154,7 @@ export const reviewHandlers = ({
  */
 export const blockOutsideStories = (storybookUrl: string): RequestHandler =>
   http.all("*", ({ request }) => {
-    const dir = new URL(".", storybookUrl);
-    const url = new URL(request.url);
-    const path = url.pathname;
-    if (
-      url.origin === dir.origin &&
-      path.startsWith(dir.pathname) &&
-      !path.startsWith(`${dir.pathname}api/`) &&
-      !path.startsWith(STORY_BASE_PREFIX)
-    ) {
+    if (isStorybookOwnFile(request.url, storybookUrl, STORY_BASE_PREFIX)) {
       return passthrough();
     }
     console.error(

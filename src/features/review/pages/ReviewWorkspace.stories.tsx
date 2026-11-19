@@ -7,7 +7,13 @@ import {
   THREAD_WITH_REPLIES_ID,
 } from "../stories/story-fixtures";
 import { reviewHandlers } from "../stories/story-handlers";
-import { waitForShot, waitForText } from "../stories/story-play";
+import {
+  settle,
+  waitForDraft,
+  waitForLiveFrameSettled,
+  waitForShot,
+  waitForText,
+} from "../stories/story-play";
 
 const withComments = {
   msw: {
@@ -36,6 +42,7 @@ export const Empty: Story = {
     await expect(
       await waitForText(canvas, /コメントはまだありません/),
     ).toBeVisible();
+    await settle();
   },
 };
 
@@ -45,6 +52,7 @@ export const WithComments: Story = {
   play: async ({ canvas }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
     await waitForText(canvas, "ボタンの文言を「カートに追加」にそろえたいです");
+    await settle();
   },
 };
 
@@ -58,6 +66,9 @@ export const SharedThread: Story = {
       canvas,
       "お願いします。ほかの画面のボタンも合わせてください",
     );
+    // スレッドを開くと、その画面を動く画面に切り替えようとする（ストーリーでは読み込まないので、待ちきった見た目で止める）
+    await waitForLiveFrameSettled(canvas);
+    await settle();
   },
 };
 
@@ -74,12 +85,10 @@ export const Drafting: Story = {
         name: "Shop/OrderForm / Default にコメントを置く",
       }),
     );
-    const input = await canvas.findByPlaceholderText(
-      "コメントを書く",
-      undefined,
-      { timeout: 10_000 },
-    );
+    const input = await waitForDraft(canvas);
     await userEvent.type(input, "送るボタンの上に、合計の金額も出してください");
+    await waitForLiveFrameSettled(canvas);
+    await settle();
   },
 };
 
@@ -93,5 +102,6 @@ export const Scoped: Story = {
     await expect(
       canvas.queryByRole("img", { name: "Admin/Orders / Default" }),
     ).toBeNull();
+    await settle();
   },
 };
