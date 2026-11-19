@@ -168,6 +168,8 @@ describe("CompareDialog", () => {
     renderDialog({ kind: "loading" });
 
     expect(screen.getAllByText("読み込み中…")).toHaveLength(2);
+    // 読み上げにも伝わる
+    expect(screen.getByRole("status").textContent).toContain("読み込み中…");
     expect(screen.getByText("比べる相手（main）")).not.toBeNull();
     expect(screen.queryAllByRole("img")).toStrictEqual([]);
     expect(screen.queryByRole("button", { name: "重ねる" })).toBeNull();

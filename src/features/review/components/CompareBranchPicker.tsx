@@ -2,7 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useDismissiblePopover } from "../hooks/useDismissiblePopover";
 import { filterCompareBranches, NO_COMPARE } from "../model/branch-compare";
-import { DROPDOWN_WIDTH, dropdownPlacement } from "../model/popover";
+import { DROPDOWN_WIDTH, dropdownPlacement } from "../model/dropdown";
 import { isImeComposing } from "../model/shortcuts";
 
 const NOT_COMPARING_LABEL = "比較しない";

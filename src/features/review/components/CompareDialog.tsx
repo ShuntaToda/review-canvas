@@ -91,12 +91,15 @@ export const CompareDialog = ({
   const body = (() => {
     switch (view.kind) {
       case "loading":
+        // 読み込み中であることを読み上げにも伝える（読み終えると中身が画像に替わる）
         return (
-          <SideBySide
-            labels={labels}
-            base={<Message>{compareMessages.loading}</Message>}
-            head={<Message>{compareMessages.loading}</Message>}
-          />
+          <div role="status">
+            <SideBySide
+              labels={labels}
+              base={<Message>{compareMessages.loading}</Message>}
+              head={<Message>{compareMessages.loading}</Message>}
+            />
+          </div>
         );
       case "no-base-manifest":
         return <Message>{compareMessages.noBaseManifest(compareBase)}</Message>;
