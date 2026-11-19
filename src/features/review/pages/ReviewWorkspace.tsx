@@ -24,6 +24,8 @@ import { ResizableSidebar } from "../components/ResizableSidebar";
 import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
+import { TransitionLayer } from "../components/TransitionLayer";
+import { TransitionPicker } from "../components/TransitionPicker";
 import { ZoomControls } from "../components/ZoomControls";
 import {
   focusCanvas,
@@ -44,12 +46,14 @@ import {
   useBranches,
   useComments,
 } from "../hooks/useReviewData";
+import { useSelectedStory } from "../hooks/useSelectedStory";
 import { useSidebarWidth } from "../hooks/useSidebarWidth";
 import { useSources } from "../hooks/useSources";
 import { useStoryListOpen } from "../hooks/useStoryListOpen";
 import { useStoryScope } from "../hooks/useStoryScope";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
+import { useTransitionHistory } from "../hooks/useTransitionHistory";
 import { useViewportWidth } from "../hooks/useViewportWidth";
 import {
   type AnchorBox,
@@ -117,6 +121,17 @@ import {
   type StatusFilter,
   type Thread,
 } from "../model/threads";
+import {
+  DEFAULT_TRANSITION_MODE,
+  filtersToReveal,
+  parseTransitionMode,
+  reachableFrom,
+  storyAtPoint,
+  storyDisplayName,
+  type TransitionLine,
+  transitionEdgesOf,
+  transitionLines,
+} from "../model/transitions";
 import { buildSearch, type UrlState } from "../model/url-state";
 import { isNarrowViewport } from "../model/viewport";
 import type { AuthUser } from "@/support/auth";
@@ -328,6 +343,18 @@ export const ReviewWorkspace = ({
     setStoryListOpenState(open);
   };
 
+  // 画面のつながり（出し方はブラウザに覚える。つながる画面だけの起点は覚えない・URL に載せない）
+  const [transitionMode, setTransitionMode] = useLocalSetting(
+    "review-canvas.transitionMode",
+    DEFAULT_TRANSITION_MODE,
+    { parse: parseTransitionMode, serialize: String },
+  );
+  const [reachableRoot, setReachableRoot] = useState<string | null>(null);
+  // 動く画面が撮ったときとずれた画面（ボタンの枠を出さず、矢印を画面の右の端から出す）
+  const [driftedStories, setDriftedStories] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const transitionHistory = useTransitionHistory();
   const [cameraStates, setCameraStates] = useState(initial.cameras);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
@@ -411,6 +438,16 @@ export const ReviewWorkspace = ({
   const shotsOf = (source: StorySource): ShotCatalog =>
     shots[source] ?? EMPTY_SHOT_CATALOG;
   const pageWidthOptions = pageWidths.optionsOf(page);
+  // いまのページの遷移（画像を撮っていない幅・ブランチでは出さない）
+  const transitionsAvailable = shotsOf(page).hasWidth(width);
+  const transitionEdges = transitionEdgesOf(
+    storiesOf(page).map((story) => story.id),
+    {
+      rowsOf: (storyId) => shotsOf(page).transitionsOf(storyId),
+      rectsOf: (storyId) => shotsOf(page).find(storyId, width)?.transitions,
+    },
+  );
+  const activeReachableRoot = transitionsAvailable ? reachableRoot : null;
   const rowsFor = (
     source: StorySource,
     {
@@ -421,6 +458,8 @@ export const ReviewWorkspace = ({
       query: string;
       scope: string | undefined;
       ignoreChangedOnly?: boolean;
+      /** つながる画面だけの起点（いまのページだけ。null は絞らない） */
+      reachableRoot?: string | null;
     },
   ) => {
     const shown = filterStories(
@@ -431,10 +470,22 @@ export const ReviewWorkspace = ({
         excludeTitlePrefixes: sources.excludeTitlePrefixes,
       },
     );
-    const visible =
+    const root =
+      source === page
+        ? filters.reachableRoot === undefined
+          ? activeReachableRoot
+          : filters.reachableRoot
+        : null;
+    const reachable =
+      root === null ? null : reachableFrom(root, transitionEdges);
+    const unchanged =
       filters.ignoreChangedOnly === true
         ? shown
         : branchCompare.filter(source, shown);
+    const visible =
+      reachable === null
+        ? unchanged
+        : unchanged.filter((story) => reachable.has(story.id));
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
@@ -513,6 +564,30 @@ export const ReviewWorkspace = ({
     viewport.width === 0
       ? undefined
       : frameAt(rows, screenToWorld(camera, viewportCenter))?.story.id;
+
+  // 画面のつながりの選んだ画面（開いているスレッドの画面。無ければ真ん中に見えている画面で、すき間なら直前の画面のまま）
+  const activeThreadOnPage = threads.find(
+    (t) => t.root.id === activeThreadId && t.root.source === page,
+  );
+  const selectedStoryId = useSelectedStory(
+    activeThreadOnPage?.root.storyId ??
+      (viewport.width === 0
+        ? undefined
+        : storyAtPoint(rows, screenToWorld(camera, viewportCenter))),
+  );
+  const transitionShown = transitionsAvailable && transitionMode !== "off";
+  const transitionLinesShown = transitionShown
+    ? transitionLines({
+        mode: transitionMode,
+        edges: transitionEdges,
+        rows,
+        selectedStoryId,
+        storyOf: (storyId) => storiesByKey.get(storyKey(page, storyId)),
+        driftedStoryIds: driftedStories,
+        camera,
+        viewport,
+      })
+    : [];
 
   // URL に載せるスレッド（削除されたスレッドは載せない。知らせを出したあと、読み直しや共有で同じ知らせを繰り返さない）
   const urlCommentId =
@@ -598,6 +673,76 @@ export const ReviewWorkspace = ({
     setPage(next);
     setDraft(null);
     setTitleFilter(undefined);
+    // 札で飛んだ見え方・つながる画面だけの起点は、ページの中のもの
+    transitionHistory.clear();
+    setReachableRoot(null);
+  };
+
+  /** 札を押して行き先へ寄る（いまの見え方を積む。行き先を隠している絞り込み・範囲は外す） */
+  const jumpByTransition = (line: TransitionLine) => {
+    if (line.target.kind === "missing") return;
+    const target = line.target.story;
+    const filters = { query, showComponents, scope: storyScope };
+    transitionHistory.push(
+      { fromStoryId: line.edge.from, camera, filters, reachableRoot },
+      target.id,
+    );
+    const next = filtersToReveal(target, filters, sources.excludeTitlePrefixes);
+    if (next.query !== query) setQuery(next.query);
+    if (next.showComponents !== showComponents) {
+      setShowComponents(next.showComponents);
+    }
+    if (next.scope !== storyScope) setStoryScope(next.scope);
+    branchCompare.reveal(page, target.id);
+    // つながる画面だけを入にしていれば、飛んだ先を起点にし直す
+    if (reachableRoot !== null) setReachableRoot(target.id);
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: {
+        kind: "focus",
+        storyId: target.id,
+        point: { x: width / 2, y: 300 },
+        zoom: focusZoom(camera.zoom),
+      },
+    }));
+    // 選んだ画面は開いているスレッドの画面が勝つので、飛んだ先を選ぶために閉じる
+    setActiveThreadId(null);
+    setDraft(null);
+  };
+
+  /** 札で飛ぶ前の見え方へ 1 段戻る */
+  const backByTransition = () => {
+    const entry = transitionHistory.pop();
+    if (entry === undefined) return;
+    setQuery(entry.filters.query);
+    setShowComponents(entry.filters.showComponents);
+    setStoryScope(entry.filters.scope);
+    setReachableRoot(entry.reachableRoot);
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: { kind: "fixed", camera: entry.camera },
+    }));
+  };
+
+  /** 「この画面からつながる画面だけ表示」を切り替える（選んだ画面を起点にし、並びが変わっても選んだ画面を真ん中に保つ） */
+  const changeReachableOnly = (on: boolean) => {
+    const root = on ? (selectedStoryId ?? null) : null;
+    setReachableRoot(root);
+    const keep = selectedStoryId;
+    const frame = keep === undefined ? undefined : findFrame(rows, keep);
+    if (keep === undefined || frame === undefined || viewport.width === 0) {
+      return;
+    }
+    const center = screenToWorld(camera, viewportCenter);
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: {
+        kind: "focus",
+        storyId: keep,
+        point: { x: center.x - frame.x, y: center.y - frame.y },
+        zoom: camera.zoom,
+      },
+    }));
   };
 
   /** 見せる範囲を替える（並びが変わるので、見え方は初めに戻す。範囲の外の画面で絞った一覧は外す） */
@@ -663,6 +808,14 @@ export const ReviewWorkspace = ({
       }
       // 「変わった画面だけ」で隠れているときも外す
       const revealed = branchCompare.reveal(root.source, story.id);
+      // 「つながる画面だけ」で隠れているときも外す（コメント一覧は絞らないので、隠れた画面のスレッドも選べる）
+      const nextReachableRoot =
+        root.source === page &&
+        activeReachableRoot !== null &&
+        reachableFrom(activeReachableRoot, transitionEdges).has(story.id)
+          ? reachableRoot
+          : null;
+      setReachableRoot(nextReachableRoot);
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
       setStoryScope(nextStoryScope);
@@ -674,6 +827,7 @@ export const ReviewWorkspace = ({
             query: nextQuery,
             scope: nextStoryScope,
             ...(revealed ? { ignoreChangedOnly: true } : {}),
+            reachableRoot: nextReachableRoot,
           }),
           bounds: null,
           viewport,
@@ -691,7 +845,10 @@ export const ReviewWorkspace = ({
         },
       }));
     }
-    if (root.source !== page) setTitleFilter(undefined);
+    if (root.source !== page) {
+      setTitleFilter(undefined);
+      transitionHistory.clear();
+    }
     setPage(root.source);
     setActiveThreadId(root.id);
     setDraft(null);
@@ -1071,6 +1228,16 @@ export const ReviewWorkspace = ({
         onToggleStoryList={() => setStoryListOpen(!storyListOpen)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        transitionPicker={
+          <TransitionPicker
+            mode={transitionMode}
+            onModeChange={setTransitionMode}
+            reachableOnly={reachableRoot !== null}
+            onReachableOnlyChange={changeReachableOnly}
+            hasSelectedStory={selectedStoryId !== undefined}
+            unavailable={!transitionsAvailable}
+          />
+        }
       />
       <div className="relative flex min-h-0 flex-1">
         {storyListOpen && (
@@ -1175,7 +1342,22 @@ export const ReviewWorkspace = ({
                     )
                   }
                   onCopyStoryLink={copyStoryLink}
-                  linkHighlight={linkHighlight}
+                  linkHighlight={transitionHistory.highlight ?? linkHighlight}
+                  {...(transitionShown
+                    ? {
+                        transitionBoxesOf: (storyId: string) =>
+                          shotsOf(page).find(storyId, width)?.transitions ?? [],
+                      }
+                    : {})}
+                  onTransitionDrift={(storyId, drifted) =>
+                    setDriftedStories((previous) => {
+                      if (previous.has(storyId) === drifted) return previous;
+                      const next = new Set(previous);
+                      if (drifted) next.add(storyId);
+                      else next.delete(storyId);
+                      return next;
+                    })
+                  }
                   onOpenThread={(threadId) => {
                     setActiveThreadId(threadId);
                     setDraft(null);
@@ -1201,6 +1383,25 @@ export const ReviewWorkspace = ({
                   }
                 />
               </ErrorBoundary>
+              <TransitionLayer
+                lines={transitionLinesShown}
+                viewport={viewport}
+                onJump={jumpByTransition}
+                back={(() => {
+                  const last = transitionHistory.stack.at(-1);
+                  if (last === undefined) return null;
+                  const from = storiesByKey.get(
+                    storyKey(page, last.fromStoryId),
+                  );
+                  return {
+                    label:
+                      from === undefined
+                        ? last.fromStoryId
+                        : storyDisplayName(from),
+                    onBack: backByTransition,
+                  };
+                })()}
+              />
               {activeThread !== undefined && threadPosition !== undefined && (
                 <ThreadPopover
                   key={activeThread.root.id}

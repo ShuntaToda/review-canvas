@@ -30,7 +30,7 @@ import {
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
 import type { LinkHighlight } from "../model/story-link";
-import type { ShotCatalog } from "../model/story-shots";
+import type { ShotCatalog, ShotTransition } from "../model/story-shots";
 import type { Story } from "../model/storybook";
 import {
   type CommentAnchor,
@@ -113,6 +113,10 @@ type CanvasProps = {
   focusStoryId?: string | null;
   /** 画面の見出しの「ほかのブランチと比べる」（比べる相手が無いとき・比べる相手の目録をはじめて読み終える前は渡さない（useBranchCompare の canOpen）） */
   onCompare?: ((story: Story) => void) | undefined;
+  /** 画面ごとの、遷移を持つボタンの矩形（画面のつながりを出さないときは渡さない） */
+  transitionBoxesOf?: (storyId: string) => ReadonlyArray<ShotTransition>;
+  /** 動く画面が撮ったときとずれた・ずれが無くなった（Frame の onTransitionDrift） */
+  onTransitionDrift?: (storyId: string, drifted: boolean) => void;
 };
 
 type Point = { x: number; y: number };
@@ -147,6 +151,8 @@ export const Canvas = ({
   onScreenChanged,
   focusStoryId = null,
   onCompare,
+  transitionBoxesOf,
+  onTransitionDrift,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
   const panRef = useRef<{
@@ -533,6 +539,10 @@ export const Canvas = ({
                       ? linkHighlight
                       : null
                   }
+                  transitionBoxes={
+                    transitionBoxesOf?.(placement.story.id) ?? []
+                  }
+                  onTransitionDrift={onTransitionDrift}
                 />
               ))}
             </div>

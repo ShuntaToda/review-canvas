@@ -603,3 +603,212 @@ describe("Frame の見出しの「ほかのブランチと比べる」", () => {
     ).toBeNull();
   });
 });
+
+describe("Frame の遷移のボタンの枠", () => {
+  const WIDTH = 375;
+  const SHOT: ShotView = {
+    url: "https://sb.example.com/shot.png",
+    height: 1319,
+    contentHeight: 1319,
+  };
+  const BOX = { index: 0, x: 24, y: 346, width: 89, height: 34 };
+  const sources = buildSourceCatalog({
+    storybooks: [
+      {
+        id: "shop",
+        label: "サンプルショップ",
+        widths: [WIDTH],
+        defaultWidth: WIDTH,
+        baseHeight: 812,
+      },
+    ],
+    excludeTitlePrefixes: [],
+  });
+  const finished = {
+    preview: true,
+    started: true,
+    phase: "finished",
+    hasPlayFunction: false,
+  };
+
+  const renderFrame = ({
+    id,
+    tool,
+    onPendingPlace = () => undefined,
+    onTransitionDrift = () => undefined,
+  }: {
+    id: string;
+    tool: "comment" | "interact";
+    onPendingPlace?: (
+      storyId: string,
+      point: { x: number; y: number } | null,
+    ) => void;
+    onTransitionDrift?: (storyId: string, drifted: boolean) => void;
+  }) => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <SourcesContext.Provider value={sources}>
+        <Frame
+          source="shop"
+          placement={{
+            story: {
+              id,
+              title: "Shop/OrderForm",
+              name: "Default",
+              importPath: null,
+              source: "shop",
+            },
+            x: 0,
+            y: 0,
+            w: WIDTH,
+            h: SHOT.height,
+          }}
+          zoom={1}
+          tool={tool}
+          shouldLoad
+          keepLoaded
+          showLabel={false}
+          shot={SHOT}
+          playHint={false}
+          pins={[]}
+          activeThreadId={null}
+          draftPin={null}
+          onMeasure={() => undefined}
+          onPlace={() => undefined}
+          onLocate={() => undefined}
+          onOpenThread={() => undefined}
+          onCopyStoryLink={() => undefined}
+          linkHighlight={null}
+          onActivate={() => undefined}
+          pendingPlace={null}
+          onPendingPlace={onPendingPlace}
+          onScreenChanged={() => undefined}
+          transitionBoxes={[BOX]}
+          onTransitionDrift={onTransitionDrift}
+        />
+      </SourcesContext.Provider>,
+    );
+    const iframe = container.querySelector("iframe");
+    if (iframe === null) throw new Error("iframe がありません");
+    fireEvent.load(iframe);
+    const frameWindow = iframe.contentWindow;
+    if (frameWindow === null) throw new Error("iframe の window がありません");
+    vi.spyOn(frameWindow, "postMessage").mockImplementation(() => undefined);
+    const receive = (message: BridgeMessage) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: toBridgeEnvelope(message),
+            origin: window.location.origin,
+            source: frameWindow,
+          }),
+        );
+      });
+    /** 動く画面を出す（height は動く画面で測った中身の高さ） */
+    const reveal = (height: number) => {
+      receive({
+        type: "ready",
+        render: finished,
+        focused: false,
+        height,
+        width: WIDTH,
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+    };
+    const boxes = () => [
+      ...container.querySelectorAll<HTMLElement>("[data-transition-box]"),
+    ];
+    const mode = () =>
+      container
+        .querySelector("[data-frame-mode]")
+        ?.getAttribute("data-frame-mode");
+    return { container, iframe, receive, reveal, boxes, mode };
+  };
+
+  test("[正常系]遷移を持つボタンに、クリックを下へ通す枠を重ね、枠の上でもピンを置ける", () => {
+    const onPendingPlace =
+      vi.fn<
+        (storyId: string, point: { x: number; y: number } | null) => void
+      >();
+    const { boxes, container } = renderFrame({
+      id: "transition-box-comment",
+      tool: "comment",
+      onPendingPlace,
+    });
+
+    const [box] = boxes();
+    expect(box?.className).toContain("pointer-events-none");
+    expect(box?.style.left).toBe("24px");
+    expect(box?.style.width).toBe("89px");
+    // 押されるのは、枠の下のコメントの置き場（枠は押せる要素を持たない）
+    expect(box?.querySelector("button, a, input")).toBeNull();
+    const placeButton = container.querySelector<HTMLButtonElement>(
+      "button[aria-label$='にコメントを置く']",
+    );
+    if (placeButton === null) throw new Error("置き場がありません");
+    vi.spyOn(placeButton, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, WIDTH, SHOT.height),
+    );
+    fireEvent.click(placeButton, { clientX: 50, clientY: 360, detail: 1 });
+    expect(onPendingPlace).toHaveBeenCalledWith("transition-box-comment", {
+      x: 50,
+      y: 360,
+    });
+  });
+
+  test("[正常系]操作のモードでは、枠を出したまま、枠の下の動く画面を押せる", () => {
+    const { reveal, boxes, iframe, mode } = renderFrame({
+      id: "transition-box-interact",
+      tool: "interact",
+    });
+
+    reveal(1319);
+
+    expect(mode()).toBe("live");
+    expect(boxes()).toHaveLength(1);
+    expect(iframe.style.pointerEvents).toBe("auto");
+    expect(iframe.hasAttribute("inert")).toBe(false);
+  });
+
+  test("[正常系]動く画面の中身の高さが撮ったときと違えば、枠を出さず、ずれたと知らせる", () => {
+    const onTransitionDrift =
+      vi.fn<(storyId: string, drifted: boolean) => void>();
+    const { reveal, boxes } = renderFrame({
+      id: "transition-box-height",
+      tool: "comment",
+      onTransitionDrift,
+    });
+
+    reveal(1600);
+
+    expect(boxes()).toHaveLength(0);
+    expect(onTransitionDrift).toHaveBeenLastCalledWith(
+      "transition-box-height",
+      true,
+    );
+  });
+
+  test("[正常系]操作のモードで中を触った後は、高さが同じでも枠を出さず、ずれたと知らせる", () => {
+    const onTransitionDrift =
+      vi.fn<(storyId: string, drifted: boolean) => void>();
+    const { reveal, receive, boxes } = renderFrame({
+      id: "transition-box-touched",
+      tool: "interact",
+      onTransitionDrift,
+    });
+
+    reveal(1319);
+    expect(boxes()).toHaveLength(1);
+    expect(onTransitionDrift).not.toHaveBeenCalled();
+
+    receive({ type: "focusin", byUser: true });
+
+    expect(boxes()).toHaveLength(0);
+    expect(onTransitionDrift).toHaveBeenLastCalledWith(
+      "transition-box-touched",
+      true,
+    );
+  });
+});

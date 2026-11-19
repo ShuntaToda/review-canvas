@@ -51,10 +51,12 @@ type ToolbarProps = {
   onToggleStoryList: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  /** 道具の右に置く「画面のつながり」（TransitionPicker） */
+  transitionPicker?: React.ReactNode;
 };
 
 /**
- * 上の操作の帯。いつも使うものだけを 1 段に並べる（ページ・左右の開閉・道具・比較するブランチ・ブランチ・使い方・アカウント）。
+ * 上の操作の帯。いつも使うものだけを 1 段に並べる（ページ・左右の開閉・道具・画面のつながり・比較するブランチ・ブランチ・使い方・アカウント）。
  * 絞り込みと並べ方の設定は、左の画面の一覧（StorySidebar）にある
  */
 export const Toolbar = ({
@@ -77,6 +79,7 @@ export const Toolbar = ({
   onToggleStoryList,
   sidebarOpen,
   onToggleSidebar,
+  transitionPicker,
 }: ToolbarProps) => {
   const sources = useSources();
   return (
@@ -136,6 +139,7 @@ export const Toolbar = ({
           </IconButton>
         ))}
       </div>
+      {transitionPicker}
 
       <div className="flex min-w-0 items-center justify-end gap-0.5 max-md:ml-auto md:flex-1">
         {/* 選べる相手が無い（置いてあるブランチが 1 つだけ・今のブランチを置いていない）なら出さない */}
