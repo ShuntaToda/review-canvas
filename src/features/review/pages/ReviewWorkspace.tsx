@@ -19,6 +19,7 @@ import {
   StorybookMissingNotice,
   Toast,
 } from "../components/Notices";
+import { ResizableSidebar } from "../components/ResizableSidebar";
 import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
@@ -35,10 +36,12 @@ import {
   useBranches,
   useComments,
 } from "../hooks/useReviewData";
+import { useSidebarWidth } from "../hooks/useSidebarWidth";
 import { useSources } from "../hooks/useSources";
 import { useStoryListOpen } from "../hooks/useStoryListOpen";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
+import { useViewportWidth } from "../hooks/useViewportWidth";
 import {
   type AnchorBox,
   type LocatedPin,
@@ -263,6 +266,9 @@ export const ReviewWorkspace = ({
   const [storyListOpen, setStoryListOpenState] = useStoryListOpen(
     () => window.innerWidth,
   );
+  const viewportWidth = useViewportWidth();
+  const storyListWidth = useSidebarWidth("left", viewportWidth);
+  const commentListWidth = useSidebarWidth("right", viewportWidth);
   const setStoryListOpen = (open: boolean) => {
     // 一覧の中にいるまま閉じると、フォーカスが body へ落ちるので、キャンバスへ戻す
     if (!open && isInsideStoryList(document.activeElement)) focusCanvas();
@@ -914,25 +920,32 @@ export const ReviewWorkspace = ({
       />
       <div className="relative flex min-h-0 flex-1">
         {storyListOpen && (
-          <StorySidebar
-            rows={rows}
-            currentStoryId={centerStoryId}
-            query={query}
-            onQueryChange={setQuery}
-            searchRef={searchRef}
-            onSelectStory={focusStory}
+          <ResizableSidebar
+            side="left"
+            label="画面の一覧の幅"
+            sidebar={storyListWidth}
+            viewportWidth={viewportWidth}
           >
-            <DisplaySettings
-              showComponents={showComponents}
-              onShowComponentsChange={setShowComponents}
-              width={width}
-              widthOptions={pageWidthOptions}
-              onWidthChange={(next) => pageWidths.select(page, next)}
-              onWidthRemove={(target) => pageWidths.remove(page, target)}
-              perRow={perRow}
-              onPerRowChange={setPerRow}
-            />
-          </StorySidebar>
+            <StorySidebar
+              rows={rows}
+              currentStoryId={centerStoryId}
+              query={query}
+              onQueryChange={setQuery}
+              searchRef={searchRef}
+              onSelectStory={focusStory}
+            >
+              <DisplaySettings
+                showComponents={showComponents}
+                onShowComponentsChange={setShowComponents}
+                width={width}
+                widthOptions={pageWidthOptions}
+                onWidthChange={(next) => pageWidths.select(page, next)}
+                onWidthRemove={(target) => pageWidths.remove(page, target)}
+                perRow={perRow}
+                onPerRowChange={setPerRow}
+              />
+            </StorySidebar>
+          </ResizableSidebar>
         )}
         <main className="relative min-w-0 flex-1" aria-label="キャンバス">
           {published === null ? (
@@ -1140,40 +1153,47 @@ export const ReviewWorkspace = ({
           {sessionExpired && <SessionExpiredNotice />}
         </main>
         {sidebarOpen && (
-          <CommentSidebar
-            page={page}
-            threads={listed}
-            counts={counts}
-            status={status}
-            onStatusChange={setStatus}
-            title={titleFilter}
-            titles={titles}
-            onTitleChange={setTitleFilter}
-            storiesById={storiesByKey}
-            activeThreadId={activeThreadId}
-            missingThreadIds={missingThreadIds}
-            loading={commentsQuery.isLoading}
-            errorMessage={
-              commentsQuery.error === undefined
-                ? undefined
-                : commentsErrorMessage(commentsQuery.error)
-            }
-            onSelect={(thread) => {
-              focusThread(thread);
-              // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
-              if (isNarrowViewport(window.innerWidth)) {
-                setSidebarOpen(false);
+          <ResizableSidebar
+            side="right"
+            label="コメント一覧の幅"
+            sidebar={commentListWidth}
+            viewportWidth={viewportWidth}
+          >
+            <CommentSidebar
+              page={page}
+              threads={listed}
+              counts={counts}
+              status={status}
+              onStatusChange={setStatus}
+              title={titleFilter}
+              titles={titles}
+              onTitleChange={setTitleFilter}
+              storiesById={storiesByKey}
+              activeThreadId={activeThreadId}
+              missingThreadIds={missingThreadIds}
+              loading={commentsQuery.isLoading}
+              errorMessage={
+                commentsQuery.error === undefined
+                  ? undefined
+                  : commentsErrorMessage(commentsQuery.error)
               }
-            }}
-            onExport={() => setDialog("markdown")}
-            onCopyLink={() =>
-              copyLink(
-                activeThreadId === null
-                  ? { page }
-                  : { page, comment: activeThreadId },
-              )
-            }
-          />
+              onSelect={(thread) => {
+                focusThread(thread);
+                // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
+                if (isNarrowViewport(window.innerWidth)) {
+                  setSidebarOpen(false);
+                }
+              }}
+              onExport={() => setDialog("markdown")}
+              onCopyLink={() =>
+                copyLink(
+                  activeThreadId === null
+                    ? { page }
+                    : { page, comment: activeThreadId },
+                )
+              }
+            />
+          </ResizableSidebar>
         )}
       </div>
       {dialog === "markdown" && (
