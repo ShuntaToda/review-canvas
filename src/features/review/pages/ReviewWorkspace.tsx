@@ -56,7 +56,11 @@ import {
   worldToScreen,
   zoomAt,
 } from "../model/camera";
-import { type CameraState, resolveCamera } from "../model/camera-state";
+import {
+  type CameraState,
+  resolveCamera,
+  storyFocusPoint,
+} from "../model/camera-state";
 import { buildExportJson, exportFileName } from "../model/export-json";
 import {
   boundsOfRows,
@@ -191,22 +195,25 @@ export const ReviewWorkspace = ({
       storyId === undefined
         ? undefined
         : storiesByKey.get(storyKey(page, storyId));
-    const cameras = mapSources<CameraState>(sources.ids, () => ({
-      kind: "initial",
-    }));
-    if (story !== undefined) {
-      cameras[page] = {
+    // 画面へ寄せる横の位置は、開いたページで実際に使う幅（リンクの幅・覚えた幅）で決めるので、幅を受けて作る
+    const cameras = (pageWidth: number) => {
+      const states = mapSources<CameraState>(sources.ids, () => ({
+        kind: "initial",
+      }));
+      if (story === undefined) return states;
+      states[page] = {
         kind: "focus",
         storyId: story.id,
         point:
           thread === undefined
-            ? { x: sources.get(story.source).defaultWidth / 2, y: 300 }
+            ? storyFocusPoint(pageWidth)
             : { x: thread.root.x, y: thread.root.y },
         zoom: thread === undefined ? 0.5 : 0.75,
         // ピンを追いかける（画面を読み込んで測り、要素を見つけたら、そこへ移る）
         ...(thread === undefined ? {} : { threadId: thread.root.id }),
       };
-    }
+      return states;
+    };
     return {
       page,
       cameras,
@@ -250,7 +257,9 @@ export const ReviewWorkspace = ({
     setStoryListOpenState(open);
   };
 
-  const [cameraStates, setCameraStates] = useState(initial.cameras);
+  const [cameraStates, setCameraStates] = useState(() =>
+    initial.cameras(widthOf(initial.page)),
+  );
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
     initial.threadId,
@@ -477,7 +486,7 @@ export const ReviewWorkspace = ({
         kind: "focus",
         storyId: story.id,
         // 開いたときの初めの見え方（URL の story=）と同じく、画面の上の方を真ん中に寄せる
-        point: { x: width / 2, y: 300 },
+        point: storyFocusPoint(width),
         zoom: focusZoom(camera.zoom),
       },
     }));
