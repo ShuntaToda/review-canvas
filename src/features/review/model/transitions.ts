@@ -32,7 +32,7 @@ export const TRANSITION_MODES: ReadonlyArray<{
 
 export const DEFAULT_TRANSITION_MODE: TransitionMode = "selected";
 
-/** ブラウザに覚えた出し方を読む（知らない値は既定に戻す） */
+/** ブラウザに覚えた出し方を読む（知らない値は undefined。呼ぶ側が既定に戻す） */
 export const parseTransitionMode = (raw: string): TransitionMode | undefined =>
   TRANSITION_MODES.find((option) => option.mode === raw)?.mode;
 
@@ -110,14 +110,30 @@ export type TransitionTarget =
 export const storyDisplayName = (story: Story): string =>
   `${story.title}／${story.name}`;
 
-/** 札の文字（目録から読んだ文字は、そのまま文字として出す） */
+/**
+ * 札の文字を、切ってよい側（label と行き先）と、切らずに必ず見せる後ろの文言（「（この表示にありません）」など）に分けて返す。
+ * 目録から読んだ文字は、そのまま文字として出す
+ */
+export const transitionLabelParts = (
+  edge: Pick<TransitionEdge, "to" | "label">,
+  target: TransitionTarget,
+): { main: string; suffix: string } => {
+  if (target.kind === "missing") {
+    return { main: `→ ${edge.to}`, suffix: "（見つかりません）" };
+  }
+  return {
+    main: `${edge.label === undefined ? "" : `${edge.label} `}→ ${storyDisplayName(target.story)}`,
+    suffix: target.kind === "hidden" ? "（この表示にありません）" : "",
+  };
+};
+
+/** 札の文字（全文） */
 export const transitionLabelText = (
   edge: Pick<TransitionEdge, "to" | "label">,
   target: TransitionTarget,
 ): string => {
-  if (target.kind === "missing") return `→ ${edge.to}（見つかりません）`;
-  const text = `${edge.label === undefined ? "" : `${edge.label} `}→ ${storyDisplayName(target.story)}`;
-  return target.kind === "hidden" ? `${text}（この表示にありません）` : text;
+  const { main, suffix } = transitionLabelParts(edge, target);
+  return `${main}${suffix}`;
 };
 
 /** 絞り込みの状態（飛ぶときに外し、戻るときに戻す分） */
@@ -196,24 +212,18 @@ const transitionEnd = (
 };
 
 /** 画面に描く 1 本の線（画面上の座標。拡大・縮小しても線の太さを変えないため、画面上で描く） */
-export type TransitionShape =
-  | {
-      kind: "curve";
-      start: Point;
-      end: Point;
-      /** SVG の path の d */
-      path: string;
-      /** 札を置く点（曲線の真ん中） */
-      labelAt: Point;
-    }
-  | {
-      /** 行き先が見えている範囲の外・キャンバスに無い。短い線と札だけ */
-      kind: "stub";
-      start: Point;
-      end: Point;
-      path: string;
-      labelAt: Point;
-    };
+export type TransitionShape = {
+  /** curve: 行き先まで引いた曲線、stub: 行き先が見えている範囲の外・キャンバスに無いときの短い線（札で行き先を示す） */
+  kind: "curve" | "stub";
+  start: Point;
+  end: Point;
+  /** SVG の path の d */
+  path: string;
+  /** 札を置く点（曲線は真ん中、短い線は先） */
+  labelAt: Point;
+  /** 札を labelAt から右へ伸ばすか（start）、labelAt で終わるように左へ伸ばすか（end。画面の右の端に寄ったとき） */
+  labelAlign: "start" | "end";
+};
 
 const round = (value: number): number => Math.round(value * 10) / 10;
 const pointText = (point: Point): string =>
@@ -235,6 +245,7 @@ const stubShape = (start: Point, toward: Point | null): TransitionShape => {
     end,
     path: `M ${pointText(start)} L ${pointText(end)}`,
     labelAt: end,
+    labelAlign: "start",
   };
 };
 
@@ -300,6 +311,7 @@ export const transitionShape = ({
     end,
     path: `M ${pointText(start)} C ${pointText(c1)} ${pointText(c2)} ${pointText(end)}`,
     labelAt: bezierAt([start, c1, c2, end], 0.5),
+    labelAlign: "start",
   };
 };
 
@@ -391,46 +403,53 @@ export const transitionLines = ({
       },
     ];
   });
-  return separateLabels(lines).map((line) =>
-    line.role === "selected" ? keepLabelInView(line, viewport) : line,
+  // 先に見えている範囲へ収めてから、重なった札をずらす（収めた先で、同じ縁に寄った札どうしが重ならないように）
+  return separateLabels(
+    lines.map((line) =>
+      line.role === "selected" ? keepLabelInView(line, viewport) : line,
+    ),
   );
 };
 
 /** 札どうしの縦の間(px。画面上)。同じボタンから出る線の札が、同じ点に重ならないようにずらす */
 export const LABEL_STEP = 24;
 
-/** 札の幅の上限(px。画面上。TransitionLayer の max-w-72 と同じ)と、画面の端との間 */
-const LABEL_MAX_WIDTH = 288;
+/** 札の幅の上限(px。画面上。TransitionLayer はこの幅で切る)と、画面の端との間 */
+export const LABEL_MAX_WIDTH = 288;
 const LABEL_EDGE = 8;
 
 /**
- * 札を、見えている範囲の中に収める（線の出る点が画面の外にあるとき、例えば画面の右の端から出す線でも、押せるようにする）
+ * 札を、見えている範囲の中に収める（線の出る点が画面の外にあるとき、例えば画面の右の端から出す線でも、押せるようにする）。
+ * 右に札の上限の幅が入らない点では、札の右の端をその点（画面の外なら画面の右の端）にそろえる
+ * （短い札を、上限の幅の分だけ線から離さないため）
  */
 const keepLabelInView = (
   line: TransitionLine,
   viewport: Size,
 ): TransitionLine => {
   const { x, y } = line.shape.labelAt;
+  const right = viewport.width - LABEL_EDGE;
+  const fitsRight = x + LABEL_MAX_WIDTH <= right;
+  const labelAlign = fitsRight ? "start" : "end";
   const next = {
-    x: Math.min(
-      Math.max(x, LABEL_EDGE),
-      Math.max(LABEL_EDGE, viewport.width - LABEL_MAX_WIDTH - LABEL_EDGE),
-    ),
+    x: fitsRight
+      ? Math.max(x, LABEL_EDGE)
+      : Math.max(Math.min(x, right), LABEL_EDGE + LABEL_MAX_WIDTH),
     y: Math.min(
       Math.max(y, LABEL_STEP / 2 + LABEL_EDGE),
       Math.max(LABEL_EDGE, viewport.height - LABEL_STEP / 2 - LABEL_EDGE),
     ),
   };
-  return next.x === x && next.y === y
+  return next.x === x && next.y === y && labelAlign === line.shape.labelAlign
     ? line
-    : { ...line, shape: { ...line.shape, labelAt: next } };
+    : { ...line, shape: { ...line.shape, labelAt: next, labelAlign } };
 };
 
 const separateLabels = (lines: TransitionLine[]): TransitionLine[] => {
   const used = new Map<string, number>();
   return lines.map((line) => {
     if (line.role !== "selected") return line;
-    const key = `${String(Math.round(line.shape.labelAt.x))}:${String(Math.round(line.shape.labelAt.y))}`;
+    const key = `${line.shape.labelAlign}:${String(Math.round(line.shape.labelAt.x))}:${String(Math.round(line.shape.labelAt.y))}`;
     const count = used.get(key) ?? 0;
     used.set(key, count + 1);
     if (count === 0) return line;

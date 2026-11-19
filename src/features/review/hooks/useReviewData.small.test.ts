@@ -162,6 +162,23 @@ describe("fetchShots（useShots が読む、スクリーンショットの目録
       expect(catalog.hasPlayFunction("pages-list--default")).toBeUndefined();
     },
   );
+
+  test.each([
+    ["目録が無い（404）", new Response("", { status: 404 }), false],
+    ["置き場が 403 で返す", new Response("", { status: 403 }), false],
+    ["サーバーの誤り（500）", new Response("", { status: 500 }), true],
+    ["通信に失敗した", new TypeError("Failed to fetch"), true],
+  ])(
+    "[異常系]%s ときの、取りに行って失敗したかの印は %s（失敗なら「画像を撮っていない」と言わない）",
+    async (_, response, failed) => {
+      respond(response);
+
+      const catalog = await fetchShots(base, "shop", "public");
+
+      expect(catalog.failed).toBe(failed);
+      expect(catalog.hasManifest).toBe(false);
+    },
+  );
 });
 
 describe("Storybook の配信の読み方（だれでも読める／ログイン連動）", () => {

@@ -9,6 +9,7 @@ import {
   STUB_LENGTH,
   type TransitionEdge,
   transitionEdgesOf,
+  transitionLabelParts,
   transitionLabelText,
   transitionLines,
   transitionShape,
@@ -384,9 +385,77 @@ describe("transitionLines（札を見えている範囲に収める）", () => {
       viewport,
     });
     expect(line?.shape.start.x).toBe(1280);
-    expect(line?.shape.labelAt.x).toBeLessThanOrEqual(viewport.width - 288);
+    // 札の右の端を画面の右の端にそろえる
+    expect(line?.shape.labelAlign).toBe("end");
+    expect(line?.shape.labelAt.x).toBe(viewport.width - 8);
     expect(line?.shape.labelAt.y).toBeGreaterThan(0);
     expect(line?.shape.labelAt.y).toBeLessThan(viewport.height);
+  });
+
+  test("[正常系]右に札の上限の幅が入らない点では、札の右の端をその点にそろえ（線から離さない）、入る点ではそのまま右へ伸ばす", () => {
+    const linesAt = (cameraX: number) =>
+      transitionLines({
+        mode: "selected",
+        edges: [edge(list, "shop-gone--default")],
+        rows: rowsAt(1000),
+        selectedStoryId: list.id,
+        storyOf: (id) => stories.find((s) => s.id === id),
+        driftedStoryIds: new Set(),
+        camera: { x: cameraX, y: 0, zoom: 1 },
+        viewport: { width: 1000, height: 800 },
+      });
+    // 線の先（札を置く点）は、ボタンの右の端 140 から右へ STUB_LENGTH
+    const near = linesAt(700)[0]?.shape;
+    expect(near?.labelAlign).toBe("end");
+    expect(near?.labelAt.x).toBe(700 + 140 + STUB_LENGTH);
+    const far = linesAt(0)[0]?.shape;
+    expect(far?.labelAlign).toBe("start");
+    expect(far?.labelAt.x).toBe(140 + STUB_LENGTH);
+  });
+
+  test("[正常系]収めた先で同じ縁に寄った札どうしも、縦にずらす", () => {
+    const lines = transitionLines({
+      mode: "selected",
+      edges: [
+        edge(list, "shop-gone--default", { rect: null }),
+        edge(list, "shop-lost--default", { index: 1, rect: null }),
+      ],
+      rows: rowsAt(1280),
+      selectedStoryId: list.id,
+      storyOf: (id) => stories.find((s) => s.id === id),
+      driftedStoryIds: new Set(),
+      // 画面の右の端（線の出る点）が見えている範囲の右の外にある
+      camera: { x: 0, y: -100, zoom: 1 },
+      viewport: { width: 1000, height: 800 },
+    });
+    const [first, second] = lines.map((line) => line.shape);
+    expect(first?.labelAt.x).toBe(second?.labelAt.x);
+    expect(
+      Math.abs((second?.labelAt.y ?? 0) - (first?.labelAt.y ?? 0)),
+    ).toBeGreaterThanOrEqual(LABEL_STEP);
+  });
+});
+
+describe("transitionLabelParts", () => {
+  test("[正常系]切ってよい側と、必ず見せる後ろの文言に分ける", () => {
+    expect(
+      transitionLabelParts(
+        { to: form.id, label: "在庫があるとき" },
+        { kind: "hidden", story: form },
+      ),
+    ).toStrictEqual({
+      main: "在庫があるとき → Shop/OrderForm／Default",
+      suffix: "（この表示にありません）",
+    });
+    expect(
+      transitionLabelParts({ to: "shop-gone--default" }, { kind: "missing" }),
+    ).toStrictEqual({
+      main: "→ shop-gone--default",
+      suffix: "（見つかりません）",
+    });
+    expect(
+      transitionLabelParts({ to: form.id }, { kind: "shown", story: form }),
+    ).toStrictEqual({ main: "→ Shop/OrderForm／Default", suffix: "" });
   });
 });
 

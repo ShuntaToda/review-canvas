@@ -811,4 +811,51 @@ describe("Frame の遷移のボタンの枠", () => {
       true,
     );
   });
+
+  test("[正常系]操作のモードで中を押して（橋渡しの知らせが無くても）フォーカスが iframe へ移ったら、触ったとみなして枠を消す", () => {
+    const onTransitionDrift =
+      vi.fn<(storyId: string, drifted: boolean) => void>();
+    const { reveal, boxes, iframe } = renderFrame({
+      id: "transition-box-blur",
+      tool: "interact",
+      onTransitionDrift,
+    });
+    reveal(1319);
+    expect(boxes()).toHaveLength(1);
+
+    // 親の文書から見ると、中を押すと window が blur し、activeElement が iframe になる
+    const activeElement = vi
+      .spyOn(document, "activeElement", "get")
+      .mockReturnValue(iframe);
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+      vi.advanceTimersByTime(0);
+    });
+    activeElement.mockRestore();
+
+    expect(boxes()).toHaveLength(0);
+    expect(onTransitionDrift).toHaveBeenLastCalledWith(
+      "transition-box-blur",
+      true,
+    );
+  });
+
+  test("[正常系]blur しても、フォーカスが iframe に無ければ（ほかのウィンドウへ移った）触ったとみなさない", () => {
+    const onTransitionDrift =
+      vi.fn<(storyId: string, drifted: boolean) => void>();
+    const { reveal, boxes } = renderFrame({
+      id: "transition-box-blur-away",
+      tool: "interact",
+      onTransitionDrift,
+    });
+    reveal(1319);
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+      vi.advanceTimersByTime(0);
+    });
+
+    expect(boxes()).toHaveLength(1);
+    expect(onTransitionDrift).not.toHaveBeenCalled();
+  });
 });

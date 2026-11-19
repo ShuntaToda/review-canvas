@@ -43,7 +43,10 @@ const fixtures = vi.hoisted(() => {
     commit: "abc1234",
     builtAt: null,
     basePath: `/sb/${branch}/`,
-    storybooks: [{ source: "shop", available: true }],
+    storybooks: [
+      { source: "shop", available: true },
+      { source: "blog", available: true },
+    ],
   });
   const meta: ReviewMeta = {
     defaultBranch: "main",
@@ -53,6 +56,13 @@ const fixtures = vi.hoisted(() => {
         {
           id: "shop",
           label: "サンプルショップ",
+          widths: [375, 1280],
+          defaultWidth: 1280,
+          baseHeight: 800,
+        },
+        {
+          id: "blog",
+          label: "ブログ",
           widths: [375, 1280],
           defaultWidth: 1280,
           baseHeight: 800,
@@ -94,7 +104,8 @@ const fixtures = vi.hoisted(() => {
           playFunctions: {},
           ...(state.manifest === "transitions" ? { transitions } : {}),
         };
-  return { stories, meta, state, manifest };
+  const blogStories: Story[] = [{ ...story("Blog/Entry"), source: "blog" }];
+  return { stories, blogStories, meta, state, manifest };
 });
 
 vi.mock("../hooks/useReviewData", async (importOriginal) => {
@@ -117,12 +128,19 @@ vi.mock("../hooks/useReviewData", async (importOriginal) => {
       retry: () => undefined,
     }),
     useStories: () =>
-      loaded({ shop: { kind: "ok" as const, stories: fixtures.stories } }),
+      loaded({
+        shop: { kind: "ok" as const, stories: fixtures.stories },
+        blog: { kind: "ok" as const, stories: fixtures.blogStories },
+      }),
     useShots: () =>
       loaded({
         shop: shots.buildShotCatalog(
           shots.parseShotsManifest(fixtures.manifest()),
           "https://sb.example.com/sb/main/shop/",
+        ),
+        blog: shots.buildShotCatalog(
+          null,
+          "https://sb.example.com/sb/main/blog/",
         ),
       }),
     useComments: () =>
@@ -353,16 +371,16 @@ describe("ReviewPage の画面のつながり", () => {
     fireEvent.click(label("在庫があるとき → Shop/Form／Default"));
     expect(urlParams().get("story")).toBe("shop-form--default");
     expect(canvas().dataset["highlight"]).toBe("shop-form--default");
-    expect(label("← Shop/List／Defaultへ戻る")).not.toBeNull();
+    expect(label("Shop/List／Defaultへ戻る")).not.toBeNull();
 
     fireEvent.click(label("→ Shop/Form／Filled"));
     expect(urlParams().get("story")).toBe("shop-form--filled");
-    expect(label("← Shop/Form／Defaultへ戻る")).not.toBeNull();
+    expect(label("Shop/Form／Defaultへ戻る")).not.toBeNull();
 
-    fireEvent.click(label("← Shop/Form／Defaultへ戻る"));
+    fireEvent.click(label("Shop/Form／Defaultへ戻る"));
     expect(urlParams().get("story")).toBe("shop-form--default");
 
-    fireEvent.click(label("← Shop/List／Defaultへ戻る"));
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
     expect(urlParams().get("story")).toBe("shop-list--default");
     expect(canvas().dataset["camera"]).toBe(initialCamera);
     expect(queryLabel(/へ戻る$/)).toBeNull();
@@ -381,6 +399,41 @@ describe("ReviewPage の画面のつながり", () => {
     expect(queryLabel(/へ戻る$/)).toBeNull();
   });
 
+  test("[正常系]ページを替えると「戻る」が消え、元のページへ戻っても出ない", () => {
+    open(LIST);
+    fireEvent.click(label("在庫があるとき → Shop/Form／Default"));
+    expect(queryLabel(/へ戻る$/)).not.toBeNull();
+    const pageSelect = screen.getByRole("combobox", { name: "ページ" });
+
+    fireEvent.change(pageSelect, { target: { value: "blog" } });
+    expect(canvasTitles()).toStrictEqual(["Blog/Entry"]);
+    expect(queryLabel(/へ戻る$/)).toBeNull();
+
+    fireEvent.change(pageSelect, { target: { value: "shop" } });
+    expect(queryLabel(/へ戻る$/)).toBeNull();
+  });
+
+  test("[正常系]札で飛ぶと「戻る」へフォーカスを移し、戻りきると押した札へフォーカスを戻す", () => {
+    open(LIST);
+    const first = label("在庫があるとき → Shop/Form／Default");
+    first.focus();
+
+    fireEvent.click(first);
+    expect(document.activeElement).toBe(label("Shop/List／Defaultへ戻る"));
+
+    fireEvent.click(label("→ Shop/Form／Filled"));
+    expect(document.activeElement).toBe(label("Shop/Form／Defaultへ戻る"));
+
+    // 1 段戻っても、まだ積んだものがあれば「戻る」に居続ける
+    fireEvent.click(label("Shop/Form／Defaultへ戻る"));
+    expect(document.activeElement).toBe(label("Shop/List／Defaultへ戻る"));
+
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
+    expect(document.activeElement).toBe(
+      label("在庫があるとき → Shop/Form／Default"),
+    );
+  });
+
   test("[正常系]画面名の絞り込みで隠れた行き先は「（この表示にありません）」を付け、押すと絞り込みを外して飛び、戻ると絞り込みも戻る", () => {
     open(LIST);
     const search = screen.getByRole<HTMLInputElement>("searchbox", {
@@ -396,7 +449,7 @@ describe("ReviewPage の画面のつながり", () => {
     expect(canvasTitles()).toContain("Shop/Form");
     expect(urlParams().get("story")).toBe("shop-form--default");
 
-    fireEvent.click(label("← Shop/List／Defaultへ戻る"));
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
     expect(search.value).toBe("List");
     expect(canvasTitles()).toStrictEqual(["Shop/List"]);
   });
@@ -414,7 +467,7 @@ describe("ReviewPage の画面のつながり", () => {
     expect(components.checked).toBe(true);
     expect(canvasTitles()).toContain("Components/Button");
 
-    fireEvent.click(label("← Shop/List／Defaultへ戻る"));
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
     expect(components.checked).toBe(false);
     expect(canvasTitles()).not.toContain("Components/Button");
   });
@@ -426,7 +479,7 @@ describe("ReviewPage の画面のつながり", () => {
     expect(urlParams().has("scope")).toBe(false);
     expect(canvasTitles()).toContain("Guide/Top");
 
-    fireEvent.click(label("← Shop/List／Defaultへ戻る"));
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
     expect(urlParams().get("scope")).toBe("Shop");
     expect(canvasTitles()).not.toContain("Guide/Top");
   });
@@ -435,9 +488,12 @@ describe("ReviewPage の画面のつながり", () => {
     open(LIST);
 
     const missing = label("→ shop-gone--default（見つかりません）");
-    expect(missing).toHaveProperty("disabled", true);
+    // disabled にせず aria-disabled にする（Tab で止まって読める）
+    expect(missing).toHaveProperty("disabled", false);
+    expect(missing.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(missing);
     expect(queryLabel(/へ戻る$/)).toBeNull();
+    expect(urlParams().get("story")).toBe("shop-list--default");
   });
 
   test("[正常系]目録の label に HTML を書いても文字として出す", () => {
@@ -475,7 +531,7 @@ describe("ReviewPage の画面のつながり", () => {
     // Shop/Done は行き止まり
     expect(canvasTitles()).toStrictEqual(["Shop/Done"]);
 
-    fireEvent.click(label("← Shop/List／Defaultへ戻る"));
+    fireEvent.click(label("Shop/List／Defaultへ戻る"));
     expect(canvasTitles()).toStrictEqual([
       "Shop/List",
       "Shop/Form",

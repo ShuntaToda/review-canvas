@@ -61,6 +61,15 @@ export const resolveLinkWidth = (
     : defaultWidth;
 };
 
+/** 画面へ寄るときに真ん中へ持ってくる点の縦の位置（画面の左上から。画面の上の方） */
+const STORY_FOCUS_Y = 300;
+
+/** 画面へ寄るときに真ん中へ持ってくる点（画面の左上から。横はその幅の真ん中、縦は画面の上の方） */
+export const storyFocusPoint = (width: number): { x: number; y: number } => ({
+  x: width / 2,
+  y: STORY_FOCUS_Y,
+});
+
 /**
  * ?story= のリンクで開いたときに寄せる点（画面の左上から）。横は openedLinkWidth（リンクの幅で開いた幅。選べない幅なら既定の幅）の真ん中、
  * それ以外（幅が無い・選べない・数でない）は、いままでどおりページの既定の幅の真ん中。縦は画面の上の方
@@ -68,10 +77,7 @@ export const resolveLinkWidth = (
 export const storyLinkFocusPoint = (
   openedLinkWidth: number | undefined,
   defaultWidth: number,
-): { x: number; y: number } => ({
-  x: (openedLinkWidth ?? defaultWidth) / 2,
-  y: 300,
-});
+): { x: number; y: number } => storyFocusPoint(openedLinkWidth ?? defaultWidth);
 
 /**
  * 作業の画面をどう作ったか。url: URL から開いた最初の 1 回、branch-switch: ブランチを切り替えて作り直した

@@ -11,6 +11,7 @@ import type { StorySource } from "../model/sources";
 import {
   buildShotCatalog,
   EMPTY_SHOT_CATALOG,
+  FAILED_SHOT_CATALOG,
   parseShotsManifest,
   type ShotCatalog,
 } from "../model/story-shots";
@@ -173,13 +174,16 @@ export const fetchShots = async (
       storybookShotsManifestPath(base, source),
       access,
     );
-    if (!response.ok) return EMPTY_SHOT_CATALOG;
+    // 4xx は目録が無い（撮る前の版で置いた・撮れなかった。置き場によっては 403 で返る）。5xx は取りに行って失敗した
+    if (!response.ok) {
+      return response.status >= 500 ? FAILED_SHOT_CATALOG : EMPTY_SHOT_CATALOG;
+    }
     return buildShotCatalog(
       parseShotsManifest(await response.json()),
       storybookSourceBase(base, source),
     );
   } catch {
-    return EMPTY_SHOT_CATALOG;
+    return FAILED_SHOT_CATALOG;
   }
 };
 

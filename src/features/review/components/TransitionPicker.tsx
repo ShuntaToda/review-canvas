@@ -15,8 +15,10 @@ type TransitionPickerProps = {
   onReachableOnlyChange: (on: boolean) => void;
   /** 選んだ画面が無い（キャンバスに画面が無い）ときは、つながる画面だけに絞れない */
   hasSelectedStory: boolean;
-  /** 画像を撮っていない表示（画像の無いブランチ・自分用に足した幅）。理由を出し、つながる画面だけに絞れない */
-  unavailable: boolean;
+  /** 画面のつながりを出せる表示か（出せなければ、つながる画面だけに絞れない） */
+  available: boolean;
+  /** 出せない理由（画像を撮っていない幅・ブランチ）を出すか。目録を取りに行って失敗したときは出さない */
+  showReason: boolean;
 };
 
 /**
@@ -29,7 +31,8 @@ export const TransitionPicker = ({
   reachableOnly,
   onReachableOnlyChange,
   hasSelectedStory,
-  unavailable,
+  available,
+  showReason,
 }: TransitionPickerProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,7 +58,7 @@ export const TransitionPicker = ({
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-describedby={unavailable ? reasonId : undefined}
+        aria-describedby={showReason ? reasonId : undefined}
         className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm whitespace-nowrap text-ink-sub hover:bg-panel-sub aria-expanded:bg-panel-sub"
         onClick={() => setOpen(!open)}
       >
@@ -64,7 +67,7 @@ export const TransitionPicker = ({
         <span className="text-xs text-muted max-lg:sr-only">: {current}</span>
         <ChevronDown aria-hidden className="size-3.5" />
       </button>
-      {unavailable && (
+      {showReason && (
         <span
           id={reasonId}
           className="max-w-56 truncate text-xs text-warn max-md:sr-only"
@@ -98,13 +101,13 @@ export const TransitionPicker = ({
           <label className="flex items-center gap-2 border-t border-line pt-2">
             <input
               type="checkbox"
-              checked={reachableOnly && !unavailable}
-              disabled={unavailable || (!reachableOnly && !hasSelectedStory)}
+              checked={reachableOnly && available}
+              disabled={!available || (!reachableOnly && !hasSelectedStory)}
               onChange={(event) => onReachableOnlyChange(event.target.checked)}
             />
             この画面からつながる画面だけ表示
           </label>
-          {unavailable && (
+          {showReason && (
             <p className="text-xs text-warn">
               {TRANSITIONS_UNAVAILABLE_MESSAGE}
             </p>

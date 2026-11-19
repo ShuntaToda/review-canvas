@@ -31,15 +31,18 @@ describe("useLinkHighlight", () => {
       ({ ready }) => useLinkHighlight(STORY, { ready, onPage: true }),
       { initialProps: { ready: false } },
     );
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
 
     rerender({ ready: true });
-    expect(result.current).toStrictEqual({ storyId: STORY, motion: "fade" });
+    expect(result.current.highlight).toStrictEqual({
+      storyId: STORY,
+      motion: "fade",
+    });
 
     advance(LINK_HIGHLIGHT_MS - 1);
-    expect(result.current).not.toBeNull();
+    expect(result.current.highlight).not.toBeNull();
     advance(1);
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
   });
 
   test("[正常系]視差効果を減らす設定なら、フェードせずに出し、同じ時間で消す", () => {
@@ -47,10 +50,13 @@ describe("useLinkHighlight", () => {
     const { result } = renderHook(() =>
       useLinkHighlight(STORY, { ready: true, onPage: true }),
     );
-    expect(result.current).toStrictEqual({ storyId: STORY, motion: "still" });
+    expect(result.current.highlight).toStrictEqual({
+      storyId: STORY,
+      motion: "still",
+    });
 
     advance(LINK_HIGHLIGHT_MS);
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
   });
 
   test("[正常系]示す画面が無い（?comment= のリンク・再読み込み）なら、出さない", () => {
@@ -59,7 +65,7 @@ describe("useLinkHighlight", () => {
       useLinkHighlight(null, { ready: true, onPage: true }),
     );
 
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
   });
 
   test("[境界値]出したあとにほかの画面へ移っても（寄せ終えた状態でなくなっても）、そのまま時間で消え、二度は出さない", () => {
@@ -68,15 +74,15 @@ describe("useLinkHighlight", () => {
       ({ ready }) => useLinkHighlight(STORY, { ready, onPage: true }),
       { initialProps: { ready: true } },
     );
-    expect(result.current).not.toBeNull();
+    expect(result.current.highlight).not.toBeNull();
 
     rerender({ ready: false });
-    expect(result.current).not.toBeNull();
+    expect(result.current.highlight).not.toBeNull();
     advance(LINK_HIGHLIGHT_MS);
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
 
     rerender({ ready: true });
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
   });
 
   test("[境界値]出しているあいだにほかのページへ切り替えたら、その時点で終え、戻っても出し直さない", () => {
@@ -85,11 +91,40 @@ describe("useLinkHighlight", () => {
       ({ onPage }) => useLinkHighlight(STORY, { ready: onPage, onPage }),
       { initialProps: { onPage: true } },
     );
-    expect(result.current).not.toBeNull();
+    expect(result.current.highlight).not.toBeNull();
 
     rerender({ onPage: false });
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
     rerender({ onPage: true });
-    expect(result.current).toBeNull();
+    expect(result.current.highlight).toBeNull();
+  });
+});
+
+describe("useLinkHighlight の show", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  test("[正常系]show で呼んだ画面に枠を出し、同じ時間で消す。ほかのページにいても出す", () => {
+    const { result } = renderHook(() =>
+      useLinkHighlight(null, { ready: false, onPage: false }),
+    );
+    expect(result.current.highlight).toBeNull();
+
+    act(() => result.current.show("shop-form--default"));
+    expect(result.current.highlight).toStrictEqual({
+      storyId: "shop-form--default",
+      motion: "fade",
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(LINK_HIGHLIGHT_MS);
+    });
+    expect(result.current.highlight).toBeNull();
   });
 });

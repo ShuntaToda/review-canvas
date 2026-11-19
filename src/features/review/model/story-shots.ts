@@ -754,6 +754,11 @@ export type ShotCatalog = {
   size: number;
   /** 目録を読めたか（無い・形が違うときは false。ほかのブランチと比べられるかに使う） */
   hasManifest: boolean;
+  /**
+   * 目録を取りに行って失敗した（通信の失敗・サーバーの誤り）。無い（撮っていない）のとは分けて、
+   * 「画像を撮っていない」と言わないために使う。読めた・無かったときは false
+   */
+  failed: boolean;
   /** そのストーリーの画像を、どれかの幅で 1 枚でも持つか */
   hasStory: (storyId: string) => boolean;
   /** その幅の画像を 1 枚でも持つか（持たない幅は、撮っていない幅。自分用に足した幅など） */
@@ -769,6 +774,7 @@ const shotKey = (storyId: string, width: number): string =>
 export const buildShotCatalog = (
   manifest: ShotsManifest | null,
   storybookUrl: string,
+  { failed = false }: { failed?: boolean } = {},
 ): ShotCatalog => {
   const byKey = new Map(
     (manifest?.shots ?? []).map((shot) => [
@@ -801,6 +807,7 @@ export const buildShotCatalog = (
         : undefined,
     size: byKey.size,
     hasManifest: manifest !== null,
+    failed,
     hasStory: (storyId) => storyIds.has(storyId),
     hasWidth: (width) => widths.has(width),
     transitionsOf: (storyId) =>
@@ -810,3 +817,8 @@ export const buildShotCatalog = (
 
 /** 画像の無い Storybook（目録が無い・読めない） */
 export const EMPTY_SHOT_CATALOG = buildShotCatalog(null, "");
+
+/** 目録を取りに行って失敗した Storybook（画像は無いものとして並べる） */
+export const FAILED_SHOT_CATALOG = buildShotCatalog(null, "", {
+  failed: true,
+});
