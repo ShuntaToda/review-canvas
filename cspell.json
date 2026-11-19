@@ -41,6 +41,7 @@
     "Passwordless",
     "pipefail",
     "prevalidate",
+    "productlist",
     "pubout",
     "quasis",
     "shellcheck",
