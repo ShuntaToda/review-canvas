@@ -2,6 +2,7 @@ import { layoutRows, type RowPlacement } from "./layout";
 import type { Story } from "./storybook";
 import {
   filtersToReveal,
+  LABEL_MAX_WIDTH,
   LABEL_STEP,
   parseTransitionMode,
   reachableFrom,
@@ -368,6 +369,53 @@ describe("transitionLines（札の重なり）", () => {
     expect((second?.shape.labelAt.y ?? 0) - (first?.shape.labelAt.y ?? 0)).toBe(
       LABEL_STEP,
     );
+  });
+});
+
+describe("transitionLines（札の矩形の重なり）", () => {
+  test("[正常系]中点の y が同じで x だけ違う 2 本の線の札は、矩形が重なるので縦にずらす", () => {
+    const filled = story("Shop/OrderForm", "Filled");
+    const shown = [list, form, filled];
+    const lines = transitionLines({
+      mode: "selected",
+      edges: [edge(list, form.id), edge(list, filled.id, { index: 1 })],
+      rows: rowsAt(1000, shown),
+      selectedStoryId: list.id,
+      storyOf: (id) => shown.find((s) => s.id === id),
+      driftedStoryIds: new Set(),
+      camera: { x: 0, y: 0, zoom: 0.25 },
+      viewport: { width: 1600, height: 900 },
+    });
+    const [first, second] = lines.map((line) => line.shape);
+    expect(first?.kind).toBe("curve");
+    expect(second?.kind).toBe("curve");
+    const dx = Math.abs((second?.labelAt.x ?? 0) - (first?.labelAt.x ?? 0));
+    // x は違うが札の幅の上限より近い（同じ y なら札が横に重なる）
+    expect(dx).toBeGreaterThan(0);
+    expect(dx).toBeLessThan(LABEL_MAX_WIDTH);
+    expect(
+      Math.abs((second?.labelAt.y ?? 0) - (first?.labelAt.y ?? 0)),
+    ).toBeGreaterThanOrEqual(LABEL_STEP);
+  });
+
+  test("[正常系]札の矩形が横に離れていれば、y が同じでもずらさない", () => {
+    const filled = story("Shop/OrderForm", "Filled");
+    const shown = [list, form, filled];
+    const lines = transitionLines({
+      mode: "selected",
+      edges: [edge(list, form.id), edge(list, filled.id, { index: 1 })],
+      rows: rowsAt(1000, shown),
+      selectedStoryId: list.id,
+      storyOf: (id) => shown.find((s) => s.id === id),
+      driftedStoryIds: new Set(),
+      camera: { x: 0, y: 0, zoom: 1.5 },
+      viewport: { width: 6000, height: 4000 },
+    });
+    const [first, second] = lines.map((line) => line.shape);
+    expect(
+      Math.abs((second?.labelAt.x ?? 0) - (first?.labelAt.x ?? 0)),
+    ).toBeGreaterThanOrEqual(LABEL_MAX_WIDTH);
+    expect(second?.labelAt.y).toBe(first?.labelAt.y);
   });
 });
 

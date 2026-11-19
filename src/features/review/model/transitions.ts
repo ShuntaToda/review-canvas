@@ -411,7 +411,7 @@ export const transitionLines = ({
   );
 };
 
-/** 札どうしの縦の間(px。画面上)。同じボタンから出る線の札が、同じ点に重ならないようにずらす */
+/** 札の高さとして見る縦の間(px。画面上)。札の矩形が重なれば、この分ずつ下へずらす */
 export const LABEL_STEP = 24;
 
 /** 札の幅の上限(px。画面上。TransitionLayer はこの幅で切る)と、画面の端との間 */
@@ -445,23 +445,35 @@ const keepLabelInView = (
     : { ...line, shape: { ...line.shape, labelAt: next, labelAlign } };
 };
 
+/** 札が占める横の範囲（幅は上限で見る。実際の札は短くても、長い札どうしが重ならないように） */
+const labelSpan = (shape: TransitionShape): { left: number; right: number } =>
+  shape.labelAlign === "end"
+    ? { left: shape.labelAt.x - LABEL_MAX_WIDTH, right: shape.labelAt.x }
+    : { left: shape.labelAt.x, right: shape.labelAt.x + LABEL_MAX_WIDTH };
+
+/**
+ * 札の矩形（幅は LABEL_MAX_WIDTH、高さは LABEL_STEP）が、先に置いた札と重なれば、重ならなくなるまで下へずらす
+ * （同じボタンから出る線の札は、行き先や揃え方の違いで x だけずれ、同じ点でなくても横に重なることがある）
+ */
 const separateLabels = (lines: TransitionLine[]): TransitionLine[] => {
-  const used = new Map<string, number>();
+  const placed: { left: number; right: number; y: number }[] = [];
   return lines.map((line) => {
     if (line.role !== "selected") return line;
-    const key = `${line.shape.labelAlign}:${String(Math.round(line.shape.labelAt.x))}:${String(Math.round(line.shape.labelAt.y))}`;
-    const count = used.get(key) ?? 0;
-    used.set(key, count + 1);
-    if (count === 0) return line;
+    const { left, right } = labelSpan(line.shape);
+    const overlaps = (y: number) =>
+      placed.some(
+        (other) =>
+          left < other.right &&
+          other.left < right &&
+          Math.abs(other.y - y) < LABEL_STEP,
+      );
+    let y = line.shape.labelAt.y;
+    while (overlaps(y)) y += LABEL_STEP;
+    placed.push({ left, right, y });
+    if (y === line.shape.labelAt.y) return line;
     return {
       ...line,
-      shape: {
-        ...line.shape,
-        labelAt: {
-          x: line.shape.labelAt.x,
-          y: line.shape.labelAt.y + count * LABEL_STEP,
-        },
-      },
+      shape: { ...line.shape, labelAt: { x: line.shape.labelAt.x, y } },
     };
   });
 };
