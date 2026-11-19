@@ -23,10 +23,22 @@ describe("url-state", () => {
     );
   });
 
+  test("[正常系]見せる範囲（scope）をフォルダのパスのまま読み書きし、空の値は無視する", () => {
+    expect(parseUrlState("?page=shop&scope=Shop%2FOrder")).toStrictEqual({
+      page: "shop",
+      scope: "Shop/Order",
+    });
+    expect(parseUrlState("?scope=")).toStrictEqual({});
+    expect(buildSearch({ page: "shop", scope: "Shop/Order" })).toBe(
+      "?page=shop&scope=Shop%2FOrder",
+    );
+  });
+
   test("[正常系]buildSearchとparseUrlStateは往復で元に戻る", () => {
     const state = {
       branch: "claude/x y",
       page: "shop" as const,
+      scope: "Shop/注文",
       comment: "01",
     };
 

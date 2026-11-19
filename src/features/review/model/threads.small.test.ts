@@ -115,6 +115,23 @@ describe("filterThreads", () => {
       }).map((t) => t.root.id),
     ).toStrictEqual(["01"]);
   });
+
+  test("[正常系]見せる範囲（フォルダ）の中の画面のスレッドだけにし、いまの Storybook に無い画面のものは外す", () => {
+    const base = {
+      status: "all" as const,
+      source: "shop" as const,
+      stories,
+    };
+
+    expect(
+      filterThreads(threads, { ...base, scope: "Features" }).map(
+        (t) => t.root.id,
+      ),
+    ).toStrictEqual(["01"]);
+    expect(
+      filterThreads(threads, { ...base, scope: "Pages" }).map((t) => t.root.id),
+    ).toStrictEqual([]);
+  });
 });
 
 describe("countByStatus", () => {

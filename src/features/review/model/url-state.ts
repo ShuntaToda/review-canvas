@@ -5,6 +5,7 @@ import { isStatusFilter, type StatusFilter } from "./threads";
  * URL のクエリに持つ状態。共有したリンクで同じ場所が開くようにする
  * - branch: 見るブランチ（Storybook とコメント。無ければ既定のブランチ）
  * - page: ページ（設定ファイルの Storybook の ID。設定に無い ID は開くときに 1 つ目へ戻す）
+ * - scope: 見せる範囲（画面の一覧のフォルダのパス。合う画面が無ければ開くときに外す）
  * - story: その画面（ストーリー）へ移る
  * - comment: そのスレッドを開く
  * - status: 一覧の状態のタブ（無ければ未解決。知らない値は捨てる）
@@ -12,6 +13,7 @@ import { isStatusFilter, type StatusFilter } from "./threads";
 export type UrlState = {
   branch?: string;
   page?: StorySource;
+  scope?: string;
   story?: string;
   comment?: string;
   status?: StatusFilter;
@@ -36,6 +38,8 @@ export const parseUrlState = (search: string): UrlState => {
   const branch = params.get("branch");
   if (branch !== null && branch !== "") state.branch = branch;
   if (isStorySourceId(page)) state.page = page;
+  const scope = params.get("scope");
+  if (scope !== null && scope !== "") state.scope = scope;
   const story = params.get("story");
   if (story !== null && story !== "") state.story = story;
   const comment = params.get("comment");
@@ -50,6 +54,7 @@ export const buildSearch = (state: UrlState): string => {
   const params = new URLSearchParams();
   if (state.branch !== undefined) params.set("branch", state.branch);
   if (state.page !== undefined) params.set("page", state.page);
+  if (state.scope !== undefined) params.set("scope", state.scope);
   if (state.story !== undefined) params.set("story", state.story);
   if (state.comment !== undefined) params.set("comment", state.comment);
   if (state.status !== undefined) params.set("status", state.status);
