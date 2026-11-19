@@ -5,7 +5,7 @@
 // scripts/repo-rules.small.test.mjs が確かめる。
 //
 //   node scripts/check-issue-text.mjs <下書きの .md> [<下書きの .md> …]
-//   node scripts/check-issue-text.mjs --posted <投稿した本文の .md>   （人が画像を貼った後。貼り残しの印も見る）
+//   node scripts/check-issue-text.mjs --posted <投稿する・した本文の .md>   （画像を埋め込んだ後。貼り残しの印も見る）
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 export const MAX_UNBROKEN_BYTES = 150;
 
 /**
- * 画像を貼る場所の印。AI は画像のファイル名だけをこの印で本文に残し、人が GitHub の画面で画像に置き換える
+ * 画像を貼る場所の印。AI は画像のファイル名だけをこの印で本文に残し、scripts/issue-images.mjs で画像に置き換える
  * （スキル dev-write-issue「画像の載せ方」）
  */
 export const IMAGE_MARKER = "【画像を貼る:";
@@ -119,7 +119,7 @@ export const problemsOf = (markdown, { posted = false } = {}) => {
     // 貼り残しの印は、コードの例・インラインのコードの中にあっても貼り残し
     if (posted && rawLine.includes(IMAGE_MARKER)) {
       problems.push(
-        `${where}: 画像を貼る印が残っています。人に、GitHub の画面でこの印を画像に置き換えてもらってください（貼れない画像なら、印ごと消して文章で書く）`,
+        `${where}: 画像を貼る印が残っています。node scripts/issue-images.mjs で画像に置き換えてください（push できなければ人に GitHub の画面で貼ってもらう。貼れない画像なら、印ごと消して文章で書く）`,
       );
     }
     if (fenced[index]) {
