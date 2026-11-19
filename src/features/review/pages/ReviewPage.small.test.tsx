@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { StrictMode } from "react";
 import type { ReviewMeta } from "../api/review-api";
+import type * as CanvasModule from "../components/Canvas";
 import type * as ReviewData from "../hooks/useReviewData";
 import type { RowPlacement } from "../model/layout";
 import type { Story } from "../model/storybook";
@@ -98,38 +99,41 @@ const fixtures = vi.hoisted(() => {
 
 vi.mock("../hooks/useReviewData", async (importOriginal) => {
   const actual = await importOriginal<typeof ReviewData>();
-  const noop = () => Promise.resolve(undefined);
+  /** 読み終えた SWR の結果 */
+  const loaded = <T,>(data: T) => ({
+    data,
+    error: undefined,
+    isLoading: false,
+    isValidating: false,
+    mutate: () => Promise.resolve(data),
+  });
   return {
     ...actual,
-    useReviewMeta: () => ({
-      data: fixtures.meta,
-      error: undefined,
-      mutate: noop,
-    }),
+    useReviewMeta: () => loaded(fixtures.meta),
     useStorybookSession: () => ({
       access: "public",
       ready: true,
       error: undefined,
       retry: () => undefined,
     }),
-    useStories: () => ({
-      data: Object.fromEntries(
-        Object.entries(fixtures.stories).map(([source, list]) => [
-          source,
-          { kind: "ok", stories: list },
-        ]),
+    useStories: () =>
+      loaded(
+        Object.fromEntries(
+          Object.entries(fixtures.stories).map(([source, list]) => [
+            source,
+            { kind: "ok" as const, stories: list },
+          ]),
+        ),
       ),
-      error: undefined,
-    }),
-    useShots: () => ({ data: {}, error: undefined }),
-    useComments: () => ({
-      data: { comments: fixtures.comments },
-      error: undefined,
-      isLoading: false,
-      mutate: noop,
-    }),
-    useBranches: () => ({ data: [], error: undefined, mutate: noop }),
-  };
+    useShots: () => loaded({}),
+    useComments: () =>
+      loaded({
+        comments: fixtures.comments,
+        asOf: "2026-11-13T10:00:00.000+09:00",
+        diffsSinceFull: 0,
+      }),
+    useBranches: () => loaded([]),
+  } satisfies typeof ReviewData;
 });
 
 vi.mock("@/support/auth", async (importOriginal) => {
@@ -137,21 +141,29 @@ vi.mock("@/support/auth", async (importOriginal) => {
   return {
     ...actual,
     useAuth: () => ({
+      isLoading: false,
+      isAuthenticated: true,
       user: { sub: "auth0|yamada", name: "山田 太郎" },
+      loginWithRedirect: () => Promise.resolve(),
       logout: () => Promise.resolve(),
+      getAccessTokenSilently: () => Promise.resolve("token"),
     }),
-  };
+  } satisfies typeof Auth;
 });
 
-vi.mock("../components/Canvas", () => ({
-  Canvas: ({ rows }: { rows: ReadonlyArray<RowPlacement> }) => (
-    <ul aria-label="キャンバスの画面">
-      {rows.map((row) => (
-        <li key={row.title}>{row.title}</li>
-      ))}
-    </ul>
-  ),
-}));
+vi.mock(
+  "../components/Canvas",
+  () =>
+    ({
+      Canvas: ({ rows }: { rows: ReadonlyArray<RowPlacement> }) => (
+        <ul aria-label="キャンバスの画面">
+          {rows.map((row) => (
+            <li key={row.title}>{row.title}</li>
+          ))}
+        </ul>
+      ),
+    }) satisfies typeof CanvasModule,
+);
 
 const open = (search: string, { strict = false } = {}) => {
   window.history.replaceState(null, "", `/${search}`);
@@ -246,9 +258,14 @@ describe("ReviewPage の見せる範囲（scope）", () => {
         "Guide/Top",
         "Shop/Order/Form",
       ]);
-      expect(screen.getAllByText("この範囲の画面はありません")).toHaveLength(1);
       expect(screen.queryByText(/部品だけのページです/)).toBeNull();
       expect(urlParams().has("scope")).toBe(false);
+      // お知らせの欄（aria-live）が空で描かれてから出す（同時に DOM に入った文は読まれないため）
+      expect(screen.queryByText("この範囲の画面はありません")).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getAllByText("この範囲の画面はありません")).toHaveLength(1);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
@@ -317,5 +334,49 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     expect(fireEvent.keyDown(only, { key: " " })).toBe(true);
     expect(fireEvent.keyDown(document.body, { key: " " })).toBe(false);
     fireEvent.keyUp(document.body, { key: " " });
+  });
+
+  test("[正常系]マウスで押したボタンにフォーカスが残っていても、Space はボタンを押さずにキャンバスを掴む", () => {
+    open("?page=shop");
+    const folder = within(storyList()).getByRole("button", { name: "Shop" });
+    // マウスで押したボタンは、フォーカスがあっても :focus-visible に合わない（jsdom はキーボードかを見分けないので、判定を差し替える）
+    // ボタンが Space を譲るかは、そのボタンの :focus-visible だけで決まる
+    const original = folder.matches.bind(folder);
+    const spy = vi
+      .spyOn(folder, "matches")
+      .mockImplementation((selector) =>
+        selector === ":focus-visible" ? false : original(selector),
+      );
+    try {
+      fireEvent.click(folder);
+      folder.focus();
+
+      expect(fireEvent.keyDown(folder, { key: " " })).toBe(false);
+      fireEvent.keyUp(folder, { key: " " });
+      // 押し直されていない（閉じたまま。開閉の覚えも 1 回分だけ）
+      expect(folder.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("[正常系]範囲を替えたとき、コメント一覧の「画面で絞る」が範囲の外の画面なら外す", () => {
+    open("?page=shop");
+    const titleSelect = within(commentList()).getByRole("combobox", {
+      name: "画面で絞り込む",
+    });
+    fireEvent.change(titleSelect, { target: { value: "Guide/Top" } });
+    expect(within(commentList()).queryByText("カートの指摘")).toBeNull();
+
+    fireEvent.click(
+      within(storyList()).getByRole("button", { name: "Shop だけを表示" }),
+    );
+
+    expect(
+      within(commentList()).getByRole<HTMLSelectElement>("combobox", {
+        name: "画面で絞り込む",
+      }).value,
+    ).toBe("");
+    expect(within(commentList()).queryByText("カートの指摘")).not.toBeNull();
   });
 });

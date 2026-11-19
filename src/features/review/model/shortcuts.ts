@@ -159,7 +159,10 @@ const SPACE_ACTIVATED_ROLES: ReadonlySet<string> = new Set([
 
 /**
  * Space をその要素の操作（押す・選ぶ・文字を打つ）に使うところか。そこでは Space でキャンバスを掴まない
- * （奪うと、キーボードだけでボタンを押せなくなる）
+ * （奪うと、キーボードだけでボタンを押せなくなる）。
+ * ボタンなどは、キーボードで移ってきたフォーカス（:focus-visible）のときだけ譲る。マウスで押したボタンにはフォーカスが残るので、
+ * 譲るとキャンバスを押した後も Space で掴めず、そのボタンがもう一度押される。
+ * 画面（iframe）の中の要素は別のウィンドウのものなので instanceof では見分けず、形で見る
  */
 export const usesSpaceKey = (target: EventTarget | null): boolean => {
   if (isTypingTarget(target)) return true;
@@ -168,19 +171,26 @@ export const usesSpaceKey = (target: EventTarget | null): boolean => {
   }
   const element = target as {
     tagName: unknown;
-    getAttribute?: unknown;
+    getAttribute?: (name: string) => string | null;
+    matches?: (selector: string) => boolean;
   };
-  if (
-    typeof element.tagName === "string" &&
-    SPACE_ACTIVATED_TAGS.has(element.tagName)
-  ) {
+  const role = element.getAttribute?.("role") ?? null;
+  const activated =
+    (typeof element.tagName === "string" &&
+      SPACE_ACTIVATED_TAGS.has(element.tagName)) ||
+    (role !== null && SPACE_ACTIVATED_ROLES.has(role));
+  return activated && isFocusVisible(element);
+};
+
+/** キーボードで移ってきたフォーカスか（:focus-visible を読めない環境では、そうとみなす。components/Pin.tsx と同じ考え） */
+const isFocusVisible = (element: {
+  matches?: (selector: string) => boolean;
+}): boolean => {
+  try {
+    return element.matches?.(":focus-visible") ?? true;
+  } catch {
     return true;
   }
-  const role: unknown =
-    typeof element.getAttribute === "function"
-      ? Reflect.apply(element.getAttribute, target, ["role"])
-      : null;
-  return typeof role === "string" && SPACE_ACTIVATED_ROLES.has(role);
 };
 
 /** 画面に出すショートカットの一覧 */

@@ -179,11 +179,11 @@ export const ReviewPage = ({
           published={published}
           publishedBranches={meta.data.branches}
           // 切り替える前に真ん中に見えていた画面・見せる範囲を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
-          onBranchChange={(next, page, story, scope) =>
+          onBranchChange={(next, page, story, storyScope) =>
             setUrlState({
               branch: next,
               page,
-              ...(scope === undefined ? {} : { scope }),
+              ...(storyScope === undefined ? {} : { scope: storyScope }),
               ...(story === undefined ? {} : { story }),
             })
           }

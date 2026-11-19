@@ -138,7 +138,7 @@ type ReviewWorkspaceProps = {
     branch: string,
     page: StorySource,
     story: string | undefined,
-    scope: string | undefined,
+    storyScope: string | undefined,
   ) => void;
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
@@ -200,7 +200,7 @@ export const ReviewWorkspace = ({
     const showComponents =
       story !== undefined &&
       isComponentStory(story, sources.excludeTitlePrefixes);
-    const initialScope = resolveInitialScope(initialUrl.scope, {
+    const initialStoryScope = resolveInitialScope(initialUrl.scope, {
       stories: filterStories(storiesOf(page), {
         showComponents,
         query: "",
@@ -226,8 +226,8 @@ export const ReviewWorkspace = ({
     }
     return {
       page,
-      storyScope: initialScope.scope,
-      storyScopeMissing: initialScope.missing,
+      storyScope: initialStoryScope.scope,
+      storyScopeMissing: initialStoryScope.missing,
       cameras,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
@@ -397,12 +397,14 @@ export const ReviewWorkspace = ({
 
   // 同じ文言でも出し直せるよう、毎回新しいオブジェクトで持つ（表示時間のタイマーを掛け直すため）
   const showToast = (message: string) => setToast({ message });
-  // リンクの範囲に合う画面が無く、外して開いた。お知らせ（aria-live）を描いた後に出して読ませる。StrictMode の 2 回目では出し直さない
-  const storyScopeMissingShown = useRef(false);
+  // リンクの範囲に合う画面が無く、外して開いた。お知らせの欄（aria-live）が空で描かれてから 1 つ後の番で出し、読み上げさせる
+  // （欄と同時に DOM に入った文は読まれない）。StrictMode で effect が 2 回走っても、1 回目は片付けで取り消すので出すのは 1 回だけ
   useEffect(() => {
-    if (!initial.storyScopeMissing || storyScopeMissingShown.current) return;
-    storyScopeMissingShown.current = true;
-    setToast({ message: "この範囲の画面はありません" });
+    if (!initial.storyScopeMissing) return;
+    const timer = window.setTimeout(() => {
+      setToast({ message: "この範囲の画面はありません" });
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [initial.storyScopeMissing]);
   useEffect(() => {
     if (toast === null) return;
@@ -702,12 +704,12 @@ export const ReviewWorkspace = ({
   );
 
   // 一覧（いまのページ・見せる範囲・解決の状態・画面で絞り込む）
-  const scopeThreads = filterThreads(pageThreads, {
+  const storyScopeThreads = filterThreads(pageThreads, {
     status: "all",
     scope: storyScope,
     stories: storiesByKey,
   });
-  const titleThreads = filterThreads(scopeThreads, {
+  const titleThreads = filterThreads(storyScopeThreads, {
     status: "all",
     title: titleFilter,
     stories: storiesByKey,
@@ -825,7 +827,7 @@ export const ReviewWorkspace = ({
 
   const titles = [
     ...new Set(
-      scopeThreads.flatMap((t) => {
+      storyScopeThreads.flatMap((t) => {
         const story = storiesByKey.get(storyKey(t.root.source, t.root.storyId));
         return story === undefined ? [] : [story.title];
       }),
