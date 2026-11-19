@@ -8,7 +8,7 @@
 export type FocusOrigin = {
   /** 直前の入力 */
   lastInput: "pointer" | "keyboard";
-  /** いまのフォーカスがポインタで押して移ったものか */
+  /** ポインタで操作した後、キーでフォーカスが移っていないか（Space を、いまフォーカスのある要素に譲らない） */
   focusedByPointer: boolean;
 };
 
@@ -20,18 +20,21 @@ export const INITIAL_FOCUS_ORIGIN: FocusOrigin = {
 
 /**
  * イベントごとに更新する。
- * - pointerdown: ポインタで押した（押した要素にすでにフォーカスがあって focusin が来なくても、ポインタで操作しているとみなす）
+ * - pointerdown: どこを押しても（フォーカスが動かない所を押しても）ポインタで操作しているとみなす
  * - keydown: 直前の入力をキーにするだけ。フォーカスを動かさないショートカット（-・]・Esc など）では、いまのフォーカスの手段を変えない
  * - focusin: フォーカスが移った。直前の入力で手段を決める（ポインタで押した後にプログラムで移した先も、ポインタ由来）
+ * - frame-blur: フォーカスが画面（iframe）の中へ移った。中の入力（押す・打つ）は親に届かないので、直前の入力をキーに戻す
+ *   （中から Shift+Tab で親へ出たときにキーボードとして扱う。マウスで親へ戻るときは、先に親の pointerdown が来る）
  */
 export const nextFocusOrigin = (
   current: FocusOrigin,
-  event: "pointerdown" | "keydown" | "focusin",
+  event: "pointerdown" | "keydown" | "focusin" | "frame-blur",
 ): FocusOrigin => {
   switch (event) {
     case "pointerdown":
       return { lastInput: "pointer", focusedByPointer: true };
     case "keydown":
+    case "frame-blur":
       return { ...current, lastInput: "keyboard" };
     case "focusin":
       return { ...current, focusedByPointer: current.lastInput === "pointer" };
