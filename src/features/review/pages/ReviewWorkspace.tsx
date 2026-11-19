@@ -4,6 +4,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { isUnauthorized, type ReviewMetaBranch } from "../api/review-api";
 import { Canvas } from "../components/Canvas";
 import { COMMENT_LIST_ID, CommentSidebar } from "../components/CommentSidebar";
+import { CompareDialog } from "../components/CompareDialog";
 import { DisplaySettings } from "../components/DisplaySettings";
 import { DraftPopover } from "../components/DraftPopover";
 import type { PinView } from "../components/Frame";
@@ -23,7 +24,12 @@ import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
-import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
+import {
+  focusCanvas,
+  focusCompareButton,
+  isInsideStoryList,
+} from "../components/canvas-dom";
+import { useBranchCompare } from "../hooks/useBranchCompare";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
@@ -44,6 +50,7 @@ import {
   mergeLocatedPins,
   isUnlocatedPin,
 } from "../model/anchor-locate";
+import { compareViewOf, resolveCompareStoryId } from "../model/branch-compare";
 import { buildBranchOptions } from "../model/branch-options";
 import {
   type Camera,
@@ -136,6 +143,8 @@ type ReviewWorkspaceProps = {
   storyErrors: Readonly<Record<StorySource, string | undefined>>;
   /** ページごとの、発行のときに撮った画像（無いページは空） */
   shots: Readonly<Record<StorySource, ShotCatalog>>;
+  /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空） */
+  baseShots: Readonly<Record<StorySource, ShotCatalog>>;
   initialUrl: UrlState;
   initialComments: Comment[];
   /** ログインしている人（書いた人として残り、自分のコメントだけを編集・削除できる） */
@@ -155,6 +164,7 @@ export const ReviewWorkspace = ({
   stories,
   storyErrors,
   shots,
+  baseShots,
   initialUrl,
   initialComments,
   me,
@@ -183,7 +193,14 @@ export const ReviewWorkspace = ({
       wanted !== undefined && sources.has(wanted)
         ? wanted
         : (sources.ids[0] ?? "");
-    const storyId = thread?.root.storyId ?? initialUrl.story;
+    // 比べる画面へのリンク（?compare=）は、その画面に寄せてから開く。既定のブランチ・知らない ID は捨てる
+    const compare = resolveCompareStoryId({
+      compare: initialUrl.compare,
+      branch,
+      defaultBranch,
+      exists: (id) => storiesByKey.has(storyKey(page, id)),
+    });
+    const storyId = thread?.root.storyId ?? compare ?? initialUrl.story;
     const story =
       storyId === undefined
         ? undefined
@@ -207,6 +224,7 @@ export const ReviewWorkspace = ({
     return {
       page,
       cameras,
+      compare,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
       // 一覧の状態のタブ。リンクのスレッドがそのタブに出ない（?status= と合わない・未解決でない）ときは「すべて」にして開く
@@ -272,6 +290,14 @@ export const ReviewWorkspace = ({
   const [writeUnauthorized, setWriteUnauthorized] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const canvas = useElementSize<HTMLDivElement>();
+  // 既定のブランチとの見比べ（印・「変わった画面だけ」・比べる画面）
+  const compare = useBranchCompare({
+    branch,
+    defaultBranch,
+    head: shots,
+    base: baseShots,
+    initialStoryId: initial.compare,
+  });
   const searchRef = useRef<HTMLInputElement>(null);
 
   const commentsQuery = useComments(branch);
@@ -315,12 +341,16 @@ export const ReviewWorkspace = ({
   const pageWidthOptions = pageWidths.optionsOf(page);
   const rowsFor = (
     source: StorySource,
-    filters: { showComponents: boolean; query: string },
+    filters: { showComponents: boolean; query: string; changedOnly?: false },
   ) => {
-    const visible = filterStories(storiesOf(source), {
+    const shown = filterStories(storiesOf(source), {
       ...filters,
       excludeTitlePrefixes: sources.excludeTitlePrefixes,
     });
+    const visible =
+      filters.changedOnly === false
+        ? shown
+        : compare.filter(source, widthOf(source), shown);
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
@@ -402,13 +432,22 @@ export const ReviewWorkspace = ({
       ...(urlCommentId === null ? {} : { comment: urlCommentId }),
       // 一覧の状態のタブ（はじめの「未解決」は載せない）
       ...(status === "open" ? {} : { status }),
+      ...(compare.storyId === undefined ? {} : { compare: compare.storyId }),
     });
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}${search}`,
     );
-  }, [branch, defaultBranch, page, urlCommentId, centerStoryId, status]);
+  }, [
+    branch,
+    defaultBranch,
+    page,
+    urlCommentId,
+    centerStoryId,
+    status,
+    compare.storyId,
+  ]);
 
   /**
    * API の失敗を、呼んだ側（入力欄・吹き出し）へそのまま伝える。失敗は消えるお知らせにせず、送った所に残して送り直せるようにする
@@ -480,6 +519,12 @@ export const ReviewWorkspace = ({
       ) {
         nextQuery = "";
       }
+      // 「変わった画面だけ」で隠れているときも外す
+      const hiddenByChangedOnly =
+        compare.filter(root.source, widthOf(root.source), [story]).length === 0;
+      if (hiddenByChangedOnly) {
+        compare.setChangedOnly(root.source, widthOf(root.source), false);
+      }
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
       const currentZoom = resolveCamera(
@@ -488,6 +533,7 @@ export const ReviewWorkspace = ({
           rows: rowsFor(root.source, {
             showComponents: nextShowComponents,
             query: nextQuery,
+            ...(hiddenByChangedOnly ? { changedOnly: false } : {}),
           }),
           bounds: null,
           viewport,
@@ -654,7 +700,7 @@ export const ReviewWorkspace = ({
   // キーボードの操作（入力欄にいるときは Esc 以外を効かせない）
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (dialog !== null) return;
+      if (dialog !== null || compare.storyId !== undefined) return;
       // 日本語の変換中の Esc は変換の取り消し（書きかけを消したり閉じたりしない）
       if (isImeComposing(event)) return;
       const typing = isTypingTarget(event.target);
@@ -826,6 +872,11 @@ export const ReviewWorkspace = ({
     published?.storybooks.find((s) => s.source === page)?.available ?? false
   );
   const commit = published?.commit;
+  // 比べる画面を開いている画面（いまのページに無ければ開かない）
+  const compareStory =
+    compare.storyId === undefined
+      ? undefined
+      : storiesByKey.get(storyKey(page, compare.storyId));
   const branchOptions = buildBranchOptions({
     current: branch,
     defaultBranch,
@@ -876,6 +927,20 @@ export const ReviewWorkspace = ({
             onQueryChange={setQuery}
             searchRef={searchRef}
             onSelectStory={focusStory}
+            marks={compare.marksOf(
+              page,
+              width,
+              storiesOf(page).map((story) => story.id),
+            )}
+            {...(compare.available(page)
+              ? {
+                  changedOnly: {
+                    checked: compare.changedOnly(page, width),
+                    onChange: (on: boolean) =>
+                      compare.setChangedOnly(page, width, on),
+                  },
+                }
+              : {})}
           >
             <DisplaySettings
               showComponents={showComponents}
@@ -964,6 +1029,11 @@ export const ReviewWorkspace = ({
                       "画面が変わりました。もう一度クリックしてください",
                     )
                   }
+                  onCompare={
+                    compare.enabled
+                      ? (story) => compare.open(story.id)
+                      : undefined
+                  }
                 />
               </ErrorBoundary>
               {activeThread !== undefined && threadPosition !== undefined && (
@@ -1034,7 +1104,7 @@ export const ReviewWorkspace = ({
                   onClose={() => setActiveThreadId(null)}
                 />
               )}
-              {rows.length === 0 && (
+              {rows.length === 0 && !compare.changedOnly(page, width) && (
                 <NoMatchNotice
                   query={query}
                   onClear={() => {
@@ -1163,6 +1233,19 @@ export const ReviewWorkspace = ({
         />
       )}
       {dialog === "help" && <HelpDialog onClose={() => setDialog(null)} />}
+      {compareStory !== undefined && (
+        <CompareDialog
+          story={compareStory}
+          view={compareViewOf(compare.pairOf(page), compareStory.id, width)}
+          defaultBranch={defaultBranch}
+          branch={branch}
+          onClose={() => {
+            // 閉じてから（ダイアログが開く前のフォーカスへ戻したあとで）、その画面のボタンへ戻す
+            flushSync(() => compare.close());
+            focusCompareButton(compareStory.id);
+          }}
+        />
+      )}
     </div>
   );
 };

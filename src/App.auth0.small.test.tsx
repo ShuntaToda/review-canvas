@@ -383,4 +383,155 @@ describe("ブランチの切り替え", () => {
     expect(requested()).toContain("/api/comments?branch=old%2Fc");
     expect(requested().some((path) => path.startsWith("/sb/"))).toBe(false);
   });
+
+  describe("既定のブランチと見比べる", () => {
+    // キャンバスの大きさを測る ResizeObserver と <dialog> の showModal・close を jsdom は持たないので、何もしない・印だけのものにする
+    beforeEach(() => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+    });
+    beforeAll(() => {
+      HTMLDialogElement.prototype.showModal = function showModal() {
+        this.setAttribute("open", "");
+      };
+      HTMLDialogElement.prototype.close = function close() {
+        this.removeAttribute("open");
+      };
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const entry = (id: string, title: string, name: string) => ({
+      type: "story",
+      id,
+      title,
+      name,
+      importPath: null,
+    });
+    const shot = (storyId: string, hash: string) => ({
+      storyId,
+      width: 375,
+      height: 800,
+      path: `review-canvas-shots/${storyId}-375-${hash}.png`,
+    });
+    // 一覧は変わり、カートは同じ、注文は既定のブランチに無い（新しい）
+    const manifests: Record<string, unknown> = {
+      "/sb/main/shop/review-canvas-shots.json": {
+        version: 1,
+        shots: [shot("shop-list--default", "a"), shot("shop-cart--empty", "c")],
+        playFunctions: {},
+      },
+      "/sb/feature~2Fa/shop/review-canvas-shots.json": {
+        version: 1,
+        shots: [
+          shot("shop-list--default", "z"),
+          shot("shop-cart--empty", "c"),
+          shot("shop-order--default", "o"),
+        ],
+        playFunctions: {},
+      },
+    };
+    const compareFetch = (input: Request) => {
+      const url = urlOf(input);
+      if (url.pathname.endsWith("/shop/index.json")) {
+        return Promise.resolve(
+          Response.json({
+            v: 5,
+            entries: {
+              a: entry("shop-list--default", "Shop/List", "Default"),
+              b: entry("shop-cart--empty", "Shop/Cart", "Empty"),
+              c: entry("shop-order--default", "Shop/Order", "Default"),
+            },
+          }),
+        );
+      }
+      const manifest = manifests[url.pathname];
+      if (manifest !== undefined) {
+        return Promise.resolve(Response.json(manifest));
+      }
+      if (url.pathname.endsWith("/review-canvas-shots.json")) {
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }
+      return branchFetch(input);
+    };
+    const statusRow = (title: string) =>
+      screen
+        .getAllByRole("button")
+        .find((button) => button.getAttribute("title") === title)?.textContent;
+
+    test("[正常系]compare= 付きで開くと比べる画面を開き、URL に載せたまま。一覧に印と「変わった画面だけ」を出す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch);
+      await renderApp(
+        "/?branch=feature%2Fa&page=shop&compare=shop-list--default",
+      );
+
+      expect(
+        await screen.findByRole("dialog", {
+          name: "Shop/List / Default を既定のブランチと比べる",
+        }),
+      ).toBeTruthy();
+      expect(requested()).toContain("/sb/main/shop/review-canvas-shots.json");
+      expect(
+        screen.getAllByRole<HTMLImageElement>("img").map((image) => image.alt),
+      ).toEqual(
+        expect.arrayContaining([
+          "既定のブランチ（main）",
+          "このブランチ（feature/a）",
+        ]),
+      );
+      expect(window.location.search).toContain("compare=shop-list--default");
+      expect(statusRow("Shop/List / Default")).toBe("Default変更");
+      expect(statusRow("Shop/Cart / Empty")).toBe("Empty");
+      expect(statusRow("Shop/Order / Default")).toBe("Default新しい");
+      expect(
+        screen.getByRole("checkbox", { name: "変わった画面だけ" }),
+      ).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
+        await Promise.resolve();
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(window.location.search).not.toContain("compare=");
+    });
+
+    test.each([
+      ["既定のブランチ", "/?page=shop&compare=shop-list--default"],
+      ["知らない ID", "/?branch=feature%2Fa&page=shop&compare=shop-unknown--x"],
+    ])("[異常系]%s の compare= は捨てる", async (_, path) => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch);
+      await renderApp(path);
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await waitFor(() =>
+        expect(window.location.search).not.toContain("compare="),
+      );
+    });
+
+    test("[正常系]既定のブランチでは、印・「変わった画面だけ」を出さず、既定のブランチの目録を読み直さない", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch);
+      await renderApp("/?page=shop");
+
+      await screen.findByRole("combobox", { name: "ブランチ" });
+      expect(statusRow("Shop/List / Default")).toBe("Default");
+      expect(statusRow("Shop/Order / Default")).toBe("Default");
+      expect(
+        screen.queryByRole("checkbox", { name: "変わった画面だけ" }),
+      ).toBeNull();
+      expect(
+        requested().filter(
+          (path) => path === "/sb/main/shop/review-canvas-shots.json",
+        ),
+      ).toHaveLength(1);
+    });
+  });
 });

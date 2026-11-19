@@ -81,6 +81,27 @@ export const ReviewPage = ({
   // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
   const shots = useShots(base, availableIds, session);
   const comments = useComments(branch);
+  // 既定のブランチの画像の目録（既定のブランチ以外の、置いてあるブランチを見ているときだけ。同じ画面を見比べる）。
+  // 既定のブランチを置いていなければ、目録の無いものとして扱う
+  const defaultPublished =
+    meta.data?.branches.find((b) => b.branch === meta.data?.defaultBranch) ??
+    null;
+  const comparing =
+    published !== null &&
+    meta.data !== undefined &&
+    branch !== meta.data.defaultBranch;
+  const baseShots = useShots(
+    `${storybookOrigin}${defaultPublished?.basePath ?? DEFAULT_STORYBOOK_BASE}`,
+    catalog.ids.filter(
+      (source) =>
+        defaultPublished?.storybooks.find((s) => s.source === source)
+          ?.available ?? false,
+    ),
+    {
+      access: session.access,
+      ready: session.ready && comparing && defaultPublished !== null,
+    },
+  );
 
   // クッキーをもらえないと Storybook を何も読めないので、置いてあるブランチを読めないときと同じ扱いにする
   const metaError: unknown = meta.error;
@@ -163,6 +184,8 @@ export const ReviewPage = ({
     !settled(stories, true) ||
     // 画像の有無が分かってから並べる（先に iframe で読み込み始めてから、画像に切り替えない）
     !settled(shots, true) ||
+    // 既定のブランチと見比べる印・絞り込みも、そろってから出す（あとから印が増えて一覧が動かないように）
+    !settled(baseShots, comparing && defaultPublished !== null) ||
     !settled(comments, true)
   ) {
     return <FullScreenMessage>読み込み中…</FullScreenMessage>;
@@ -200,6 +223,10 @@ export const ReviewPage = ({
           shots={mapSources(
             catalog.ids,
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+          )}
+          baseShots={mapSources(
+            catalog.ids,
+            (id) => baseShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
           initialUrl={urlState}
           initialComments={comments.data?.comments ?? []}

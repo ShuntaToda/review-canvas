@@ -50,7 +50,7 @@ export const Modal = ({
     <dialog
       ref={ref}
       aria-label={title}
-      className="m-auto rounded-xl border border-line bg-panel p-0 text-ink shadow-2xl"
+      className="m-auto max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-panel p-0 text-ink shadow-2xl"
       style={{ width }}
       onCancel={(event) => {
         event.preventDefault();

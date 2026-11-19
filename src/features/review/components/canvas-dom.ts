@@ -18,6 +18,20 @@ export const focusCanvas = (): HTMLElement | null => {
   return canvas;
 };
 
+/** 画面の見出しの「既定のブランチと比べる」ボタンに付ける印（値はストーリー ID。閉じたときのフォーカスの戻り先） */
+export const COMPARE_BUTTON_ATTRIBUTE = "data-compare-story";
+
+/** 比べる画面を閉じたあと、その画面の「既定のブランチと比べる」ボタンへフォーカスを戻す（見出しを出していなければキャンバスへ） */
+export const focusCompareButton = (storyId: string): void => {
+  const button = Array.from(
+    document.querySelectorAll<HTMLElement>(`[${COMPARE_BUTTON_ATTRIBUTE}]`),
+  ).find(
+    (element) => element.getAttribute(COMPARE_BUTTON_ATTRIBUTE) === storyId,
+  );
+  if (button === undefined) focusCanvas();
+  else button.focus({ preventScroll: true });
+};
+
 /** 中がスクロールしてしまったら戻す（clip でも、フォーカスの移動などで動いたときの保険） */
 export const resetScroll = (event: React.UIEvent<HTMLElement>) => {
   const target = event.currentTarget;
