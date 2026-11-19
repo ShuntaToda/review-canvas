@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { measureContentHeight } from "../model/story-shots";
 import { installBridge } from "./bridge-runtime";
+import { decideSize, type MeasureState } from "./measure";
 import {
   BRIDGE_CHANNEL,
   type ParentMessage,
@@ -324,8 +325,17 @@ describe("installBridge", () => {
 });
 
 describe("measureContentHeight", () => {
+  /** 子要素の矩形・scrollHeight・画面の高さ（innerHeight）を偽る。bottom・scrollHeight・viewport は測るたびに読む */
   const setUpDocument = (
-    children: { bottom: number; height?: number; position?: string }[],
+    children: {
+      bottom: number | (() => number);
+      height?: number;
+      position?: string;
+    }[],
+    {
+      scrollHeight = () => 800,
+      viewport = () => 800,
+    }: { scrollHeight?: () => number; viewport?: () => number } = {},
   ) => {
     const iframe = document.createElement("iframe");
     document.body.append(iframe);
@@ -339,25 +349,35 @@ describe("measureContentHeight", () => {
       const child = doc.createElement("div");
       if (position !== undefined) child.style.position = position;
       child.style.marginBottom = "4px";
-      child.getBoundingClientRect = () => ({
-        top: bottom - height,
-        bottom,
-        left: 0,
-        right: height === 0 ? 0 : 100,
-        width: height === 0 ? 0 : 100,
-        height,
-        x: 0,
-        y: bottom - height,
-        toJSON: () => ({}),
-      });
+      child.getBoundingClientRect = () => {
+        const bottomNow = typeof bottom === "number" ? bottom : bottom();
+        return {
+          top: bottomNow - height,
+          bottom: bottomNow,
+          left: 0,
+          right: height === 0 ? 0 : 100,
+          width: height === 0 ? 0 : 100,
+          height,
+          x: 0,
+          y: bottomNow - height,
+          toJSON: () => ({}),
+        };
+      };
       doc.body.append(child);
     });
     Object.defineProperty(doc.documentElement, "scrollHeight", {
       configurable: true,
-      get: () => 800,
+      get: scrollHeight,
+    });
+    Object.defineProperty(frameWindow, "innerHeight", {
+      configurable: true,
+      get: viewport,
     });
     return doc;
   };
+
+  // body の余白 8・内側の余白 16・子の余白 4 の分（子要素の下端に足される）
+  const BODY_AND_CHILD_SPACING = 28;
 
   test("[正常系]子要素の下端（下の余白まで）と body の下の余白から測り、iframe より低くても低い高さを返す", () => {
     const doc = setUpDocument([{ bottom: 300 }, { bottom: 420.2 }]);
@@ -374,5 +394,73 @@ describe("measureContentHeight", () => {
     expect(
       measureContentHeight(setUpDocument([{ bottom: 0, height: 0 }])),
     ).toBe(800);
+  });
+
+  test("[正常系]高さを画面に合わせた入れ物（100vh）から中身が下へはみ出してページがスクロールするときは、scrollHeight まで含める", () => {
+    const doc = setUpDocument(
+      [{ bottom: 812 - BODY_AND_CHILD_SPACING, height: 812 }],
+      { scrollHeight: () => 2400, viewport: () => 812 },
+    );
+    expect(measureContentHeight(doc)).toBe(2400);
+  });
+
+  test("[正常系]ページがスクロールしても、子要素の下端のほうが下なら子要素の下端を返す", () => {
+    const doc = setUpDocument([{ bottom: 1500 }], {
+      scrollHeight: () => 1500,
+      viewport: () => 812,
+    });
+    expect(measureContentHeight(doc)).toBe(1500 + BODY_AND_CHILD_SPACING);
+  });
+
+  test("[正常系]ページがスクロールしない（scrollHeight が画面の高さのまま）ときは、iframe より低い子要素の下端を返す", () => {
+    const doc = setUpDocument([{ bottom: 300 }], {
+      scrollHeight: () => 2400,
+      viewport: () => 2400,
+    });
+    expect(measureContentHeight(doc)).toBe(300 + BODY_AND_CHILD_SPACING);
+  });
+
+  test("[境界値]scrollHeight が画面の高さを 1px の内で超えるだけなら子要素の下端のまま、1px を超えたら scrollHeight を含める", () => {
+    let scrollHeight = 813;
+    const doc = setUpDocument([{ bottom: 500 }], {
+      scrollHeight: () => scrollHeight,
+      viewport: () => 812,
+    });
+    expect(measureContentHeight(doc)).toBe(500 + BODY_AND_CHILD_SPACING);
+    scrollHeight = 814;
+    expect(measureContentHeight(doc)).toBe(814);
+  });
+
+  test("[正常系]100vh の入れ物からはみ出す画面は、知らせた高さを iframe に付けて入れ物ごと伸びても、同じ高さのまま落ち着く", () => {
+    // 入れ物は画面の高さ（100vh。body と子の余白を含めて画面いっぱい）。中身は 2400 で、画面が低いあいだは入れ物から下へはみ出す
+    let viewport = 812;
+    const doc = setUpDocument(
+      [{ bottom: () => viewport - BODY_AND_CHILD_SPACING, height: 812 }],
+      {
+        scrollHeight: () => Math.max(viewport, 2400),
+        viewport: () => viewport,
+      },
+    );
+    const measure = (force: boolean, state: MeasureState | null) =>
+      decideSize(
+        state,
+        { height: measureContentHeight(doc), width: 375, viewport },
+        force,
+      );
+
+    const opened = measure(false, null);
+    expect(opened.report).toBe(2400);
+
+    // 知らせた高さを iframe に付けた。入れ物も 2400 になり、中身はもうはみ出さない
+    viewport = 2400;
+    expect(measureContentHeight(doc)).toBe(2400);
+    const attached = measure(false, opened.state);
+    expect(attached.report).toBeNull();
+    expect(attached.state.ignored).toBeNull();
+
+    // 測り直しを頼まれても 2400 のまま
+    const remeasured = measure(true, attached.state);
+    expect(remeasured.report).toBe(2400);
+    expect(measure(false, remeasured.state).report).toBeNull();
   });
 });

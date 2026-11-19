@@ -98,16 +98,19 @@ export const SHOT_ELEMENT_SELECTOR = [
  * 中身の高さ（px）を測る。橋渡し（bridge/bridge-runtime.ts）と撮影（infra/scripts/story-screenshots.ts）が同じ測り方をする。
  * scrollHeight は画面の高さより小さくならないので、中身が縮んでも縮んだと分からない。
  * body の子要素の下端（下の余白まで）の最も下を中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
- * 子要素の内からはみ出した絶対配置の要素は数えない。測れる子要素が無いときは scrollHeight に戻る。
+ * ただしページがスクロールする（scrollHeight が画面の高さより 1px を超えて大きい）ときは、scrollHeight との大きい方にする。
+ * 高さを画面に合わせた入れ物（height: 100vh。左にサイドバーを置く作りなど）から中身が下へはみ出す画面では、子要素の下端は画面の高さで止まるため。
+ * 撮影の画像（fullPage）もはみ出した分まで撮るので、子要素の内からはみ出した絶対配置の要素も、ページがスクロールするときは数えることになる（画像の高さとそろう）。
+ * スクロールしないときは子要素の下端のまま（iframe より中身が低くなったら、低い高さを返す）。測れる子要素が無いときは scrollHeight に戻る。
  * 撮影ではこの関数の文字列をブラウザへ渡すので、外の値を読まない
  */
 export const measureContentHeight = (doc: Document): number => {
   const body = doc.body;
-  const fallback = () =>
+  const scrollHeight = () =>
     Math.max(doc.documentElement.scrollHeight, body?.scrollHeight ?? 0);
-  if (body === null) return fallback();
+  if (body === null) return scrollHeight();
   const view = doc.defaultView;
-  if (view === null) return fallback();
+  if (view === null) return scrollHeight();
   const px = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -120,15 +123,20 @@ export const measureContentHeight = (doc: Document): number => {
     if (style.position === "fixed") continue;
     bottom = Math.max(bottom, rect.bottom + px(style.marginBottom));
   }
-  if (bottom <= 0) return fallback();
+  if (bottom <= 0) return scrollHeight();
   const bodyStyle = view.getComputedStyle(body);
-  return Math.ceil(
+  const childrenBottom = Math.ceil(
     bottom +
       view.scrollY +
       px(bodyStyle.paddingBottom) +
       px(bodyStyle.borderBottomWidth) +
       px(bodyStyle.marginBottom),
   );
+  // 1px までの差は測り方の端数（bridge/measure.ts と同じ幅）。スクロールしないページでは scrollHeight は画面の高さと同じで、縮んだのが分からない
+  const scrolled = scrollHeight();
+  return scrolled > view.innerHeight + 1
+    ? Math.max(childrenBottom, scrolled)
+    : childrenBottom;
 };
 
 /**
