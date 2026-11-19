@@ -49,6 +49,8 @@ export const ReviewPage = ({
   const [urlState, setUrlState] = useState<UrlState>(() =>
     parseUrlState(window.location.search),
   );
+  // ブランチを切り替えて作り直したか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ）
+  const [switchedBranch, setSwitchedBranch] = useState(false);
   const meta = useReviewMeta();
   // はじめに決まった既定のブランチを覚える（あとで既定のブランチが変わっても、開いている作業の画面を作り直さない）
   if (urlState.branch === undefined && meta.data !== undefined) {
@@ -179,14 +181,15 @@ export const ReviewPage = ({
           published={published}
           publishedBranches={meta.data.branches}
           // 切り替える前に真ん中に見えていた画面・見せる範囲を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
-          onBranchChange={(next, page, story, storyScope) =>
+          onBranchChange={(next, page, story, storyScope) => {
+            setSwitchedBranch(true);
             setUrlState({
               branch: next,
               page,
               ...(storyScope === undefined ? {} : { scope: storyScope }),
               ...(story === undefined ? {} : { story }),
-            })
-          }
+            });
+          }}
           stories={mapSources(catalog.ids, (id) => {
             const result = stories.data?.[id];
             return result?.kind === "ok" ? result.stories : [];
@@ -203,6 +206,7 @@ export const ReviewPage = ({
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
           initialUrl={urlState}
+          openedBy={switchedBranch ? "branch-switch" : "url"}
           initialComments={comments.data?.comments ?? []}
           me={user}
           onLogout={() =>

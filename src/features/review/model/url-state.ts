@@ -9,6 +9,7 @@ import { isStatusFilter, type StatusFilter } from "./threads";
  * - story: その画面（ストーリー）へ移る
  * - comment: そのスレッドを開く
  * - status: 一覧の状態のタブ（無ければ未解決。知らない値は捨てる）
+ * - width: 画面の幅（見出しの「この画面のリンクをコピー」が載せる。数として読めない値は null。選べる幅かは開くときに見る）
  */
 export type UrlState = {
   branch?: string;
@@ -17,6 +18,7 @@ export type UrlState = {
   story?: string;
   comment?: string;
   status?: StatusFilter;
+  width?: number | null;
 };
 
 /** ブランチ名の長さの上限（API の branch と同じ） */
@@ -46,6 +48,10 @@ export const parseUrlState = (search: string): UrlState => {
   if (comment !== null && comment !== "") state.comment = comment;
   const status = params.get("status");
   if (isStatusFilter(status)) state.status = status;
+  const width = params.get("width");
+  if (width !== null && width !== "") {
+    state.width = /^\d+$/.test(width) ? Number(width) : null;
+  }
   return state;
 };
 
@@ -58,6 +64,9 @@ export const buildSearch = (state: UrlState): string => {
   if (state.story !== undefined) params.set("story", state.story);
   if (state.comment !== undefined) params.set("comment", state.comment);
   if (state.status !== undefined) params.set("status", state.status);
+  if (typeof state.width === "number") {
+    params.set("width", String(state.width));
+  }
   const query = params.toString();
   return query === "" ? "" : `?${query}`;
 };
