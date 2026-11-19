@@ -43,8 +43,14 @@ const shownWidth = () =>
 beforeEach(() => {
   window.localStorage.clear();
   window.innerWidth = 1280;
-  // jsdom は pointer capture を持たない
-  HTMLElement.prototype.setPointerCapture = vi.fn();
+  // jsdom は pointer capture を持たない（捕まえた要素を覚えるだけの代わりを置く）
+  const captured = new WeakSet<Element>();
+  HTMLElement.prototype.setPointerCapture = function (this: HTMLElement) {
+    captured.add(this);
+  };
+  HTMLElement.prototype.hasPointerCapture = function (this: HTMLElement) {
+    return captured.has(this);
+  };
 });
 afterEach(() => cleanup());
 
@@ -230,5 +236,26 @@ describe("ResizableSidebar", () => {
       rightAside.compareDocumentPosition(separator("コメント一覧の幅")) &
         Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
+  });
+
+  test("[異常系]ドラッグ中に境目が消えて（窓を狭めて）作り直されたら、押したまま動かしても変えない", () => {
+    render(<Harness side="right" />);
+    fireEvent.pointerDown(separator("コメント一覧の幅"), {
+      button: 0,
+      pointerId: 1,
+      clientX: 900,
+    });
+    setViewport(600);
+    expect(screen.queryByRole("separator")).toBeNull();
+    setViewport(1100);
+
+    fireEvent.pointerMove(separator("コメント一覧の幅"), {
+      pointerId: 1,
+      buttons: 1,
+      clientX: 800,
+    });
+
+    expect(shownWidth()).toBe("340px");
+    expect(window.localStorage.getItem(RIGHT_KEY)).toBeNull();
   });
 });

@@ -670,7 +670,7 @@ export default tseslint.config(
   forApp(jsxA11y.flatConfigs.recommended),
   forApp(reactHooks.configs.flat["recommended-latest"]),
   // フォーカスできる separator はウィジェット（WAI-ARIA 1.2 https://www.w3.org/TR/wai-aria-1.2/#separator ・window splitter のパターン）。
-  // jsx-a11y は操作しない要素として扱うので、サイドバーの境目（<hr>）にだけ、フォーカスと矢印キーを許す（要素ごとの許可は role ではなく要素の名前で引く）
+  // jsx-a11y は操作しない要素として扱うので、サイドバーの境目（<hr>）にだけ、フォーカスと矢印キーを許す（onKeyDown の許可（no-noninteractive-element-interactions）は role では引けず、要素の名前で引くため）
   {
     files: ["src/features/review/components/ResizableSidebar.tsx"],
     rules: {

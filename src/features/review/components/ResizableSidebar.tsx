@@ -29,7 +29,7 @@ export const ResizableSidebar = ({
   // ドラッグを始めたときの指の位置と幅
   const dragRef = useRef<{ x: number; width: number } | null>(null);
 
-  // 境目は hr（もともと separator の役割を持つ）。eslint.config.mjs で、フォーカスと矢印キーを許しているのは、このファイルの hr だけ（jsx-a11y の許可は role ではなく要素の名前で引くため）
+  // 境目は hr（もともと separator の役割を持つ）。eslint.config.mjs で、フォーカスと矢印キーを許しているのは、このファイルの hr だけ（onKeyDown の許可（jsx-a11y/no-noninteractive-element-interactions）は role では引けず、要素の名前で引くため）
   const handle = (
     <hr
       aria-orientation="vertical"
@@ -54,8 +54,11 @@ export const ResizableSidebar = ({
       onPointerMove={(event) => {
         const start = dragRef.current;
         if (start === null) return;
-        // 離したのを取りこぼしたとき（窓の外で離した など）は、動かさずにやめる
-        if (event.buttons === 0) {
+        // 離したのを取りこぼしたとき・境目が消えて作り直されたとき（窓を狭めた。外れた知らせは境目ではなく document に届く）は、動かさずにやめる
+        if (
+          event.buttons === 0 ||
+          !event.currentTarget.hasPointerCapture(event.pointerId)
+        ) {
           dragRef.current = null;
           return;
         }
@@ -74,7 +77,7 @@ export const ResizableSidebar = ({
       onPointerCancel={() => {
         dragRef.current = null;
       }}
-      // 境目が消えた（窓を狭めた）ときなど、指を離さないまま捕まえていたのが外れたら、やめる
+      // 指を離さないまま、捕まえていたのが外れたら（ほかの要素が捕まえた など）、やめる
       onLostPointerCapture={() => {
         dragRef.current = null;
       }}
