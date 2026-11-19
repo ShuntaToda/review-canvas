@@ -245,7 +245,7 @@ const KIND_ORDER: Readonly<Record<TransitionProblem["kind"], number>> = {
 };
 
 /** 文字の中の改行などを空白にする（1 行の知らせを崩さない） */
-const oneLine = (value: string): string =>
+export const oneLine = (value: string): string =>
   Array.from(value, (char) => {
     const code = char.codePointAt(0) ?? 0;
     return code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029

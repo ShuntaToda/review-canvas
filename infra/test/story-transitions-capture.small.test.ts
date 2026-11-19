@@ -48,6 +48,8 @@ const STORIES: Readonly<Record<string, string>> = {
 /** 遷移のボタンを探すのが時間切れになるストーリー（別の Storybook として撮る） */
 const SLOW_STORIES: Readonly<Record<string, string>> = {
   "shop-list--slow": `<button>重い</button>`,
+  // ボタンを 1 行探すたびに 1.5 秒かかる（文字で探すときに使う closest を遅くする）
+  "shop-list--heavy": `<button>重いボタン</button>`,
 };
 
 const PARAMETERS_SCRIPT = `
@@ -83,6 +85,10 @@ const PARAMETERS_SCRIPT = `
         },
       },
     ],
+    "shop-list--heavy": Array.from({ length: 10 }, () => ({
+      from: { text: "重いボタン" },
+      to: "shop-form--default",
+    })),
     "shop-list--params": [
       { from: { testId: "buy" }, to: "shop-form--default", label: "買うとき" },
       { get from() { throw new Error("読めない"); }, to: "shop-form--default" },
@@ -119,6 +125,14 @@ const IFRAME_HTML = `<!doctype html>
       root.innerHTML = stories[id] ?? "";
       const render = { phase: "rendering", story: { parameters: parametersOf(id) } };
       window.__STORYBOOK_PREVIEW__ = { currentRender: render };
+      if (id === "shop-list--heavy") {
+        const closest = Element.prototype.closest;
+        Element.prototype.closest = function (selector) {
+          const end = Date.now() + 1500;
+          while (Date.now() < end) {}
+          return closest.call(this, selector);
+        };
+      }
       if (id === "shop-list--play") {
         render.story.playFunction = () => undefined;
         render.phase = "playing";
@@ -256,7 +270,7 @@ describe("captureStorybook（遷移）", () => {
 });
 
 describe("captureStorybook（遷移のボタンを探すのが時間切れ）", () => {
-  test("撮った画像は矩形なしで残し、ページを作り直してほかのストーリーも撮る（書き間違いは出さない）", async () => {
+  test("撮った画像は矩形なしで残し、ほかのストーリーも撮る（書き間違いは出さない）", async () => {
     const dir = buildStorybook("slow", [
       "shop-list--slow",
       "shop-form--default",
@@ -294,4 +308,39 @@ describe("captureStorybook（遷移のボタンを探すのが時間切れ）", 
       ),
     ).toHaveLength(2);
   }, 120_000);
+});
+
+describe("captureStorybook（ボタンを探している途中で撮影の時間の上限に届く）", () => {
+  test("ブラウザが閉じても「見つかりません」とせず、画像は矩形なしで残し、読めた行き先は残す", async () => {
+    const dir = buildStorybook("deadline", [
+      "shop-list--heavy",
+      "shop-form--default",
+    ]);
+    const logged: string[] = [];
+
+    const heavy = await captureStorybook({
+      dir,
+      widths: [375],
+      baseHeight: 600,
+      deadline: Date.now() + 8_000,
+      log: (message) => logged.push(message),
+    });
+
+    const written = readManifest(dir);
+    expect(heavy.transitionProblems).toStrictEqual([]);
+    const shot = written.shots.find(
+      (row) => row.storyId === "shop-list--heavy",
+    );
+    expect(shot).toBeDefined();
+    expect(fs.existsSync(path.join(dir, shot?.path ?? ""))).toBe(true);
+    expect(shot?.transitions).toBeUndefined();
+    expect(written.transitions?.["shop-list--heavy"]).toHaveLength(10);
+    expect(
+      logged.filter((message) =>
+        message.startsWith(
+          "  ! shop-list--heavy（375px）: 遷移のボタンを探せませんでした（画像は置きます）",
+        ),
+      ),
+    ).toHaveLength(1);
+  }, 60_000);
 });

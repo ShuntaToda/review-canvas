@@ -118,7 +118,7 @@ Agent ツールで、1 つのメッセージにまとめて起こします（並
 ## 5. 直させる
 
 - 直しは**書いた実装役**に送る（文脈が残っているので速い。書いた本人が直すのはよく、レビューしないだけ）。文章なら、書いた役に送る
-- 指摘ごとに、直し方と「変えないこと」を書き、終わりの条件（`pnpm run validate`・`pnpm run test:small`、コードを触ったなら `pnpm run test:coverage`、infra を触ったなら `pnpm run infra:validate`・`pnpm run infra:test`・コミットの決まり）を書き直して渡す
+- 指摘ごとに、直し方と「変えないこと」を書き、終わりの条件（`pnpm run validate`・`pnpm run test:small`、コードを触ったなら `pnpm run test:coverage`、infra を触ったなら `pnpm run infra:validate`・`pnpm run infra:test`（撮影のテストに Chromium が要る。docs/development.md「検証」）・コミットの決まり）を書き直して渡す
 - 方針が決まらない Low には「無理なら理由つきで見送ってよい」と逃げ道を渡す（新しい方針を作らせない）
 - 報告をうのみにせず、`git log`・`git status`・テストの結果を自分で確かめる
 

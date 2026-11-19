@@ -38,6 +38,7 @@ import {
 import {
   checkTransitionSpecs,
   groupTransitionProblems,
+  oneLine,
   placeTransition,
   toTransitionCandidates,
   toTransitionSpecs,
@@ -406,7 +407,7 @@ type TransitionFinder = (
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
 
-/** Playwright の getByRole が受け付ける役割（型と同じ並び。足りない・余るものは型の検査で落ちる） */
+/** Playwright の getByRole が受け付ける役割（型と同じ役割の集まり。足りない・余るものは型の検査で落ちる） */
 const ARIA_ROLES: Readonly<Record<AriaRole, true>> = {
   alert: true,
   alertdialog: true,
@@ -496,7 +497,7 @@ const isAriaRole = (role: string): role is AriaRole =>
   Object.hasOwn(ARIA_ROLES, role);
 
 /**
- * ボタンの決め方から、Playwright の探し方を作る（見えている要素だけ。名前・文字は前後の空白を除いた完全一致）。
+ * ボタンの決め方から、Playwright の探し方を作る（見えている要素だけ。名前・文字の比べ方は Playwright の exact: true。docs/host-setup.md）。
  * 知らない役割は探せないので null（ボタンが見つからない）
  */
 const locateTransition = (page: Page, from: TransitionFrom) => {
@@ -518,11 +519,12 @@ const locateTransition = (page: Page, from: TransitionFrom) => {
 
 /**
  * 遷移の行ごとに、いまの画面でボタンの候補を探す（行の index ごと）。
- * 探せない行（知らない role など）は候補なしにする。時間切れは投げる（呼ぶ側がページを作り直す）
+ * 探せない行（知らない role など）は候補なしにする。時間切れと、ページ・ブラウザが閉じたときは投げる（呼ぶ側がページを作り直す・矩形なしで残す）
  */
 const findTransitionCandidates = async (
   page: Page,
   lookups: ReadonlyArray<TransitionLookup>,
+  isGone: () => boolean,
 ): Promise<Map<number, TransitionCandidate[]>> => {
   const found = new Map<number, TransitionCandidate[]>();
   if (lookups.length === 0) return found;
@@ -546,7 +548,8 @@ const findTransitionCandidates = async (
         );
         found.set(index, toTransitionCandidates(raw));
       } catch (error) {
-        if (isTimeout(error)) throw error;
+        // ページ・ブラウザが閉じた（撮影の時間の上限など）ときは、見つからないとせずに投げる（呼ぶ側が矩形なしで残す）
+        if (isTimeout(error) || isGone()) throw error;
         found.set(index, []);
       }
     }
@@ -618,6 +621,10 @@ export const createCaptureGuard = ({
     },
   };
 };
+
+/** 知らせに出すエラーの 1 行目 */
+const firstLine = (error: unknown): string =>
+  error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
 
 const isTimeout = (error: unknown): boolean =>
   error instanceof Error && error.name === "TimeoutError";
@@ -839,46 +846,28 @@ export const captureStorybook = async ({
       }
       if (state.phase === "errored" || state.phase === "aborted") {
         log(
-          `  ! ${storyId}（${String(width)}px）: 描画が ${state.phase} で終わりました（そのままの画面を撮っています）`,
+          `  ! ${oneLine(storyId)}（${String(width)}px）: 描画が ${oneLine(state.phase)} で終わりました（そのままの画面を撮っています）`,
         );
       }
       return shot;
     };
-    /**
-     * 撮った後の同じ画面（play 関数が終わった後）で、遷移の書き方を読み、ボタンを探す。
-     * 書き間違い・目録の行は返すだけにし、呼ぶ側が時間内に終わったものだけを残す
-     */
-    const lookUp = async (
-      { storyId, width }: { storyId: string; width: number },
-      slot: number,
-      shot: StoryShot,
-    ) => {
-      const page = pages[slot];
-      if (page === undefined) throw new Error("撮るページがありません");
-      const checked = checkTransitionSpecs(
-        storyId,
-        toTransitionSpecs(
-          await page
-            .evaluate<unknown>(TRANSITION_SPECS_SCRIPT)
-            .catch(() => null),
-        ),
-        knownStories,
-      );
-      const candidates = await findTransitionCandidates(page, checked.lookups);
-      const rects: ShotTransition[] = [];
-      const problems: TransitionProblem[] = [];
-      for (const { index } of checked.lookups) {
-        const placed = placeTransition({
-          storyId,
-          width,
-          shotHeight: shot.height,
-          index,
-          candidates: candidates.get(index) ?? [],
-        });
-        if ("rect" in placed) rects.push(placed.rect);
-        else problems.push(placed.problem);
+    /** ページ・ブラウザが閉じたか（撮影の時間の上限でブラウザを閉じたときなど） */
+    const isGone = (page: Page): boolean =>
+      page.isClosed() || !browser.isConnected();
+    /** 撮った後の同じ画面（play 関数が終わった後）で、遷移の書き方を読む。読めなければ null（ページが閉じたときは投げる） */
+    const readSpecs = async (page: Page): Promise<unknown> => {
+      try {
+        return await page.evaluate<unknown>(TRANSITION_SPECS_SCRIPT);
+      } catch (error) {
+        if (isTimeout(error) || isGone(page)) throw error;
+        return null;
       }
-      return { checked, rects, problems };
+    };
+    /** 撮影を止めた後に終わった結果は、途中で切れているかもしれないので使わない */
+    const assertRunning = (page: Page): void => {
+      if (guard.stopReason() !== null || isGone(page)) {
+        throw new Error("撮影を止めたので、遷移を読み切れませんでした");
+      }
     };
     const settled = await runPool(plan, concurrency, async (item, slot) => {
       const stop = guard.stopReason();
@@ -895,32 +884,68 @@ export const captureStorybook = async ({
         }
         throw error;
       }
-      // 遷移のボタンを探すのが時間切れ・失敗でも、撮った 1 枚は残す（矩形なし。この幅の書き間違いも出さない）
-      try {
-        const found = await withTimeout(
-          lookUp(item, slot, shot),
-          transitionTimeoutMs,
-          "遷移のボタンの読み取り",
-        );
-        widthProblems.push(...found.problems);
-        if (!storyTransitions.has(item.storyId)) {
-          storyTransitions.set(item.storyId, {
-            transitions: found.checked.transitions,
-            problems: found.checked.problems,
-          });
-        }
-        return found.rects.length === 0
-          ? shot
-          : { ...shot, transitions: found.rects };
-      } catch (error) {
+      // 撮った後の同じ画面で、遷移を読み、ボタンを探す（読むのと探すのとで、1 枚に transitionTimeoutMs まで）。
+      // 時間切れ・失敗でも撮った 1 枚は残す。読めた行き先と幅に依らない書き間違いは残し、矩形とこの幅の書き間違いだけを捨てる
+      const page = pages[slot];
+      if (page === undefined) return shot;
+      const startedLookUp = Date.now();
+      const remaining = () =>
+        Math.max(0, transitionTimeoutMs - (Date.now() - startedLookUp));
+      const giveUp = async (error: unknown): Promise<StoryShot> => {
         log(
-          `  ! ${item.storyId}（${String(item.width)}px）: 遷移のボタンを探せませんでした（画像は置きます）: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+          `  ! ${oneLine(item.storyId)}（${String(item.width)}px）: 遷移のボタンを探せませんでした（画像は置きます）: ${oneLine(firstLine(error))}`,
         );
         // 終わらなかったページは使い回さない
         if (isTimeout(error) && guard.stopReason() === null) {
           await renewPages(slot).catch(() => undefined);
         }
         return shot;
+      };
+      let checked: ReturnType<typeof checkTransitionSpecs>;
+      try {
+        const raw = await withTimeout(
+          readSpecs(page),
+          remaining(),
+          "遷移の読み取り",
+        );
+        assertRunning(page);
+        checked = checkTransitionSpecs(
+          item.storyId,
+          toTransitionSpecs(raw),
+          knownStories,
+        );
+      } catch (error) {
+        return giveUp(error);
+      }
+      if (!storyTransitions.has(item.storyId)) {
+        storyTransitions.set(item.storyId, {
+          transitions: checked.transitions,
+          problems: checked.problems,
+        });
+      }
+      if (checked.lookups.length === 0) return shot;
+      try {
+        const candidates = await withTimeout(
+          findTransitionCandidates(page, checked.lookups, () => isGone(page)),
+          remaining(),
+          "遷移のボタンの読み取り",
+        );
+        assertRunning(page);
+        const rects: ShotTransition[] = [];
+        for (const { index } of checked.lookups) {
+          const placed = placeTransition({
+            storyId: item.storyId,
+            width: item.width,
+            shotHeight: shot.height,
+            index,
+            candidates: candidates.get(index) ?? [],
+          });
+          if ("rect" in placed) rects.push(placed.rect);
+          else widthProblems.push(placed.problem);
+        }
+        return rects.length === 0 ? shot : { ...shot, transitions: rects };
+      } catch (error) {
+        return giveUp(error);
       }
     });
     await context.close().catch(() => undefined);
@@ -934,13 +959,10 @@ export const captureStorybook = async ({
         shots.push(result.value);
         return;
       }
-      const reason =
-        result.reason instanceof Error
-          ? (result.reason.message.split("\n")[0] ?? "")
-          : String(result.reason);
+      const reason = firstLine(result.reason);
       failures.push({ ...item, reason });
       log(
-        `  ! ${item.storyId}（${String(item.width)}px）: 撮れません: ${reason}`,
+        `  ! ${oneLine(item.storyId)}（${String(item.width)}px）: 撮れません: ${oneLine(reason)}`,
       );
     });
     const transitions = Object.fromEntries(

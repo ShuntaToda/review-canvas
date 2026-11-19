@@ -438,10 +438,12 @@ describe("parseShotsManifest（遷移）", () => {
       })),
       { index: 0, to: "shop-form--default" },
     ];
+    // 矩形も、1 件目の形が違うので位置 1 は空いているが、51 件目の位置 1（行のある位置）は読まない
     const rects = [
+      { ...rect, index: 1, width: 0 },
+      ...Array.from({ length: 48 }, (_, i) => ({ ...rect, index: i + 2 })),
       { ...rect, index: 99 },
-      ...Array.from({ length: 49 }, (_, i) => ({ ...rect, index: i + 1 })),
-      { ...rect, index: 0 },
+      { ...rect, index: 1 },
     ];
     const manifest = parseShotsManifest({
       version: 1,
@@ -457,7 +459,7 @@ describe("parseShotsManifest（遷移）", () => {
     );
     expect(
       manifest?.shots[0]?.transitions?.map((row) => row.index),
-    ).toStrictEqual(Array.from({ length: 49 }, (_, i) => i + 1));
+    ).toStrictEqual(Array.from({ length: 48 }, (_, i) => i + 2));
   });
 
   test("[異常系]ストーリー ID が Object の名前（constructor・toString・__proto__）の画像・遷移でも投げず、画像はすべて残し、行の無い ID の矩形は捨てる", () => {
