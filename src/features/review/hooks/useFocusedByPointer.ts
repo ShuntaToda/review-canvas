@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { INITIAL_FOCUS_ORIGIN, nextFocusOrigin } from "../model/focus-origin";
+import {
+  countsAsKeyInput,
+  INITIAL_FOCUS_ORIGIN,
+  nextFocusOrigin,
+} from "../model/focus-origin";
 
 /**
  * いまのフォーカスがポインタで押して移ったものかを覚え、読む関数を返す（model/focus-origin）。
@@ -11,7 +15,10 @@ export const useFocusedByPointer = (): (() => boolean) => {
   useEffect(() => {
     const listeners = (["pointerdown", "keydown", "focusin"] as const).map(
       (type) => {
-        const listener = () => {
+        const listener = (event: Event) => {
+          if (event instanceof KeyboardEvent && !countsAsKeyInput(event.key)) {
+            return;
+          }
           origin.current = nextFocusOrigin(origin.current, type);
         };
         window.addEventListener(type, listener, true);

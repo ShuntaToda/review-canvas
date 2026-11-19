@@ -1,4 +1,5 @@
 import {
+  countsAsKeyInput,
   type FocusOrigin,
   INITIAL_FOCUS_ORIGIN,
   isFocusVisible,
@@ -54,5 +55,20 @@ describe("isFocusVisible", () => {
         },
       }),
     ).toBe(true);
+  });
+});
+
+describe("countsAsKeyInput", () => {
+  test.each([
+    ["Tab", true],
+    ["Escape", true],
+    ["-", true],
+    [" ", true],
+    ["Shift", false],
+    ["Control", false],
+    ["Alt", false],
+    ["Meta", false],
+  ])("[正常系]%j を直前の入力として数えるか（%s）", (key, expected) => {
+    expect(countsAsKeyInput(key)).toBe(expected);
   });
 });

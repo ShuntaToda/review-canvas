@@ -104,4 +104,19 @@ describe("useFocusedByPointer", () => {
     pin.focus();
     expect(result.current()).toBe(false);
   });
+
+  test("[正常系]マウスで押したボタンから Cmd+Tab で別のウィンドウへ移り、戻って同じボタンにフォーカスしても、ポインタのまま", () => {
+    const { result } = renderHook(() => useFocusedByPointer());
+    render(createElement("button", { type: "button" }, "拡大"));
+    const button = screen.getByRole("button", { name: "拡大" });
+
+    fireEvent.pointerDown(button);
+    button.focus();
+    fireEvent.keyDown(button, { key: "Meta", metaKey: true });
+    button.blur();
+    fireEvent.blur(window);
+    button.focus();
+
+    expect(result.current()).toBe(true);
+  });
 });

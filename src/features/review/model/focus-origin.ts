@@ -18,10 +18,23 @@ export const INITIAL_FOCUS_ORIGIN: FocusOrigin = {
   focusedByPointer: false,
 };
 
+/** 修飾キーだけの keydown（Cmd+Tab で別のウィンドウへ移るときなど）。フォーカスを移すキーではないので、直前の入力を変えない */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set([
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+]);
+
+/** keydown を直前の入力として数えるか（修飾キーだけなら数えない。Shift+Tab は Tab の keydown で数える） */
+export const countsAsKeyInput = (key: string): boolean =>
+  !MODIFIER_KEYS.has(key);
+
 /**
  * イベントごとに更新する。
  * - pointerdown: どこを押しても（フォーカスが動かない所を押しても）ポインタで操作しているとみなす
- * - keydown: 直前の入力をキーにするだけ。フォーカスを動かさないショートカット（-・]・Esc など）では、いまのフォーカスの手段を変えない
+ * - keydown: 直前の入力をキーにするだけ。フォーカスを動かさないショートカット（-・]・Esc など）では、いまのフォーカスの手段を変えない。
+ *   修飾キーだけの keydown は送らない（countsAsKeyInput）
  * - focusin: フォーカスが移った。直前の入力で手段を決める（ポインタで押した後にプログラムで移した先も、ポインタ由来）
  * - frame-blur: フォーカスが画面（iframe）の中へ移った。中の入力（押す・打つ）は親に届かないので、直前の入力をキーに戻す
  *   （中から Shift+Tab で親へ出たときにキーボードとして扱う。マウスで親へ戻るときは、先に親の pointerdown が来る）

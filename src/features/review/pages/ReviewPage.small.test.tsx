@@ -12,6 +12,7 @@ import type { ReviewMeta } from "../api/review-api";
 import type * as CanvasModule from "../components/Canvas";
 import type * as ReviewData from "../hooks/useReviewData";
 import type { RowPlacement } from "../model/layout";
+import type { LinkHighlight } from "../model/story-link";
 import type { Story } from "../model/storybook";
 import type { Comment } from "../model/threads";
 import { ReviewPage } from "./ReviewPage";
@@ -79,7 +80,7 @@ const fixtures = vi.hoisted(() => {
   const storybook = (id: string, label: string) => ({
     id,
     label,
-    widths: [1280],
+    widths: [375, 1280],
     defaultWidth: 1280,
     baseHeight: 800,
   });
@@ -157,26 +158,39 @@ vi.mock(
     ({
       Canvas: ({
         rows,
+        width,
+        linkHighlight,
+        containerRef,
         onCopyStoryLink,
       }: {
         rows: ReadonlyArray<RowPlacement>;
+        width: number;
+        linkHighlight: LinkHighlight | null;
+        containerRef: (element: HTMLDivElement | null) => void;
         onCopyStoryLink: (storyId: string) => void;
       }) => (
-        <ul aria-label="キャンバスの画面">
-          {rows.map((row) => (
-            <li key={row.title}>
-              {row.title}
-              <button
-                type="button"
-                aria-label={`${row.title} のリンクをコピー`}
-                onClick={() => {
-                  const [first] = row.frames;
-                  if (first !== undefined) onCopyStoryLink(first.story.id);
-                }}
-              />
-            </li>
-          ))}
-        </ul>
+        <div
+          ref={containerRef}
+          data-testid="canvas"
+          data-width={width}
+          data-highlight={linkHighlight?.storyId ?? ""}
+        >
+          <ul aria-label="キャンバスの画面">
+            {rows.map((row) => (
+              <li key={row.title}>
+                {row.title}
+                <button
+                  type="button"
+                  aria-label={`${row.title} のリンクをコピー`}
+                  onClick={() => {
+                    const [first] = row.frames;
+                    if (first !== undefined) onCopyStoryLink(first.story.id);
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
       ),
     }) satisfies typeof CanvasModule,
 );
@@ -202,10 +216,35 @@ const storyList = () =>
   screen.getByRole("complementary", { name: "画面の一覧" });
 const urlParams = () => new URLSearchParams(window.location.search);
 
-beforeEach(() => window.localStorage.clear());
+/** キャンバスの大きさ（ResizeObserver の偽物が返す。0 なら知らせない＝大きさの分からないまま） */
+let canvasSize = { width: 0, height: 0 };
+class FakeResizeObserver {
+  readonly #callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.#callback = callback;
+  }
+  observe() {
+    if (canvasSize.width === 0) return;
+    this.#callback(
+      [{ contentRect: canvasSize } as unknown as ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    );
+  }
+  disconnect() {
+    return undefined;
+  }
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  canvasSize = { width: 0, height: 0 };
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("ReviewPage の見せる範囲（scope）", () => {
@@ -426,5 +465,21 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  test("[正常系]画面のリンク（?story=&width=）で開いた後にブランチを替えると、開いたときの枠を出さず、幅は覚えた幅に戻す", () => {
+    canvasSize = { width: 1000, height: 800 };
+    const canvas = () => screen.getByTestId("canvas");
+    open("?page=shop&story=shop-cart--default&width=375");
+    expect(canvas().dataset["width"]).toBe("375");
+    expect(canvas().dataset["highlight"]).toBe("shop-cart--default");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "ブランチ" }), {
+      target: { value: "feature/cart" },
+    });
+
+    expect(urlParams().get("branch")).toBe("feature/cart");
+    expect(canvas().dataset["width"]).toBe("1280");
+    expect(canvas().dataset["highlight"]).toBe("");
   });
 });
