@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { afterAll, describe, expect, test } from "vitest";
 import {
-  MAX_MEASURED_ELEMENTS,
+  MAX_MEASURED_NODES,
   measureContentHeight,
 } from "../../src/features/review/model/story-shots";
 import {
@@ -309,13 +309,13 @@ describe("withContent・SHOT_CONTENT_SCRIPT", () => {
     expect(SHOT_CONTENT_SCRIPT).not.toContain("import");
   });
 
-  test("中身の高さは、橋渡しと同じ上限（MAX_MEASURED_ELEMENTS）を渡して測る", () => {
+  test("中身の高さは、橋渡しと同じ上限（MAX_MEASURED_NODES）を渡して測る", () => {
     const call = `(${measureContentHeight.toString()})(`;
     const start = SHOT_CONTENT_SCRIPT.indexOf(call);
     expect(start).toBeGreaterThan(-1);
     const args = SHOT_CONTENT_SCRIPT.slice(start + call.length).split(")")[0];
     expect(args?.replace(/\s/g, "")).toBe(
-      `document,${String(MAX_MEASURED_ELEMENTS)},`,
+      `document,${String(MAX_MEASURED_NODES)},`,
     );
   });
 });

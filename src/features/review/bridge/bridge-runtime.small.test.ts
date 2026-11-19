@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-import {
-  MAX_MEASURED_ELEMENTS,
-  measureContentHeight,
-} from "../model/story-shots";
+import { MAX_MEASURED_NODES, measureContentHeight } from "../model/story-shots";
 import { installBridge } from "./bridge-runtime";
 import { decideSize, type MeasureState } from "./measure";
 import {
@@ -427,7 +424,7 @@ describe("measureContentHeight", () => {
   // body の余白 8・内側の余白 16・body の子要素の余白 4 の分（body の子要素の下端に足される）
   const BODY_AND_CHILD_SPACING = 28;
 
-  const measure = (children: FakeElement[], limit = MAX_MEASURED_ELEMENTS) =>
+  const measure = (children: FakeElement[], limit = MAX_MEASURED_NODES) =>
     measureContentHeight(setUpDocument(children).doc, limit);
 
   test("[正常系]子要素の下端（下の余白まで）と body の下の余白から測り、iframe より低くても低い高さを返す", () => {
@@ -590,13 +587,29 @@ describe("measureContentHeight", () => {
     expect(measure(tree, 1)).toBe(784 + BODY_AND_CHILD_SPACING);
   });
 
-  test("[正常系]橋渡しは、撮影と同じ上限（MAX_MEASURED_ELEMENTS）で測る", () => {
+  test("[境界値]空白だけの文字は上限を減らさない", () => {
+    const { doc } = setUpDocument([
+      {
+        bottom: 784,
+        overflow: 1600,
+        children: [
+          { bottom: 784, overflow: 1600, children: [{ bottom: 2352 }] },
+        ],
+      },
+    ]);
+    doc.body.querySelectorAll("div").forEach((element) => {
+      element.prepend(doc.createTextNode("\n  "), doc.createTextNode(" "));
+    });
+    expect(measureContentHeight(doc, 2)).toBe(2352);
+  });
+
+  test("[正常系]橋渡しは、撮影と同じ上限（MAX_MEASURED_NODES）で測る", () => {
     vi.mocked(measureContentHeight).mockClear();
     const { send, uninstall } = setUp();
     send({ type: "hello", interactive: false });
     expect(measureContentHeight).toHaveBeenCalledWith(
       expect.anything(),
-      MAX_MEASURED_ELEMENTS,
+      MAX_MEASURED_NODES,
     );
     uninstall();
   });
@@ -627,7 +640,7 @@ describe("measureContentHeight", () => {
         const decided = decideSize(
           state,
           {
-            height: measureContentHeight(doc, MAX_MEASURED_ELEMENTS),
+            height: measureContentHeight(doc, MAX_MEASURED_NODES),
             width: 375,
             viewport,
           },

@@ -95,22 +95,23 @@ export const SHOT_ELEMENT_SELECTOR = [
 ].join(", ");
 
 /**
- * 中身の高さを測るときに中へ降りる要素（文字を含む）の数の上限。
+ * 中身の高さを測るときに中へ降りて数える要素と文字（空白だけの文字は除く）の数の上限。
  * 測って決めた値ではなく、要素の多い画面で重くしないための目安。尽きたら、それより先へは降りない（低く測る）。
  * 降りるかどうかは中身のはみ出しで決まり、はみ出しは画面の高さで変わるので、尽きる場所も画面の高さで変わりうる
  */
-export const MAX_MEASURED_ELEMENTS = 5_000;
+export const MAX_MEASURED_NODES = 5_000;
 
 /**
  * 中身の高さ（px）を測る。橋渡し（bridge/bridge-runtime.ts）と撮影（infra/scripts/story-screenshots.ts）が同じ測り方をする
- * （どちらも上限に MAX_MEASURED_ELEMENTS を渡す）。
+ * （どちらも上限に MAX_MEASURED_NODES を渡す）。
  * scrollHeight は画面の高さより小さくならないので、中身が縮んでも縮んだと分からない。
  * body の子要素の箱の下端（下の余白まで）に body の下の余白を足したものを中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
  * 子要素の箱から中身が下へはみ出している（高さを画面に合わせた入れ物（height: 100vh）の中の長い中身など）ときは、
  * 中へ降りて、はみ出した要素の下端（下の余白まで）と、はみ出した文字の下端も数え、大きい方を中身の高さとする。
  * はみ出した中身の下には、入れ物の内側の下の余白も body の下の余白も足さない
- * （Chromium のページの高さ（撮影の fullPage の画像の高さ）でも足されない。手元で測ると、サンプルの Storybook の 100vh の画面で画像の高さと同じになった。
+ * （Chromium のページの高さ（撮影の fullPage の画像の高さ）は、はみ出した中身の下に先祖の余白を足さない。
  * 文字の矩形は行の高さより少し低いので、文字がはみ出す画面では数 px 低くなることがある）。
+ * body に余白のある画面（Storybook の layout: padded）の 100vh の入れ物は、iframe を伸ばすと余白の分だけ伸びるので、切り替えた後に枠が余白の分だけ高くなりうる。
  * どれも矩形で測るので、画面の高さが変わっても、同じ中身なら同じ高さになる
  * （画面の高さで測り方が変わると、知らせた高さを iframe に付けるたびに測った高さが行き来する）。
  * 数えないもの: 画面に固定した要素、子要素の内の絶対配置の要素（その中身も。body の子要素そのものが絶対配置なら、その箱だけを数える）、
@@ -131,8 +132,7 @@ export const measureContentHeight = (doc: Document, limit: number): number => {
   };
   let budget = limit;
   /** 文字の下端（数えなければ 0） */
-  const textBottomOf = (node: Node): number => {
-    if ((node.nodeValue ?? "").trim() === "") return 0;
+  const textBottomOf = (node: Text): number => {
     const range = doc.createRange();
     range.selectNodeContents(node);
     const rect = range.getBoundingClientRect();
@@ -167,20 +167,23 @@ export const measureContentHeight = (doc: Document, limit: number): number => {
     if (!descend) return 0;
     let bottom = 0;
     for (const child of Array.from(element.childNodes)) {
-      if (child.nodeType !== 1 && child.nodeType !== 3) continue;
-      if (budget <= 0) break;
-      budget -= 1;
-      if (child.nodeType === 3) {
+      // 文字・要素は iframe の中の realm のものなので、その window のクラスで見分ける
+      if (child instanceof view.Text) {
+        if ((child.nodeValue ?? "").trim() === "") continue;
+        if (budget <= 0) break;
+        budget -= 1;
         bottom = Math.max(bottom, textBottomOf(child));
         continue;
       }
-      const childElement = child as Element;
-      const childStyle = styleOf(childElement, false);
+      if (!(child instanceof view.Element)) continue;
+      if (budget <= 0) break;
+      budget -= 1;
+      const childStyle = styleOf(child, false);
       if (childStyle === null) continue;
       bottom = Math.max(
         bottom,
-        boxBottomOf(childElement, childStyle),
-        overflowBottomOf(childElement, childStyle),
+        boxBottomOf(child, childStyle),
+        overflowBottomOf(child, childStyle),
       );
     }
     return bottom;

@@ -11,7 +11,7 @@ import {
 import {
   collectShotElements,
   isShotPath,
-  MAX_MEASURED_ELEMENTS,
+  MAX_MEASURED_NODES,
   MAX_SHOT_ELEMENTS,
   MAX_SHOT_HEIGHT,
   measureContentHeight,
@@ -329,7 +329,7 @@ export const SHOT_CONTENT_SCRIPT = `(() => {
   return {
     contentHeight: (${measureContentHeight.toString()})(
       document,
-      ${String(MAX_MEASURED_ELEMENTS)},
+      ${String(MAX_MEASURED_NODES)},
     ),
     elements: (${collectShotElements.toString()})(
       document,
