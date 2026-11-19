@@ -157,40 +157,34 @@ const SPACE_ACTIVATED_ROLES: ReadonlySet<string> = new Set([
   "option",
 ]);
 
+/** model は DOM に頼らないので、要素かどうかは形で見る */
+const isElementLike = (
+  target: object,
+): target is { tagName: string; getAttribute: (name: string) => unknown } =>
+  "tagName" in target &&
+  typeof target.tagName === "string" &&
+  "getAttribute" in target &&
+  typeof target.getAttribute === "function";
+
 /**
  * Space をその要素の操作（押す・選ぶ・文字を打つ）に使うところか。そこでは Space でキャンバスを掴まない
  * （奪うと、キーボードだけでボタンを押せなくなる）。
- * ボタンなどは、キーボードで移ってきたフォーカス（:focus-visible）のときだけ譲る。マウスで押したボタンにはフォーカスが残るので、
- * 譲るとキャンバスを押した後も Space で掴めず、そのボタンがもう一度押される。
- * 画面（iframe）の中の要素は別のウィンドウのものなので instanceof では見分けず、形で見る
+ * ボタンなどは、キーボードで移ってきたフォーカスのときだけ譲る（focusedByPointer。model/focus-origin）。
+ * マウスで押したボタンにはフォーカスが残るので、譲るとキャンバスを押した後も Space で掴めず、そのボタンがもう一度押される
  */
-export const usesSpaceKey = (target: EventTarget | null): boolean => {
+export const usesSpaceKey = (
+  target: EventTarget | null,
+  { focusedByPointer }: { focusedByPointer: boolean },
+): boolean => {
   if (isTypingTarget(target)) return true;
-  if (target === null || typeof target !== "object" || !("tagName" in target)) {
+  if (focusedByPointer || target === null || !isElementLike(target)) {
     return false;
   }
-  const element = target as {
-    tagName: unknown;
-    getAttribute?: (name: string) => string | null;
-    matches?: (selector: string) => boolean;
-  };
-  const role = element.getAttribute?.("role") ?? null;
-  const activated =
-    (typeof element.tagName === "string" &&
-      SPACE_ACTIVATED_TAGS.has(element.tagName)) ||
-    (role !== null && SPACE_ACTIVATED_ROLES.has(role));
-  return activated && isFocusVisible(element);
-};
-
-/** キーボードで移ってきたフォーカスか（:focus-visible を読めない環境では、そうとみなす。components/Pin.tsx と同じ考え） */
-const isFocusVisible = (element: {
-  matches?: (selector: string) => boolean;
-}): boolean => {
-  try {
-    return element.matches?.(":focus-visible") ?? true;
-  } catch {
-    return true;
-  }
+  const role = target.getAttribute("role");
+  return (
+    SPACE_ACTIVATED_TAGS.has(target.tagName) ||
+    (typeof role === "string" && SPACE_ACTIVATED_ROLES.has(role))
+  );
 };
 
 /** 画面に出すショートカットの一覧 */

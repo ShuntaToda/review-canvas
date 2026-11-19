@@ -115,51 +115,43 @@ describe("isImeComposing", () => {
 });
 
 describe("usesSpaceKey", () => {
-  const element = (
-    tagName: string,
-    attributes: Record<string, string> = {},
-    focusVisible: boolean | "throws" = true,
-  ) =>
+  const element = (tagName: string, attributes: Record<string, string> = {}) =>
     ({
       tagName,
       isContentEditable: false,
       getAttribute: (name: string) => attributes[name] ?? null,
-      matches: (selector: string) => {
-        if (selector !== ":focus-visible") return false;
-        if (focusVisible === "throws") throw new SyntaxError(selector);
-        return focusVisible;
-      },
     }) as unknown as EventTarget;
+  const keyboard = { focusedByPointer: false };
+  const pointer = { focusedByPointer: true };
 
   test("[正常系]キーボードで移ってきたボタン・リンク・押せる役の要素と、入力欄は Space を使う", () => {
-    expect(usesSpaceKey(element("BUTTON"))).toBe(true);
-    expect(usesSpaceKey(element("A"))).toBe(true);
-    expect(usesSpaceKey(element("INPUT", { type: "checkbox" }))).toBe(true);
-    expect(usesSpaceKey(element("TEXTAREA"))).toBe(true);
-    expect(usesSpaceKey(element("DIV", { role: "button" }))).toBe(true);
+    expect(usesSpaceKey(element("BUTTON"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("A"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("SUMMARY"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("TEXTAREA"), keyboard)).toBe(true);
+    expect(usesSpaceKey(element("DIV", { role: "button" }), keyboard)).toBe(
+      true,
+    );
   });
 
-  test("[正常系]マウスで押してフォーカスが残ったボタンでは Space を使わない（掴んで動かす）。文字を打つ欄は使う", () => {
-    expect(usesSpaceKey(element("BUTTON", {}, false))).toBe(false);
-    expect(usesSpaceKey(element("DIV", { role: "button" }, false))).toBe(false);
-    expect(usesSpaceKey(element("TEXTAREA", {}, false))).toBe(true);
+  test("[正常系]ポインタで押してフォーカスが残ったボタンでは Space を使わない（掴んで動かす）。文字を打つ欄は使う", () => {
+    expect(usesSpaceKey(element("BUTTON"), pointer)).toBe(false);
+    expect(usesSpaceKey(element("DIV", { role: "button" }), pointer)).toBe(
+      false,
+    );
+    expect(usesSpaceKey(element("TEXTAREA"), pointer)).toBe(true);
   });
 
-  test("[境界値]:focus-visible を読めない環境では、キーボードで移ってきたとみなす", () => {
-    expect(usesSpaceKey(element("BUTTON", {}, "throws"))).toBe(true);
+  test("[正常系]キャンバス・何も無い所・要素の形でない値は Space を使わない（掴んで動かす）", () => {
+    expect(usesSpaceKey(element("DIV"), keyboard)).toBe(false);
+    expect(usesSpaceKey(element("BODY"), keyboard)).toBe(false);
+    expect(usesSpaceKey(element("DIV", { role: "region" }), keyboard)).toBe(
+      false,
+    );
+    expect(usesSpaceKey(null, keyboard)).toBe(false);
+    expect(usesSpaceKey({} as EventTarget, keyboard)).toBe(false);
     expect(
-      usesSpaceKey({
-        tagName: "BUTTON",
-        isContentEditable: false,
-      } as unknown as EventTarget),
-    ).toBe(true);
-  });
-
-  test("[正常系]キャンバス・何も無い所・DOM の無い値は Space を使わない（掴んで動かす）", () => {
-    expect(usesSpaceKey(element("DIV"))).toBe(false);
-    expect(usesSpaceKey(element("BODY"))).toBe(false);
-    expect(usesSpaceKey(element("DIV", { role: "region" }))).toBe(false);
-    expect(usesSpaceKey(null)).toBe(false);
-    expect(usesSpaceKey({} as EventTarget)).toBe(false);
+      usesSpaceKey({ tagName: "BUTTON" } as unknown as EventTarget, keyboard),
+    ).toBe(false);
   });
 });

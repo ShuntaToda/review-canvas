@@ -1,3 +1,4 @@
+import { isFocusVisible } from "../model/focus-origin";
 import { PIN_SCREEN_SIZE } from "../model/popover";
 import type { ThreadStatus } from "../model/threads";
 
@@ -27,15 +28,6 @@ export const PIN_COLORS = {
   "ai-fixed": "bg-ai-fixed",
   resolved: "bg-resolved",
 } as const satisfies Record<ThreadStatus, string>;
-
-/** キーボードで移ってきたフォーカスか（:focus-visible を読めない環境では、そうとみなす） */
-const isFocusVisible = (element: Element): boolean => {
-  try {
-    return element.matches(":focus-visible");
-  } catch {
-    return true;
-  }
-};
 
 /**
  * コメントのピン。先の尖った角（左下）が指している位置。倍率に関わらず同じ大きさで見せる

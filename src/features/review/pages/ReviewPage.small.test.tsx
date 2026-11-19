@@ -251,6 +251,10 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     "[異常系]%s の scope のリンクは、範囲を外して全部の画面で開き、お知らせを 1 回出す",
     async (_label, scope) => {
       vi.useFakeTimers();
+      // お知らせを出すたびに、表示時間（2.5 秒）のタイマーを掛け直す。その数で、出した回数を数える
+      const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+      const toastTimers = () =>
+        setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 2500).length;
       open(`?page=shop&scope=${scope}`, { strict: true });
 
       expect(canvasTitles()).toEqual([
@@ -266,6 +270,7 @@ describe("ReviewPage の見せる範囲（scope）", () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(screen.getAllByText("この範囲の画面はありません")).toHaveLength(1);
+      expect(toastTimers()).toBe(1);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
@@ -320,44 +325,65 @@ describe("ReviewPage の見せる範囲（scope）", () => {
     expect(within(storyList()).getByText("表示: Shop")).not.toBeNull();
   });
 
-  test("[正常系]ボタンにフォーカスがあるときの Space はボタンに任せ、キャンバス・何も無い所では掴んで動かす", () => {
+  /**
+   * Chromium の順を写す: マウスで押してフォーカスした時は :focus-visible に合わず、キーを押すと keydown を配る前に合う状態へ切り替わる。
+   * jsdom はキーボードかを見分けないので、そのボタンの matches(":focus-visible") を、この順に差し替える
+   */
+  const chromiumFocusVisible = (button: HTMLElement) => {
+    const original = button.matches.bind(button);
+    let visible = false;
+    const flip = () => {
+      visible = true;
+    };
+    button.addEventListener("keydown", flip, true);
+    vi.spyOn(button, "matches").mockImplementation((selector) =>
+      selector === ":focus-visible" ? visible : original(selector),
+    );
+  };
+
+  // jsdom は Space でボタンを押さないので、押されないこと（掴むこと）は、既定の動作を止めたか（fireEvent が false を返す）で確かめる
+  test("[正常系]マウスで押したボタンにフォーカスが残っていても、Space はボタンを押さずにキャンバスを掴む", () => {
+    open("?page=shop");
+    const zoomIn = screen.getByRole("button", { name: "拡大" });
+    const folder = within(storyList()).getByRole("button", { name: "Shop" });
+    for (const button of [zoomIn, folder]) {
+      chromiumFocusVisible(button);
+      fireEvent.pointerDown(button);
+      button.focus();
+      fireEvent.click(button);
+
+      expect(fireEvent.keyDown(button, { key: " " })).toBe(false);
+      fireEvent.keyUp(button, { key: " " });
+      // 修飾キーと一緒に押しても同じ
+      fireEvent.keyDown(button, { key: "Shift" });
+      expect(fireEvent.keyDown(button, { key: " ", shiftKey: true })).toBe(
+        false,
+      );
+      fireEvent.keyUp(button, { key: " " });
+    }
+  });
+
+  test("[正常系]Tab で移ってきたボタンの Space はボタンに任せ、キャンバス・何も無い所では掴んで動かす", () => {
     open("?page=shop");
     const folder = within(storyList()).getByRole("button", { name: "Shop" });
     const only = within(storyList()).getByRole("button", {
       name: "Shop だけを表示",
     });
+    // 先にマウスで押していても、Tab で移ったらキーボードのフォーカスとして扱う
+    fireEvent.pointerDown(folder);
 
-    // fireEvent は既定の動作を止められたら false を返す
-    folder.focus();
-    expect(fireEvent.keyDown(folder, { key: " " })).toBe(true);
-    only.focus();
-    expect(fireEvent.keyDown(only, { key: " " })).toBe(true);
+    for (const button of [folder, only]) {
+      chromiumFocusVisible(button);
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: "Tab",
+      });
+      button.focus();
+
+      expect(fireEvent.keyDown(button, { key: " " })).toBe(true);
+    }
+    fireEvent.pointerDown(document.body);
     expect(fireEvent.keyDown(document.body, { key: " " })).toBe(false);
     fireEvent.keyUp(document.body, { key: " " });
-  });
-
-  test("[正常系]マウスで押したボタンにフォーカスが残っていても、Space はボタンを押さずにキャンバスを掴む", () => {
-    open("?page=shop");
-    const folder = within(storyList()).getByRole("button", { name: "Shop" });
-    // マウスで押したボタンは、フォーカスがあっても :focus-visible に合わない（jsdom はキーボードかを見分けないので、判定を差し替える）
-    // ボタンが Space を譲るかは、そのボタンの :focus-visible だけで決まる
-    const original = folder.matches.bind(folder);
-    const spy = vi
-      .spyOn(folder, "matches")
-      .mockImplementation((selector) =>
-        selector === ":focus-visible" ? false : original(selector),
-      );
-    try {
-      fireEvent.click(folder);
-      folder.focus();
-
-      expect(fireEvent.keyDown(folder, { key: " " })).toBe(false);
-      fireEvent.keyUp(folder, { key: " " });
-      // 押し直されていない（閉じたまま。開閉の覚えも 1 回分だけ）
-      expect(folder.getAttribute("aria-expanded")).toBe("false");
-    } finally {
-      spy.mockRestore();
-    }
   });
 
   test("[正常系]範囲を替えたとき、コメント一覧の「画面で絞る」が範囲の外の画面なら外す", () => {

@@ -27,6 +27,7 @@ import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
 import { useCollapsedFolders } from "../hooks/useCollapsedFolders";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
+import { useFocusedByPointer } from "../hooks/useFocusedByPointer";
 import { useLocalSetting } from "../hooks/useLocalSetting";
 import {
   commentsErrorMessage,
@@ -294,6 +295,7 @@ export const ReviewWorkspace = ({
   // 書き込みが 401 になった（ログインの期限切れ）。消えるお知らせではなく、ログインし直す操作と一緒に出しておく
   const [writeUnauthorized, setWriteUnauthorized] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const focusedByPointer = useFocusedByPointer();
   const canvas = useElementSize<HTMLDivElement>();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -339,12 +341,12 @@ export const ReviewWorkspace = ({
   const rowsFor = (
     source: StorySource,
     {
-      scope: scopeFilter,
+      scope: storyScopeFilter,
       ...filters
     }: { showComponents: boolean; query: string; scope: string | undefined },
   ) => {
     const visible = filterStories(
-      filterStoriesByScope(storiesOf(source), scopeFilter),
+      filterStoriesByScope(storiesOf(source), storyScopeFilter),
       { ...filters, excludeTitlePrefixes: sources.excludeTitlePrefixes },
     );
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
@@ -530,7 +532,7 @@ export const ReviewWorkspace = ({
       let nextShowComponents = showComponents;
       let nextQuery = query;
       // 範囲はいまのページの中だけ。ほかのページ・範囲の外の画面へ移るときは外す
-      const nextScope =
+      const nextStoryScope =
         root.source === page &&
         storyScope !== undefined &&
         isTitleInScope(story.title, storyScope)
@@ -550,14 +552,14 @@ export const ReviewWorkspace = ({
       }
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
-      setStoryScope(nextScope);
+      setStoryScope(nextStoryScope);
       const currentZoom = resolveCamera(
         cameraStateOf(cameraStates, root.source),
         {
           rows: rowsFor(root.source, {
             showComponents: nextShowComponents,
             query: nextQuery,
-            scope: nextScope,
+            scope: nextStoryScope,
           }),
           bounds: null,
           viewport,
@@ -733,8 +735,11 @@ export const ReviewWorkspace = ({
       // 日本語の変換中の Esc は変換の取り消し（書きかけを消したり閉じたりしない）
       if (isImeComposing(event)) return;
       const typing = isTypingTarget(event.target);
-      // ボタン・リンクなどにいるときの Space は、そこでの操作（押す）に任せる
-      if (event.key === " " && !usesSpaceKey(event.target)) {
+      // キーボードで移ってきたボタン・リンクなどにいるときの Space は、そこでの操作（押す）に任せる
+      if (
+        event.key === " " &&
+        !usesSpaceKey(event.target, { focusedByPointer: focusedByPointer() })
+      ) {
         event.preventDefault();
         setSpaceHeld(true);
         return;
