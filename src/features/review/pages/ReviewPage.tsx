@@ -11,6 +11,12 @@ import {
 import { SourcesContext } from "../hooks/useSources";
 import { StorybookBaseContext } from "../hooks/useStorybookBase";
 import {
+  compareBaseOptions,
+  compareBaseParam,
+  keepCompareChoice,
+  resolveCompareBase,
+} from "../model/branch-compare";
+import {
   buildSourceCatalog,
   EMPTY_SOURCE_CATALOG,
   mapSources,
@@ -68,7 +74,7 @@ export const ReviewPage = ({
   const published =
     meta.data?.branches.find((b) => b.branch === branch) ?? null;
   // iframe・リンク・ストーリーの一覧は Storybook のオリジンから読む（キャンバスのオリジンでは配らない）
-  const base = `${storybookOrigin}${published?.basePath ?? DEFAULT_STORYBOOK_BASE}`;
+  const storybookBase = `${storybookOrigin}${published?.basePath ?? DEFAULT_STORYBOOK_BASE}`;
   const available = (source: StorySource): boolean =>
     published?.storybooks.find((s) => s.source === source)?.available ?? false;
   // 並べるページ（設定ファイルの Storybook）。置いてあるページだけストーリーの一覧を読む
@@ -79,30 +85,45 @@ export const ReviewPage = ({
   const availableIds = catalog.ids.filter(available);
   // ログイン連動のときは、Storybook の配信を読むためのクッキーをもらってから、一覧・目録・iframe・画像を読む
   const session = useStorybookSession(storybookAccess);
-  const stories = useStories(base, availableIds, session);
+  const stories = useStories(storybookBase, availableIds, session);
   // 発行のときに撮った画像の目録（無ければ空。キャンバスは iframe で出す）
-  const shots = useShots(base, availableIds, session);
+  const shots = useShots(storybookBase, availableIds, session);
   const comments = useComments(branch);
-  // 既定のブランチの画像の目録（既定のブランチ以外の、置いてあるブランチを見ているときだけ。同じ画面を見比べる）。
-  // 既定のブランチを置いていなければ、目録の無いものとして扱う
-  const defaultPublished =
-    meta.data?.branches.find((b) => b.branch === meta.data?.defaultBranch) ??
-    null;
-  const onFeatureBranch =
-    published !== null &&
-    meta.data !== undefined &&
-    branch !== meta.data.defaultBranch;
-  const defaultBranchShots = useShots(
-    `${storybookOrigin}${defaultPublished?.basePath ?? DEFAULT_STORYBOOK_BASE}`,
+  // 比べる相手の選び方（URL の ?base=。NO_COMPARE（-）は比較しない。選べるもの（置いてあるブランチから今のブランチを除いたもの）に無ければ初めの状態）。
+  // ブランチを切り替えても作業の画面の外で持ち、新しいブランチでも選べれば保つ
+  const [compareChoice, setCompareChoice] = useState(urlState.base);
+  const baseOptionsOf = (current: string | undefined) =>
+    meta.data === undefined || current === undefined
+      ? []
+      : compareBaseOptions({
+          current,
+          defaultBranch: meta.data.defaultBranch,
+          published: meta.data.branches,
+        });
+  // 比べる相手を決める材料（ブランチと置いてあるブランチが分かってから。Storybook を置いていないブランチ（コメントだけ）では比べない）
+  const compareContext =
+    meta.data === undefined || branch === undefined
+      ? undefined
+      : {
+          current: branch,
+          defaultBranch: meta.data.defaultBranch,
+          options: published === null ? [] : baseOptionsOf(branch),
+        };
+  const compareBase =
+    compareContext === undefined
+      ? undefined
+      : resolveCompareBase(compareChoice, compareContext);
+  const basePublished =
+    meta.data?.branches.find((b) => b.branch === compareBase) ?? null;
+  // 比べる相手の画像の目録（相手を替えたら読み直す）
+  const baseShots = useShots(
+    `${storybookOrigin}${basePublished?.basePath ?? DEFAULT_STORYBOOK_BASE}`,
     catalog.ids.filter(
       (source) =>
-        defaultPublished?.storybooks.find((s) => s.source === source)
-          ?.available ?? false,
+        basePublished?.storybooks.find((s) => s.source === source)?.available ??
+        false,
     ),
-    {
-      access: session.access,
-      ready: session.ready && onFeatureBranch && defaultPublished !== null,
-    },
+    { access: session.access, ready: session.ready && basePublished !== null },
   );
 
   // クッキーをもらえないと Storybook を何も読めないので、置いてあるブランチを読めないときと同じ扱いにする
@@ -193,7 +214,7 @@ export const ReviewPage = ({
 
   return (
     <SourcesContext value={catalog}>
-      <StorybookBaseContext value={base}>
+      <StorybookBaseContext value={storybookBase}>
         <ReviewWorkspace
           // ブランチを切り替えたら作り直す（カメラ・開いているスレッド・書きかけを持ち越さない）
           key={branch}
@@ -204,6 +225,10 @@ export const ReviewPage = ({
           // 切り替える前に真ん中に見えていた画面・見せる範囲を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
           onBranchChange={(next, page, story, storyScope) => {
             setSwitchedBranch(true);
+            // 選んだ相手が新しいブランチでも選べれば保ち、選べなければ（同じブランチになった等）初めの状態に戻す
+            setCompareChoice(
+              keepCompareChoice(compareChoice, baseOptionsOf(next)),
+            );
             setUrlState({
               branch: next,
               page,
@@ -226,16 +251,21 @@ export const ReviewPage = ({
             catalog.ids,
             (id) => shots.data?.[id] ?? EMPTY_SHOT_CATALOG,
           )}
-          // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）。
-          // 既定のブランチを置いていなければ、目録の無いものとして渡す
+          compareBase={compareBase}
+          compareBaseParam={
+            compareContext === undefined
+              ? undefined
+              : compareBaseParam(compareBase, compareContext)
+          }
+          compareBaseOptions={compareContext?.options ?? []}
+          onCompareChoiceChange={setCompareChoice}
+          // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）
           baseShots={
-            onFeatureBranch &&
-            defaultPublished !== null &&
-            defaultBranchShots.data === undefined
+            basePublished !== null && baseShots.data === undefined
               ? null
               : mapSources(
                   catalog.ids,
-                  (id) => defaultBranchShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+                  (id) => baseShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
                 )
           }
           initialUrl={urlState}

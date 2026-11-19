@@ -50,6 +50,8 @@ const head = {
 };
 
 type Props = {
+  /** 比べる相手（null で比べない） */
+  compareBase?: string | null;
   branch?: string;
   page?: string;
   width?: number;
@@ -59,6 +61,7 @@ type Props = {
 const renderCompare = (initial: Props = {}) =>
   renderHook(
     ({
+      compareBase = "main",
       branch = "feature/a",
       page = "shop",
       width = 375,
@@ -66,8 +69,8 @@ const renderCompare = (initial: Props = {}) =>
       initialStoryId,
     }: Props) =>
       useBranchCompare({
+        compareBase: compareBase ?? undefined,
         branch,
-        defaultBranch: "main",
         page,
         width,
         head,
@@ -78,7 +81,7 @@ const renderCompare = (initial: Props = {}) =>
   );
 
 describe("useBranchCompare", () => {
-  test("[正常系]既定のブランチ以外では、印を付け、「変わった画面だけ」で「変更」「新しい」だけにする", () => {
+  test("[正常系]比べる相手があれば、印を付け、「変わった画面だけ」で「変更」「新しい」だけにする", () => {
     const { result } = renderCompare();
 
     expect(result.current.canOpen).toBe(true);
@@ -169,9 +172,22 @@ describe("useBranchCompare", () => {
     expect(result.current.changedOnly).toBe(false);
   });
 
-  test("[正常系]既定のブランチでは、印・絞り込み・比べるボタン・比べる画面を出さず、URL にも載せない", () => {
+  test("[正常系]既定のブランチを見ているときも、比べる相手があれば比べる", () => {
     const { result } = renderCompare({
       branch: "main",
+      compareBase: "feature/a",
+      initialStoryId: list.id,
+    });
+
+    expect(result.current.canOpen).toBe(true);
+    expect(result.current.available).toBe(true);
+    expect(result.current.openStoryId).toBe(list.id);
+  });
+
+  test("[正常系]比べる相手が無い（置いてあるブランチが 1 つだけ）ときは、印・絞り込み・比べるボタン・比べる画面を出さず、URL にも載せない", () => {
+    const { result } = renderCompare({
+      branch: "main",
+      compareBase: null,
       initialStoryId: list.id,
     });
 
@@ -192,7 +208,7 @@ describe("useBranchCompare", () => {
     expect(result.current.marksOf([order.id]).size).toBe(0);
   });
 
-  test("[正常系]既定のブランチの目録を読み終えるまでは、印・絞り込み・比べるボタン・比べる画面を出さず、compare は URL に載せたまま、読み終えたら開く", () => {
+  test("[正常系]比べる相手の目録をはじめて読み終えるまでは、印・絞り込み・比べるボタン・比べる画面を出さず、compare は URL に載せたまま、読み終えたら開く", () => {
     const { result, rerender } = renderCompare({
       base: null,
       initialStoryId: list.id,
@@ -221,5 +237,56 @@ describe("useBranchCompare", () => {
 
     act(() => result.current.open(order.id));
     expect(result.current.openStoryId).toBe(order.id);
+  });
+
+  test("[正常系]相手を替えて読み直すあいだは、印と「変わった画面だけ」を出さず、比べるボタンは出したままで、押すと比べる画面をすぐ開いて読み込み中にし、読み終えると出す", () => {
+    const { result, rerender } = renderCompare({ compareBase: "main" });
+
+    rerender({ compareBase: "feature/b", base: null });
+
+    expect(result.current.available).toBe(false);
+    expect(result.current.marksOf([list.id, order.id]).size).toBe(0);
+    expect(result.current.canOpen).toBe(true);
+    act(() => result.current.open(list.id));
+    expect(result.current.openStoryId).toBe(list.id);
+    expect(result.current.urlStoryId).toBe(list.id);
+    expect(result.current.viewOf(list.id)).toStrictEqual({ kind: "loading" });
+
+    // feature/b は一覧も同じ（375 の名前が z）なので、一覧は変わっていない
+    const featureB = {
+      shop: catalog([shot(list.id, 375, "z"), shot(cart.id, 375, "c")]),
+    };
+    rerender({ compareBase: "feature/b", base: featureB });
+
+    expect(result.current.available).toBe(true);
+    expect([...result.current.marksOf(stories.map((s) => s.id))]).toStrictEqual(
+      [[order.id, "new"]],
+    );
+    expect(result.current.openStoryId).toBe(list.id);
+    expect(result.current.viewOf(list.id).kind).toBe("ready");
+  });
+
+  test("[正常系]相手を替えたら「変わった画面だけ」を外し、元の相手に戻しても外れたまま", () => {
+    const { result, rerender } = renderCompare({ compareBase: "main" });
+    act(() => result.current.setChangedOnly(true));
+
+    rerender({ compareBase: "feature/b" });
+    expect(result.current.changedOnly).toBe(false);
+
+    rerender({ compareBase: "main" });
+    expect(result.current.changedOnly).toBe(false);
+  });
+
+  test("[正常系]「比較しない」になったら、開いている比べる画面を捨て、あとで相手を選び直しても開かない", () => {
+    const { result, rerender } = renderCompare({ compareBase: "main" });
+    rerender({ compareBase: "feature/b", base: null });
+    act(() => result.current.open(list.id));
+
+    rerender({ compareBase: null, base });
+    expect(result.current.openStoryId).toBeUndefined();
+    expect(result.current.urlStoryId).toBeUndefined();
+
+    rerender({ compareBase: "main", base });
+    expect(result.current.openStoryId).toBeUndefined();
   });
 });
