@@ -20,6 +20,7 @@ import {
   StorybookMissingNotice,
   Toast,
 } from "../components/Notices";
+import { ResizableSidebar } from "../components/ResizableSidebar";
 import { StorySidebar } from "../components/StorySidebar";
 import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
@@ -29,9 +30,11 @@ import {
   focusCompareButton,
   isInsideStoryList,
 } from "../components/canvas-dom";
+import { copyLinkWithToast } from "../components/copy-link";
 import { useBranchCompare } from "../hooks/useBranchCompare";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
+import { useLinkHighlight } from "../hooks/useLinkHighlight";
 import { useLocalSetting } from "../hooks/useLocalSetting";
 import {
   commentsErrorMessage,
@@ -39,10 +42,12 @@ import {
   useBranches,
   useComments,
 } from "../hooks/useReviewData";
+import { useSidebarWidth } from "../hooks/useSidebarWidth";
 import { useSources } from "../hooks/useSources";
 import { useStoryListOpen } from "../hooks/useStoryListOpen";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
+import { useViewportWidth } from "../hooks/useViewportWidth";
 import {
   type AnchorBox,
   type LocatedPin,
@@ -83,6 +88,13 @@ import {
   type Tool,
 } from "../model/shortcuts";
 import { mapSources, type StorySource } from "../model/sources";
+import {
+  linkHighlightStory,
+  linkWidthToApply,
+  storyLinkFocusPoint,
+  storyLinkUrl,
+  type WorkspaceOpening,
+} from "../model/story-link";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
 import {
@@ -99,6 +111,7 @@ import {
 import { buildSearch, type UrlState } from "../model/url-state";
 import { isNarrowViewport } from "../model/viewport";
 import type { AuthUser } from "@/support/auth";
+import { readNavigationType } from "@/support/navigation/navigation-type";
 
 type Draft = {
   source: StorySource;
@@ -146,6 +159,8 @@ type ReviewWorkspaceProps = {
   /** ページごとの、既定のブランチの画像（見比べる。既定のブランチを見ているとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
+  /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
+  openedBy: WorkspaceOpening;
   initialComments: Comment[];
   /** ログインしている人（書いた人として残り、自分のコメントだけを編集・削除できる） */
   me: AuthUser;
@@ -166,6 +181,7 @@ export const ReviewWorkspace = ({
   shots,
   baseShots,
   initialUrl,
+  openedBy,
   initialComments,
   me,
   onLogout,
@@ -181,6 +197,14 @@ export const ReviewWorkspace = ({
       ),
     ),
   );
+
+  // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
+  // リンクの幅（?width=）は、リンクのページにだけ重ねる
+  const pageWidths = useCustomWidths(
+    sources,
+    linkWidthToApply(initialUrl, openedBy),
+  );
+  const widthOf = pageWidths.widthOf;
 
   // 共有リンクで開いたときの場所（?comment= のスレッド、なければ ?story= の画面）
   const [initial] = useState(() => {
@@ -214,7 +238,10 @@ export const ReviewWorkspace = ({
         storyId: story.id,
         point:
           thread === undefined
-            ? { x: sources.get(story.source).defaultWidth / 2, y: 300 }
+            ? storyLinkFocusPoint(
+                pageWidths.openedLinkWidth,
+                sources.get(story.source).defaultWidth,
+              )
             : { x: thread.root.x, y: thread.root.y },
         zoom: thread === undefined ? 0.5 : 0.75,
         // ピンを追いかける（画面を読み込んで測り、要素を見つけたら、そこへ移る）
@@ -232,6 +259,13 @@ export const ReviewWorkspace = ({
       showComponents:
         story !== undefined &&
         isComponentStory(story, sources.excludeTitlePrefixes),
+      // ?story= のリンクで開いた画面（寄せ終えたら枠で示す）
+      highlightStoryId: linkHighlightStory(
+        initialUrl,
+        story?.id,
+        openedBy,
+        readNavigationType(),
+      ),
     };
   });
 
@@ -239,9 +273,6 @@ export const ReviewWorkspace = ({
   const [tool, setTool] = useState<Tool>("move");
   const [query, setQuery] = useState("");
   const [showComponents, setShowComponents] = useState(initial.showComponents);
-  // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
-  const pageWidths = useCustomWidths(sources);
-  const widthOf = pageWidths.widthOf;
   const [perRow, setPerRow] = useLocalSetting(
     "review-canvas.perRow",
     DEFAULT_FRAMES_PER_ROW,
@@ -253,6 +284,9 @@ export const ReviewWorkspace = ({
   const [storyListOpen, setStoryListOpenState] = useStoryListOpen(
     () => window.innerWidth,
   );
+  const viewportWidth = useViewportWidth();
+  const storyListWidth = useSidebarWidth("left", viewportWidth);
+  const commentListWidth = useSidebarWidth("right", viewportWidth);
   const setStoryListOpen = (open: boolean) => {
     // 一覧の中にいるまま閉じると、フォーカスが body へ落ちるので、キャンバスへ戻す
     if (!open && isInsideStoryList(document.activeElement)) focusCanvas();
@@ -392,6 +426,14 @@ export const ReviewWorkspace = ({
   const focusState = cameraStateOf(cameraStates, page);
   const focusStoryId = focusState.kind === "focus" ? focusState.storyId : null;
   const camera = resolveCamera(focusState, cameraContext);
+  // 画面を指すリンクで開いた画面の枠（開いたページで、画面の大きさが分かり、寄せ終えてから出す）
+  const linkHighlight = useLinkHighlight(initial.highlightStoryId, {
+    onPage: page === initial.page,
+    ready:
+      viewport.width > 0 &&
+      initial.highlightStoryId !== null &&
+      findFrame(rows, initial.highlightStoryId) !== undefined,
+  });
 
   const updateCamera = (update: (current: Camera) => Camera) =>
     setCameraStates((previous) => ({
@@ -476,12 +518,21 @@ export const ReviewWorkspace = ({
       ...state,
       ...(status === "open" ? {} : { status }),
     })}`;
-  const copyLink = (state: UrlState) => {
-    navigator.clipboard
-      .writeText(shareUrl(state))
-      .then(() => showToast("リンクをコピーしました"))
-      .catch(() => showToast("リンクをコピーできませんでした"));
-  };
+  const copyLink = (state: UrlState) =>
+    void copyLinkWithToast(shareUrl(state), showToast);
+  /** 画面の見出しの「この画面のリンクをコピー」（いまの幅も載せる） */
+  const copyStoryLink = (storyId: string) =>
+    void copyLinkWithToast(
+      storyLinkUrl(window.location, {
+        branch,
+        defaultBranch,
+        page,
+        story: storyId,
+        width,
+        status,
+      }),
+      showToast,
+    );
 
   const changePage = (next: StorySource) => {
     setPage(next);
@@ -924,36 +975,43 @@ export const ReviewWorkspace = ({
       />
       <div className="relative flex min-h-0 flex-1">
         {storyListOpen && (
-          <StorySidebar
-            rows={rows}
-            currentStoryId={centerStoryId}
-            query={query}
-            onQueryChange={setQuery}
-            searchRef={searchRef}
-            onSelectStory={focusStory}
-            marks={branchCompare.marksOf(
-              storiesOf(page).map((story) => story.id),
-            )}
-            {...(branchCompare.available
-              ? {
-                  changedOnly: {
-                    checked: branchCompare.changedOnly,
-                    onChange: branchCompare.setChangedOnly,
-                  },
-                }
-              : {})}
+          <ResizableSidebar
+            side="left"
+            label="画面の一覧の幅"
+            sidebar={storyListWidth}
+            viewportWidth={viewportWidth}
           >
-            <DisplaySettings
-              showComponents={showComponents}
-              onShowComponentsChange={setShowComponents}
-              width={width}
-              widthOptions={pageWidthOptions}
-              onWidthChange={(next) => pageWidths.select(page, next)}
-              onWidthRemove={(target) => pageWidths.remove(page, target)}
-              perRow={perRow}
-              onPerRowChange={setPerRow}
-            />
-          </StorySidebar>
+            <StorySidebar
+              rows={rows}
+              currentStoryId={centerStoryId}
+              query={query}
+              onQueryChange={setQuery}
+              searchRef={searchRef}
+              onSelectStory={focusStory}
+              marks={branchCompare.marksOf(
+                storiesOf(page).map((story) => story.id),
+              )}
+              {...(branchCompare.available
+                ? {
+                    changedOnly: {
+                      checked: branchCompare.changedOnly,
+                      onChange: branchCompare.setChangedOnly,
+                    },
+                  }
+                : {})}
+            >
+              <DisplaySettings
+                showComponents={showComponents}
+                onShowComponentsChange={setShowComponents}
+                width={width}
+                widthOptions={pageWidthOptions}
+                onWidthChange={(next) => pageWidths.select(page, next)}
+                onWidthRemove={(target) => pageWidths.remove(page, target)}
+                perRow={perRow}
+                onPerRowChange={setPerRow}
+              />
+            </StorySidebar>
+          </ResizableSidebar>
         )}
         <main className="relative min-w-0 flex-1" aria-label="キャンバス">
           {published === null ? (
@@ -1012,6 +1070,8 @@ export const ReviewWorkspace = ({
                       ),
                     )
                   }
+                  onCopyStoryLink={copyStoryLink}
+                  linkHighlight={linkHighlight}
                   onOpenThread={(threadId) => {
                     setActiveThreadId(threadId);
                     setDraft(null);
@@ -1168,40 +1228,47 @@ export const ReviewWorkspace = ({
           {sessionExpired && <SessionExpiredNotice />}
         </main>
         {sidebarOpen && (
-          <CommentSidebar
-            page={page}
-            threads={listed}
-            counts={counts}
-            status={status}
-            onStatusChange={setStatus}
-            title={titleFilter}
-            titles={titles}
-            onTitleChange={setTitleFilter}
-            storiesById={storiesByKey}
-            activeThreadId={activeThreadId}
-            missingThreadIds={missingThreadIds}
-            loading={commentsQuery.isLoading}
-            errorMessage={
-              commentsQuery.error === undefined
-                ? undefined
-                : commentsErrorMessage(commentsQuery.error)
-            }
-            onSelect={(thread) => {
-              focusThread(thread);
-              // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
-              if (isNarrowViewport(window.innerWidth)) {
-                setSidebarOpen(false);
+          <ResizableSidebar
+            side="right"
+            label="コメント一覧の幅"
+            sidebar={commentListWidth}
+            viewportWidth={viewportWidth}
+          >
+            <CommentSidebar
+              page={page}
+              threads={listed}
+              counts={counts}
+              status={status}
+              onStatusChange={setStatus}
+              title={titleFilter}
+              titles={titles}
+              onTitleChange={setTitleFilter}
+              storiesById={storiesByKey}
+              activeThreadId={activeThreadId}
+              missingThreadIds={missingThreadIds}
+              loading={commentsQuery.isLoading}
+              errorMessage={
+                commentsQuery.error === undefined
+                  ? undefined
+                  : commentsErrorMessage(commentsQuery.error)
               }
-            }}
-            onExport={() => setDialog("markdown")}
-            onCopyLink={() =>
-              copyLink(
-                activeThreadId === null
-                  ? { page }
-                  : { page, comment: activeThreadId },
-              )
-            }
-          />
+              onSelect={(thread) => {
+                focusThread(thread);
+                // 狭い表示では一覧がキャンバスに重なるので、選んだら閉じてスレッドを見せる
+                if (isNarrowViewport(window.innerWidth)) {
+                  setSidebarOpen(false);
+                }
+              }}
+              onExport={() => setDialog("markdown")}
+              onCopyLink={() =>
+                copyLink(
+                  activeThreadId === null
+                    ? { page }
+                    : { page, comment: activeThreadId },
+                )
+              }
+            />
+          </ResizableSidebar>
         )}
       </div>
       {dialog === "markdown" && (

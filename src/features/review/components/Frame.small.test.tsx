@@ -11,6 +11,7 @@ import { type BridgeMessage, toBridgeEnvelope } from "../bridge/protocol";
 import { SourcesContext } from "../hooks/useSources";
 import { frameLoadQueue } from "../model/load-queue";
 import { buildSourceCatalog } from "../model/sources";
+import { LINK_HIGHLIGHT_MS, type LinkHighlight } from "../model/story-link";
 import type { ShotView } from "../model/story-shots";
 import type { Story } from "../model/storybook";
 import { Frame, StoryIframe } from "./Frame";
@@ -168,6 +169,8 @@ describe("Frame の高さの知らせ", () => {
         onPlace={() => undefined}
         onLocate={() => undefined}
         onOpenThread={() => undefined}
+        onCopyStoryLink={() => undefined}
+        linkHighlight={null}
         onActivate={() => undefined}
         pendingPlace={null}
         onPendingPlace={() => undefined}
@@ -410,6 +413,117 @@ describe("Frame の高さの知らせ", () => {
   });
 });
 
+describe("Frame の見出しのリンクと、リンクで開いたときの枠", () => {
+  const sources = buildSourceCatalog({
+    storybooks: [
+      {
+        id: "shop",
+        label: "サンプルショップ",
+        widths: [375],
+        defaultWidth: 375,
+        baseHeight: 812,
+      },
+    ],
+    excludeTitlePrefixes: [],
+  });
+
+  const renderHeader = ({
+    linkHighlight = null,
+    onCopyStoryLink = () => undefined,
+  }: {
+    linkHighlight?: LinkHighlight | null;
+    onCopyStoryLink?: (storyId: string) => void;
+  }) =>
+    render(
+      <SourcesContext.Provider value={sources}>
+        <Frame
+          source="shop"
+          placement={{
+            story: {
+              id: "pages-cart--empty",
+              title: "Pages/Cart",
+              name: "Empty",
+              importPath: null,
+              source: "shop",
+            },
+            x: 0,
+            y: 0,
+            w: 375,
+            h: 812,
+          }}
+          zoom={0.5}
+          tool="move"
+          shouldLoad={false}
+          keepLoaded={false}
+          showLabel={true}
+          shot={null}
+          playHint={undefined}
+          pins={[]}
+          activeThreadId={null}
+          draftPin={null}
+          onMeasure={() => undefined}
+          onPlace={() => undefined}
+          onLocate={() => undefined}
+          onOpenThread={() => undefined}
+          onCopyStoryLink={onCopyStoryLink}
+          linkHighlight={linkHighlight}
+          onActivate={() => undefined}
+          pendingPlace={null}
+          onPendingPlace={() => undefined}
+          onScreenChanged={() => undefined}
+        />
+      </SourcesContext.Provider>,
+    );
+
+  test("[正常系]見出しの「この画面のリンクをコピー」は、Storybook で開くの隣にあり、Tab で止まらず、押すとその画面を渡す", () => {
+    const onCopyStoryLink = vi.fn<(storyId: string) => void>();
+    renderHeader({ onCopyStoryLink });
+
+    const button = screen.getByRole("button", {
+      name: "Pages/Cart / Empty のリンクをコピー",
+    });
+    expect(button.getAttribute("title")).toBe("この画面のリンクをコピー");
+    expect(button.tabIndex).toBe(-1);
+    expect(button.previousElementSibling?.getAttribute("title")).toBe(
+      "Storybook で開く",
+    );
+
+    fireEvent.click(button);
+    expect(onCopyStoryLink).toHaveBeenCalledExactlyOnceWith(
+      "pages-cart--empty",
+    );
+  });
+
+  test("[正常系]リンクで開いた画面に、クリックを妨げないアクセントの色の枠を出し、フェードで消す", () => {
+    const { container } = renderHeader({
+      linkHighlight: { storyId: "pages-cart--empty", motion: "fade" },
+    });
+
+    const frame = container.querySelector<HTMLElement>("[data-link-highlight]");
+    expect(frame?.dataset["linkHighlight"]).toBe("fade");
+    expect(frame?.className).toContain("pointer-events-none");
+    expect(frame?.className).toContain("animate-link-highlight");
+    expect(frame?.style.outline).toContain("var(--color-accent)");
+    expect(frame?.style.animationDuration).toBe(`${LINK_HIGHLIGHT_MS}ms`);
+  });
+
+  test("[正常系]視差効果を減らす設定（still）では、フェードせずに出す", () => {
+    const { container } = renderHeader({
+      linkHighlight: { storyId: "pages-cart--empty", motion: "still" },
+    });
+
+    const frame = container.querySelector<HTMLElement>("[data-link-highlight]");
+    expect(frame?.dataset["linkHighlight"]).toBe("still");
+    expect(frame?.className).not.toContain("animate-");
+  });
+
+  test("[正常系]枠を出さないときは、何も重ねない", () => {
+    const { container } = renderHeader({});
+
+    expect(container.querySelector("[data-link-highlight]")).toBeNull();
+  });
+});
+
 describe("Frame の見出しの「既定のブランチと比べる」", () => {
   const sample: Story = {
     id: "shop-compare--default",
@@ -453,12 +567,14 @@ describe("Frame の見出しの「既定のブランチと比べる」", () => {
         pendingPlace={null}
         onPendingPlace={() => undefined}
         onScreenChanged={() => undefined}
+        onCopyStoryLink={() => undefined}
+        linkHighlight={null}
         onCompare={onCompare}
       />
     </SourcesContext.Provider>
   );
 
-  test("[正常系]「Storybook で開く」の隣に出し、押すとその画面を返す", () => {
+  test("[正常系]「Storybook で開く」「この画面のリンクをコピー」の隣に出し、押すとその画面を返す", () => {
     const onCompare = vi.fn();
     render(frameWith(onCompare));
 
@@ -468,7 +584,11 @@ describe("Frame の見出しの「既定のブランチと比べる」", () => {
     const button = screen.getByRole("button", {
       name: "Shop/Compare / Default を既定のブランチと比べる",
     });
-    expect(open.nextElementSibling).toBe(button);
+    const copy = screen.getByRole("button", {
+      name: "Shop/Compare / Default のリンクをコピー",
+    });
+    expect(open.nextElementSibling).toBe(copy);
+    expect(copy.nextElementSibling).toBe(button);
     expect(button.tabIndex).toBe(-1);
 
     fireEvent.click(button);

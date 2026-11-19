@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+
 import type { AnchorBox, LocatedPin } from "../model/anchor-locate";
 import {
   type Camera,
@@ -28,6 +29,7 @@ import {
 } from "../model/pending-place";
 import { isTypingTarget, type Tool } from "../model/shortcuts";
 import type { StorySource } from "../model/sources";
+import type { LinkHighlight } from "../model/story-link";
 import type { ShotCatalog } from "../model/story-shots";
 import type { Story } from "../model/storybook";
 import {
@@ -94,6 +96,10 @@ type CanvasProps = {
   ) => void;
   onLocate: (storyId: string, results: ReadonlyMap<string, LocatedPin>) => void;
   onOpenThread: (threadId: string) => void;
+  /** 画面の見出しの「この画面のリンクをコピー」を押した */
+  onCopyStoryLink: (storyId: string) => void;
+  /** 画面を指すリンクで開いた画面の枠（出していなければ null） */
+  linkHighlight: LinkHighlight | null;
   /** 何も無いところをクリックした（開いているスレッドを閉じる） */
   onBackgroundClick: () => void;
   /** 移動の道具のまま、画面を（動かさずに）クリックした（コメントの置き方を知らせる） */
@@ -134,6 +140,8 @@ export const Canvas = ({
   onPlace,
   onLocate,
   onOpenThread,
+  onCopyStoryLink,
+  linkHighlight,
   onBackgroundClick,
   onFrameClick,
   onScreenChanged,
@@ -519,6 +527,12 @@ export const Canvas = ({
                   onLocate={onLocate}
                   onOpenThread={onOpenThread}
                   onCompare={onCompare}
+                  onCopyStoryLink={onCopyStoryLink}
+                  linkHighlight={
+                    linkHighlight?.storyId === placement.story.id
+                      ? linkHighlight
+                      : null
+                  }
                 />
               ))}
             </div>

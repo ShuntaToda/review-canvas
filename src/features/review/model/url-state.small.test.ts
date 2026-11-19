@@ -35,6 +35,31 @@ describe("url-state", () => {
       parseUrlState("?branch=feature%2Fa&compare=shop-list--default"),
     ).toStrictEqual({ branch: "feature/a", compare: "shop-list--default" });
     expect(parseUrlState("?compare=")).toStrictEqual({});
+    // 画面の幅（width）と一緒に読み書きできる
+    expect(
+      parseUrlState(
+        buildSearch({
+          page: "shop",
+          width: 820,
+          compare: "shop-list--default",
+        }),
+      ),
+    ).toStrictEqual({
+      page: "shop",
+      width: 820,
+      compare: "shop-list--default",
+    });
+  });
+
+  test("[正常系]画面の幅（width）を数として読み、数でない値は null にする", () => {
+    expect(parseUrlState("?width=820")).toStrictEqual({ width: 820 });
+    expect(parseUrlState("?width=abc")).toStrictEqual({ width: null });
+    expect(parseUrlState("?width=-1")).toStrictEqual({ width: null });
+    expect(parseUrlState("?width=")).toStrictEqual({});
+    expect(buildSearch({ page: "shop", width: 820 })).toBe(
+      "?page=shop&width=820",
+    );
+    expect(buildSearch({ page: "shop", width: null })).toBe("?page=shop");
   });
 
   test("[正常系]buildSearchとparseUrlStateは往復で元に戻る", () => {
