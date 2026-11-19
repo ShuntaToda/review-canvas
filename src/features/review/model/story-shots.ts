@@ -98,45 +98,67 @@ export const SHOT_ELEMENT_SELECTOR = [
  * 中身の高さ（px）を測る。橋渡し（bridge/bridge-runtime.ts）と撮影（infra/scripts/story-screenshots.ts）が同じ測り方をする。
  * scrollHeight は画面の高さより小さくならないので、中身が縮んでも縮んだと分からない。
  * body の子要素の下端（下の余白まで）の最も下を中身の高さとする（#storybook-root のほか、body へ出したポータルも含む）。
- * ただしページがスクロールする（scrollHeight が画面の高さより 1px を超えて大きい）ときは、scrollHeight との大きい方にする。
- * 高さを画面に合わせた入れ物（height: 100vh。左にサイドバーを置く作りなど）から中身が下へはみ出す画面では、子要素の下端は画面の高さで止まるため。
- * 撮影の画像（fullPage）もはみ出した分まで撮るので、子要素の内からはみ出した絶対配置の要素も、ページがスクロールするときは数えることになる（画像の高さとそろう）。
- * スクロールしないときは子要素の下端のまま（iframe より中身が低くなったら、低い高さを返す）。測れる子要素が無いときは scrollHeight に戻る。
+ * 子要素から中身が下へはみ出している（高さを画面に合わせた入れ物（height: 100vh）の中の長い中身など）ときは、
+ * 中へ降りて、はみ出した要素の下端（下の余白まで）も数える。入れ物の内側の下の余白は足さない（スクロールしない入れ物のはみ出しには含まれず、撮った画像（fullPage）の高さとそろう）。
+ * どれも矩形で測り、画面の高さによらない
+ * （画面の高さで測り方が変わると、知らせた高さを iframe に付けるたびに測った高さが行き来する）。
+ * 数えないもの: 画面に固定した要素、子要素の内の絶対配置の要素（その中身も。body の子要素そのものが絶対配置なら、その矩形だけを数える）、
+ * スクロール・切り取りをする入れ物（overflow-y が visible でない）の中身（入れ物の矩形だけ）。
+ * 測れる子要素が無いときは scrollHeight に戻る。
  * 撮影ではこの関数の文字列をブラウザへ渡すので、外の値を読まない
  */
 export const measureContentHeight = (doc: Document): number => {
   const body = doc.body;
-  const scrollHeight = () =>
+  const fallback = () =>
     Math.max(doc.documentElement.scrollHeight, body?.scrollHeight ?? 0);
-  if (body === null) return scrollHeight();
+  if (body === null) return fallback();
   const view = doc.defaultView;
-  if (view === null) return scrollHeight();
+  if (view === null) return fallback();
   const px = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
   };
+  // 降りる要素の数の上限（要素の多い画面で重くしない。超えたら、それより先へは降りない）
+  let budget = 5000;
+  /** 要素の下端（下の余白まで。数えなければ 0）。中身が下へはみ出していれば中へ降りる */
+  const bottomOf = (element: Element, topLevel: boolean): number => {
+    const style = view.getComputedStyle(element);
+    if (style.position === "fixed") return 0;
+    const absolute = style.position === "absolute";
+    if (absolute && !topLevel) return 0;
+    const rect = element.getBoundingClientRect();
+    const own =
+      rect.width === 0 && rect.height === 0
+        ? 0
+        : rect.bottom + px(style.marginBottom);
+    // display: contents は自分の箱を持たないので、大きさによらず中へ降りる
+    const descend =
+      !absolute &&
+      (style.display === "contents" ||
+        (style.overflowY === "visible" &&
+          element.scrollHeight > element.clientHeight + 1));
+    if (!descend) return own;
+    let inner = 0;
+    for (const child of Array.from(element.children)) {
+      if (budget <= 0) break;
+      budget -= 1;
+      inner = Math.max(inner, bottomOf(child, false));
+    }
+    return Math.max(own, inner);
+  };
   let bottom = 0;
   for (const child of Array.from(body.children)) {
-    const rect = child.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) continue;
-    const style = view.getComputedStyle(child);
-    if (style.position === "fixed") continue;
-    bottom = Math.max(bottom, rect.bottom + px(style.marginBottom));
+    bottom = Math.max(bottom, bottomOf(child, true));
   }
-  if (bottom <= 0) return scrollHeight();
+  if (bottom <= 0) return fallback();
   const bodyStyle = view.getComputedStyle(body);
-  const childrenBottom = Math.ceil(
+  return Math.ceil(
     bottom +
       view.scrollY +
       px(bodyStyle.paddingBottom) +
       px(bodyStyle.borderBottomWidth) +
       px(bodyStyle.marginBottom),
   );
-  // 1px までの差は測り方の端数（bridge/measure.ts と同じ幅）。スクロールしないページでは scrollHeight は画面の高さと同じで、縮んだのが分からない
-  const scrolled = scrollHeight();
-  return scrolled > view.innerHeight + 1
-    ? Math.max(childrenBottom, scrolled)
-    : childrenBottom;
 };
 
 /**
