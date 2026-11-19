@@ -30,6 +30,8 @@ import { ZoomControls } from "../components/ZoomControls";
 import {
   focusCanvas,
   focusCompareButton,
+  focusTransitionBack,
+  focusTransitionLabel,
   isInsideStoryList,
 } from "../components/canvas-dom";
 import { copyLinkWithToast } from "../components/copy-link";
@@ -549,7 +551,7 @@ export const ReviewWorkspace = ({
         ? undefined
         : storyAtPoint(rows, screenToWorld(camera, viewportCenter))),
   );
-  const transitionView = transitions.bind({
+  const transitionView = transitions.viewOf({
     rows,
     camera,
     viewport,
@@ -572,6 +574,8 @@ export const ReviewWorkspace = ({
       setDraft(null);
     },
     focusZoom,
+    focusBack: focusTransitionBack,
+    focusLabel: focusTransitionLabel,
   });
 
   // URL に載せるスレッド（削除されたスレッドは載せない。知らせを出したあと、読み直しや共有で同じ知らせを繰り返さない）
@@ -714,11 +718,10 @@ export const ReviewWorkspace = ({
       // 「変わった画面だけ」で隠れているときも外す
       const revealed = branchCompare.reveal(root.source, story.id);
       // 「つながる画面だけ」で隠れているときも外す（コメント一覧は絞らないので、隠れた画面のスレッドも選べる）
-      const nextReachableRoot =
-        root.source === page && transitions.reachable?.has(story.id) === true
-          ? transitions.reachableRoot
-          : null;
-      transitions.setReachableRoot(nextReachableRoot);
+      const nextReachableRoot = transitions.rootForThread(
+        story.id,
+        root.source === page,
+      );
       setShowComponents(next.showComponents);
       setQuery(next.query);
       setStoryScope(next.scope);

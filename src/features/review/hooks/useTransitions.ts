@@ -1,9 +1,5 @@
 import { useMemo, useState } from "react";
 import { flushSync } from "react-dom";
-import {
-  focusTransitionBack,
-  focusTransitionLabel,
-} from "../components/canvas-dom";
 import { type Camera, screenToWorld, type Size } from "../model/camera";
 import type { CameraState } from "../model/camera-state";
 import { findFrame, type RowPlacement } from "../model/layout";
@@ -47,6 +43,10 @@ export type TransitionViewContext = {
   onJumped: (storyId: string) => void;
   /** 寄るときの倍率（いまの倍率から） */
   focusZoom: (current: number) => number;
+  /** 「戻る」へフォーカスを移す（札で飛んだ・まだ戻れる） */
+  focusBack: () => void;
+  /** 札（line.key）へフォーカスを移す（戻りきった） */
+  focusLabel: (lineKey: string) => void;
 };
 
 /**
@@ -113,9 +113,16 @@ export const useTransitions = ({
         : root === activeRoot
           ? reachable
           : reachableFrom(root, edges),
-    /** いまの起点（切っていれば null。出せない表示でも覚えている値） */
-    reachableRoot,
-    setReachableRoot,
+    /**
+     * スレッドの画面へ移るときの起点を決めて置き、その起点を返す（null は切った）。
+     * いまのページで、いまの起点からたどれる画面なら起点を残し、そうでなければ切る（隠れた画面のスレッドも選べるように）
+     */
+    rootForThread: (storyId: string, samePage: boolean): string | null => {
+      const next =
+        samePage && reachable?.has(storyId) === true ? reachableRoot : null;
+      setReachableRoot(next);
+      return next;
+    },
     /** 遷移を持つボタンの矩形（出さないときは undefined） */
     boxesOf: shown
       ? (storyId: string): ReadonlyArray<ShotTransition> =>
@@ -137,7 +144,7 @@ export const useTransitions = ({
     /** 積んだものだけを捨てる（ほかのページのスレッドへ移ったとき） */
     clearHistory: history.clear,
     /** いまの見え方で、描く線と、札・「戻る」・「つながる画面だけ」の動きを作る */
-    bind: (context: TransitionViewContext) => {
+    viewOf: (context: TransitionViewContext) => {
       const {
         rows,
         camera,
@@ -151,6 +158,8 @@ export const useTransitions = ({
         setCameraState,
         onJumped,
         focusZoom,
+        focusBack,
+        focusLabel,
       } = context;
       const lines = shown
         ? transitionLines({
@@ -189,12 +198,12 @@ export const useTransitions = ({
           });
           onJumped(target.id);
         });
-        focusTransitionBack();
+        focusBack();
       };
 
       /** 札で飛ぶ前の見え方へ 1 段戻る。戻りきったら、飛ぶ前に押した札へフォーカスを戻す */
       const goBack = () => {
-        const last = history.stack.length === 1;
+        const wasLastStep = history.stack.length === 1;
         const entry = history.pop();
         if (entry === undefined) return;
         flushSync(() => {
@@ -202,8 +211,8 @@ export const useTransitions = ({
           setReachableRoot(entry.reachableRoot);
           setCameraState({ kind: "fixed", camera: entry.camera });
         });
-        if (last) focusTransitionLabel(entry.lineKey);
-        else focusTransitionBack();
+        if (wasLastStep) focusLabel(entry.lineKey);
+        else focusBack();
       };
 
       /** 「この画面からつながる画面だけ表示」を切り替える（選んだ画面を起点にし、並びが変わっても選んだ画面を真ん中に保つ） */

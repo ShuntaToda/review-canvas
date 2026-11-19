@@ -127,4 +127,24 @@ describe("useLinkHighlight の show", () => {
     });
     expect(result.current.highlight).toBeNull();
   });
+
+  test("[境界値]リンクの枠を待っているあいだに show で出したら、寄せ終えても、あとからリンクの枠で上書きしない", () => {
+    const { result, rerender } = renderHook(
+      ({ ready }) => useLinkHighlight(STORY, { ready, onPage: true }),
+      { initialProps: { ready: false } },
+    );
+
+    act(() => result.current.show("shop-form--default"));
+    rerender({ ready: true });
+
+    expect(result.current.highlight?.storyId).toBe("shop-form--default");
+    act(() => {
+      vi.advanceTimersByTime(LINK_HIGHLIGHT_MS);
+    });
+    expect(result.current.highlight).toBeNull();
+    // 寄せ終えた後も、リンクの枠は出し直さない
+    rerender({ ready: false });
+    rerender({ ready: true });
+    expect(result.current.highlight).toBeNull();
+  });
 });

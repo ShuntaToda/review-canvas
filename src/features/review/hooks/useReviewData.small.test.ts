@@ -168,8 +168,10 @@ describe("fetchShots（useShots が読む、スクリーンショットの目録
     ["置き場が 403 で返す", new Response("", { status: 403 }), false],
     ["サーバーの誤り（500）", new Response("", { status: 500 }), true],
     ["通信に失敗した", new TypeError("Failed to fetch"), true],
+    ["JSON として読めない", new Response("<html>", { status: 200 }), true],
+    ["目録の形が違う", Response.json({ version: 2, shots: [shot] }), true],
   ])(
-    "[異常系]%s ときの、取りに行って失敗したかの印は %s（失敗なら「画像を撮っていない」と言わない）",
+    "[異常系]%s ときの、読めなかったかの印は %s（読めなければ「画像を撮っていない」と言わない）",
     async (_, response, failed) => {
       respond(response);
 

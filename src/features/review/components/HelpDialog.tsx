@@ -25,7 +25,8 @@ export const HelpDialog = ({ onClose }: { onClose: () => void }) => (
         </li>
         <li>
           上の「画面のつながり」で、画面から画面への矢印を出します（選んだ画面／すべて／出さない）。札を押すと行き先の画面へ寄り、左上の「←
-          …へ戻る」で元の見え方に戻ります。画像を撮っていない幅・ブランチでは出ません。
+          …へ戻る」で元の見え方に戻ります（1
+          段ずつ、何段でも戻れます）。画像を撮っていない幅・ブランチでは出ません。
         </li>
         <li className="flex list-none items-center gap-2">
           <MissingMark />

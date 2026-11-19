@@ -61,13 +61,10 @@ export const resolveLinkWidth = (
     : defaultWidth;
 };
 
-/** 画面へ寄るときに真ん中へ持ってくる点の縦の位置（画面の左上から。画面の上の方） */
-const STORY_FOCUS_Y = 300;
-
-/** 画面へ寄るときに真ん中へ持ってくる点（画面の左上から。横はその幅の真ん中、縦は画面の上の方） */
+/** 画面へ寄るときに真ん中へ持ってくる点（画面の左上から。横はその幅の真ん中、縦は画面の上の方の 300px） */
 export const storyFocusPoint = (width: number): { x: number; y: number } => ({
   x: width / 2,
-  y: STORY_FOCUS_Y,
+  y: 300,
 });
 
 /**

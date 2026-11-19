@@ -90,10 +90,12 @@ const fixtures = vi.hoisted(() => {
     "shop-form--default": [{ index: 0, to: "shop-form--filled" }],
     "shop-form--filled": [{ index: 0, to: "shop-list--default" }],
   };
-  /** 目録（kind: transitions は遷移あり、old は遷移を残す前の版、none は目録が無い） */
-  const state = { manifest: "transitions" as "transitions" | "old" | "none" };
+  /** 目録（kind: transitions は遷移あり、old は遷移を残す前の版、none は目録が無い、failed は読めなかった） */
+  const state = {
+    manifest: "transitions" as "transitions" | "old" | "none" | "failed",
+  };
   const manifest = () =>
-    state.manifest === "none"
+    state.manifest === "none" || state.manifest === "failed"
       ? null
       : {
           version: 1,
@@ -134,10 +136,13 @@ vi.mock("../hooks/useReviewData", async (importOriginal) => {
       }),
     useShots: () =>
       loaded({
-        shop: shots.buildShotCatalog(
-          shots.parseShotsManifest(fixtures.manifest()),
-          "https://sb.example.com/sb/main/shop/",
-        ),
+        shop:
+          fixtures.state.manifest === "failed"
+            ? shots.FAILED_SHOT_CATALOG
+            : shots.buildShotCatalog(
+                shots.parseShotsManifest(fixtures.manifest()),
+                "https://sb.example.com/sb/main/shop/",
+              ),
         blog: shots.buildShotCatalog(
           null,
           "https://sb.example.com/sb/main/blog/",
@@ -310,6 +315,25 @@ describe("ReviewPage の画面のつながり", () => {
       ).length,
     ).toBeGreaterThan(0);
     openPicker();
+    expect(reachableOnly().disabled).toBe(true);
+  });
+
+  test("[異常系]目録を読めなかったときは線を引かず、「撮っていない」とは言わず、「つながる画面だけ」を押せない", () => {
+    fixtures.state.manifest = "failed";
+    open(LIST);
+
+    expect(lineRoles()).toStrictEqual([]);
+    expect(
+      screen.queryByText(
+        "この表示では画面のつながりを出せません（画像を撮っていない幅・ブランチ）",
+      ),
+    ).toBeNull();
+    openPicker();
+    expect(
+      screen.queryByText(
+        "この表示では画面のつながりを出せません（画像を撮っていない幅・ブランチ）",
+      ),
+    ).toBeNull();
     expect(reachableOnly().disabled).toBe(true);
   });
 

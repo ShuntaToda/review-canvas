@@ -752,11 +752,12 @@ export type ShotCatalog = {
   hasPlayFunction: (storyId: string) => boolean | undefined;
   /** 画像の枚数 */
   size: number;
-  /** 目録を読めたか（無い・形が違うときは false。ほかのブランチと比べられるかに使う） */
+  /** 目録を読めたか（無い・形が違うとき、取りに行って失敗したときも false。ほかのブランチと比べられるかに使う） */
   hasManifest: boolean;
   /**
-   * 目録を取りに行って失敗した（通信の失敗・サーバーの誤り）。無い（撮っていない）のとは分けて、
-   * 「画像を撮っていない」と言わないために使う。読めた・無かったときは false
+   * 目録を読めなかった（通信の失敗・サーバーの誤り・JSON として読めない・形が違う）。無い（撮っていない）のとは分けて、
+   * 画面のつながりで「画像を撮っていない」と言わないために使う（使うのは画面のつながりだけ。ブランチの比較は見ていない）。
+   * 読めた・無かったときは false
    */
   failed: boolean;
   /** そのストーリーの画像を、どれかの幅で 1 枚でも持つか */
@@ -818,7 +819,7 @@ export const buildShotCatalog = (
 /** 画像の無い Storybook（目録が無い・読めない） */
 export const EMPTY_SHOT_CATALOG = buildShotCatalog(null, "");
 
-/** 目録を取りに行って失敗した Storybook（画像は無いものとして並べる） */
+/** 目録を読めなかった Storybook（画像は無いものとして並べる） */
 export const FAILED_SHOT_CATALOG = buildShotCatalog(null, "", {
   failed: true,
 });

@@ -174,14 +174,15 @@ export const fetchShots = async (
       storybookShotsManifestPath(base, source),
       access,
     );
-    // 4xx は目録が無い（撮る前の版で置いた・撮れなかった。置き場によっては 403 で返る）。5xx は取りに行って失敗した
+    // 4xx は目録が無い（撮る前の版で置いた・撮れなかった。置き場によっては 403 で返る）。5xx は取りに行って失敗した。
+    // ログイン連動の Storybook では、配信のクッキーが切れたときも 403 になり、そのときも「撮っていない」として扱う
     if (!response.ok) {
       return response.status >= 500 ? FAILED_SHOT_CATALOG : EMPTY_SHOT_CATALOG;
     }
-    return buildShotCatalog(
-      parseShotsManifest(await response.json()),
-      storybookSourceBase(base, source),
-    );
+    // JSON として読めない（catch に落ちる）ときと同じく、形の違う目録も「読めなかった」とする
+    const manifest = parseShotsManifest(await response.json());
+    if (manifest === null) return FAILED_SHOT_CATALOG;
+    return buildShotCatalog(manifest, storybookSourceBase(base, source));
   } catch {
     return FAILED_SHOT_CATALOG;
   }
