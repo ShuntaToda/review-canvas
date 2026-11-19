@@ -14,13 +14,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"]
     },
     "types": ["vitest/globals"]
   },
-  "include": ["src"],
+  "include": ["src", ".storybook/*.ts", ".storybook/*.tsx"],
   "exclude": ["src/generated/**"],
   "references": [
     {

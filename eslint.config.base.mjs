@@ -29,12 +29,28 @@ export const commonIgnores = [
 /**
  * infra（置くスクリプト）からも相対パスで読む、画面（src/）のファイル。
  * infra の tsconfig・Node（esbuild-register）でそのまま読めるよう、何も import しない（eslint.config.mjs）。
+ * スクリプトが Node（--experimental-strip-types）で読むものは、下の SRC_FILES_READ_BY_SCRIPTS にも挙げる。
  * infra から読んでよい src のファイルは、これだけ（infra/eslint.config.mjs）
  */
 export const SRC_FILES_READ_BY_INFRA = [
   "src/features/review/bridge/inject.ts",
   "src/features/review/model/story-shots.ts",
   "src/features/review/model/story-render.ts",
+];
+
+/**
+ * 開発用のスクリプト（scripts/*.mjs。テストは vitest が読むので除く）が、Node（--experimental-strip-types）でそのまま読む画面（src/）のファイル。
+ * Node は別名（@/）・拡張子の無い import を解けないので、何も import しない（eslint.config.mjs）。
+ * スクリプトから読んでよい src のファイルは、これだけ（eslint.config.mjs の scripts/*.mjs の節）
+ */
+export const SRC_FILES_READ_BY_SCRIPTS = [
+  "src/features/review/bridge/inject.ts",
+  "src/features/review/stories/story-branches.ts",
+];
+
+/** infra・スクリプトから読むので、何も import しない画面（src/）のファイル */
+export const SRC_FILES_WITHOUT_IMPORTS = [
+  ...new Set([...SRC_FILES_READ_BY_INFRA, ...SRC_FILES_READ_BY_SCRIPTS]),
 ];
 
 /**

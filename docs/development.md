@@ -7,7 +7,7 @@
 ```bash
 pnpm install
 pnpm run docker:up          # DynamoDB Local（ポート 8000）
-pnpm run build:storybook    # サンプルの Storybook をビルドする（examples/sample-storybook/storybook-static）
+pnpm run build:storybook    # サンプルの Storybook（examples/sample-storybook/storybook-static）と、review-canvas 自身の画面の Storybook（storybook-static）をビルドする
 pnpm dev                    # → http://localhost:4100（Storybook は http://localhost:4102 で配る）
 ```
 
@@ -80,6 +80,39 @@ pnpm --dir examples/sample-storybook run validate
 - コミットメッセージの決まりは `scripts/check-commit-message.mjs` にあり、CI のジョブ commit-messages が PR のコミットの範囲にも同じものをかけます（`--no-verify`・GitHub の画面で作ったコミットも見る）。マージコミットは見ません（「Update branch」などで GitHub が作り、文面を選べない）。`git revert` が付ける本文（`This reverts commit …`。件名が `Revert "`・`Reapply "` で始まるもの）だけは 1 行の例外として認めます（戻したコミットを指す決まった形のため）。手元（commit-msg）では、エディタに出る git の案内（`#` だけの行と、`#` の後ろが空白（スペース・タブ）の行。`# On branch …`・`#<TAB>modified: …`・`# Conflicts:`）と、`git commit -v` の切り取り線から後ろを除いてから数えます（コメントの文字を `core.commentChar` で変えていれば、その文字で見る）。`-m "# 本文"` のように案内と同じ形で付けた本文は手元では見分けられないので、CI が見つけます。PR をまとめてマージするときのメッセージは、人が 1 行に直します
 - API を 1 本足すときは `pnpm run new:api`（[architecture.md](architecture.md#api-を-1-本足すとき)）。CI の scaffold ジョブが、雛形で作った直後の状態で `validate` と `test:small` を通します
 
+## review-canvas 自身の Storybook
+
+review-canvas の作業の画面を、状態ごとに描いたストーリーです。設定ファイルの 2 つ目の Storybook（`id` は `app`、名前は「review canvas」）として、手元のキャンバスのサンプルのショップの後ろに並びます。
+
+```bash
+pnpm run build:storybook:shop   # 先にサンプルのショップを組み立てる（動く画面で開く。下）
+pnpm run storybook              # 開発しながら見る（http://localhost:6007）
+pnpm run build:storybook:app    # 組み立てる（storybook-static）。build:storybook はサンプルのショップ → app の順に両方を組み立てる
+pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つずつ開いて確かめる（下）
+```
+
+写すスクリプト（`scripts/stage-story-storybooks.mjs`）と `check:storybook:app` は、`src/` の TypeScript（`stories/story-branches.ts`・`bridge/inject.ts`）を Node の `--experimental-strip-types` でそのまま読みます。Node 22 はそのたびに試験中の機能の警告を出すので、`--no-warnings=ExperimentalWarning` で黙らせます（ほかの警告は出したまま）。Node がそのまま読むファイルは何も import しません（一覧は `eslint.config.base.mjs` の `SRC_FILES_READ_BY_SCRIPTS`。`src/` 全体に `erasableSyntaxOnly` を効かせ、`enum` など Node が読めない構文も書けない）。
+
+- 設定は `.storybook/`（`main.ts`・`preview.tsx`）、ストーリーは画面・部品のコードの隣（`src/features/*/pages/*.stories.tsx`・`src/features/*/components/*.stories.tsx`。置ける場所はこの 2 つだけで、`.storybook/main.ts` の `stories` と eslint の `STORY_GLOB` が同じ）、ストーリーが使う固定のデータ・MSW の handler・描き方は `src/features/review/stories/` に置きます。画面と同じ vite の設定（React Compiler・`@/` の別名）と Tailwind（`src/index.css`）を使います
+- 1 つのストーリーは、画面の入口と同じ `App` を、ストーリー用の偽のログイン（`src/support/auth/fake`。山田 太郎でログイン済み、または未ログイン）で描きます（`stories/ReviewStory.tsx`）。`pnpm dev` の擬似ログイン（`src/support/auth/dev`。名前を入れてログインする）とは別のもので、ストーリーでは使いません。どちらも置く版のビルドには入りません。SWR のキャッシュはストーリーごとに作り直します
+- API（`/api/*`）と、置いてあるブランチの Storybook（ストーリーの一覧・画像の目録・画像）は MSW が返します（`stories/story-handlers.ts`）。置いてあるブランチは `main` と `feature/new-cart`（架空）、キャンバスの中身はサンプルのショップを撮った画像と目録（`stories/fixtures/`。幅 375 だけ）です。部品の `Components/Button` も持ち、本物の設定と同じく既定では外します（`excludeTitlePrefixes` の `Components/`）。「見せる範囲を絞った」では「部品も表示」に入れても、範囲（`Shop`）の外なので並ばないことを確かめます。画像を撮り直すときは、サンプルの Storybook を組み立ててから `pnpm --dir infra run screenshots --repo-root <根> --config <shop だけの設定>` で撮り、要る画面を写します
+- 動く画面（スレッドを開いた・コメントを置いたとき、画像の無い幅で開く iframe）は、本物のサンプルのショップです。`build:storybook:app`・`storybook` は、組み立てたサンプルのショップ（設定の shop の outDir）を、橋渡し（`pnpm run build:bridge`）を差し込んでブランチごとに写し（`scripts/stage-story-storybooks.mjs`。写す先は `node_modules/.cache/review-canvas-story`）、`.storybook/main.ts` の `staticDirs` が置き場（`<Storybook の置き場>/review-canvas-story/<ブランチのキー>/shop/`。`stories/story-branches.ts`）として出します。手元の配信・置くスクリプトと同じ印・同じ script の src と属性を、開いたときに書きます（`bridge/inject.ts` の `injectRuntimeBridge`。組み立ては `bridgeTag` と同じ関数）。つないでよいオリジン（`data-canvas-origin`）だけは、開いたときの `location.origin` にします（どこで開くかは組み立てのときに分からないため）。写すのは iframe.html とその読み込みで、Storybook の画面の枠（`index.html`・`sb-manager`・`sb-addons`）、サンプルの撮影の結果（`review-canvas-shots.json`・`review-canvas-shots/`）、サンプルのサービスワーカー（`mockServiceWorker.js`。サンプルの MSW はオリジンの直下のものを登録するので使われない）は写しません。どのブランチの置き場にも同じサンプルを写すので、見比べのストーリーで `feature/new-cart` の画像は変更後の見た目でも、押して動く画面にすると main のサンプルの見た目になります。サンプルのショップの中の通信（`/api/products` など）は、サンプル自身の MSW が返します（サービスワーカーは同じオリジンに 1 つ。msw の版は catalog で同じ）
+- ストーリーの handler に無い道への通信（Storybook の外・API の知らない道・置き場の画像の目録と画像）は、`.storybook/preview.tsx` が最後の handler で止めて失敗にし、コンソールに `[MSW]` で出します。iframe の読み込みは MSW を通らないので、`.storybook/main.ts` の CSP（`frame-src` を置き場の `review-canvas-story/` だけにする。オリジンは開いたときに入れる）が止めます
+- URL の状態（`?branch=`・`?comment=`・`?scope=` など）は、ストーリーの `parameters.reviewUrl` に書きます。描く前に iframe の URL へ入れ、キャンバスが URL を書き換えても Storybook のクエリ（`?id=`・`?viewMode=`）を残します（`stories/story-url.ts`）
+- 押して開く状態（コメントを書いている・ヘルプを開いた・変わった画面だけ）は、play 関数で押して作ります。置くときの撮影は play 関数の終わりを待ちます
+- 動く画面を待つ play 関数は `waitForLiveFrame`（`stories/story-play.ts`）で、画面が動く画面に切り替わり、中の橋渡しとつながり（`Frame` の `data-frame-bridge` が `ready`）、中のストーリーが描き終えるのを待ちます。橋渡しがつながらない（「一部の機能が使えません」が出る）ときは落ちます
+- play 関数は、終わりに `settle()`（`stories/story-play.ts`）を呼びます。動きが止まるのを待ち、画面を 1 度まるごと描き直して、撮るたびに同じ画素にします（見比べは画像のハッシュで比べるので、角丸のふちが 1 段ずれても「変更」になる）。Storybook の `afterEach` では呼べません（置くときの撮影は、`afterEach` より前の段階 `completed` で撮る）。呼び忘れは `check:storybook:app` が落とします
+
+ストーリーを足すときの決まり:
+
+- タイトルは画面ごとに日本語で `レビュー/<画面>`、ストーリーの `name` は状態を日本語で書きます。ID は英字に保ちます（遷移の行き先にストーリーの ID を使うため）。meta に英字の `id`（`review-workspace` など）を書き、export の名前を英字にします（ID は `<meta の id>--<export の名前の kebab>`）。並べる順は `.storybook/preview.tsx` の `storySort`
+- 作業の画面全体を主にします。部品のストーリーは、画面で出しにくい状態があるときだけ、部品の隣（`components/*.stories.tsx`）にタイトル `Components/…` で置きます（設定の `excludeTitlePrefixes` で、既定ではキャンバスに並ばない）
+- 名前・文字は架空のもの（山田 太郎・佐藤 花子・サンプルのショップ・`example.com`）にします
+- 足したら `scripts/check-app-storybook.mjs` の `APP_STORY_IDS` に ID を足します
+- Storybook・MSW・ストーリー用の偽のログイン（`src/support/auth/fake`）と、ストーリーの置き場（`src/features/*/stories/`・`*.stories.tsx`）を import できるのは、ストーリー（`src/features/*/{pages,components}/*.stories.tsx`）・`src/features/*/stories/`・`.storybook/` だけです（eslint の `no-restricted-imports`。動的 import（`import("msw")`）は `no-restricted-syntax`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
+
+`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、play 関数（一覧の tags の `play-fn` で見る）の終わりに `settle()` を呼んでいること（最後の文であることは `scripts/repo-rules.small.test.mjs` が見る）、Storybook の外・MSW に無い道へ通信しないこと（iframe.html と、置き場に写したサンプルのショップの iframe.html の外へのページの移動、CSP が止めた読み込みも含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
+
 ## Issue から PR まで
 
 このリポジトリ自身の開発は、AI（Claude Code）と次の順に回します。人の手は「Issue で選ぶ」と「PR の本文を読んでマージを決める」の 2 つに絞り、AI は人がすぐ決められる形で書きます。**仕様は人が決め、AI は実装しながら決めません。**
@@ -132,6 +165,7 @@ main はルールセットで PR を必須にし、直に push しません。�
 | `check-file`（ファイル名・ディレクトリ名・テストの名前）                                                                                                 | 名前のゆれ。つくりのテスト・雛形が名前から対応を探すので、ゆれると検査が効かなくなる                                                                                                                                                                                                                           | 入口（`src/main.tsx`）とモードの設定（`src/config.test.ts`）の 2 つを対象から外している                                                                                                                                                                               |
 | `eslint-comments`・`reportUnusedDisableDirectives`                                                                                                       | 理由の無い disable・直したあとに残った disable・構造を守るルール（`local/*`・層の向き・循環・`no-restricted-*`・`check-file/*`）の disable・コメントでの設定の変更（`/* eslint ルール: "off" */`・`/* global */`・範囲やファイルの `/* eslint-disable */`。使えるのは 1 行だけの disable）                     | メッセージは英語（プラグインのもの。hook が直し方を添える）。構造のルールの例外は、コメントではなく `eslint.config.mjs` の対象・`ignores` に理由つきで書く                                                                                                            |
 | `no-restricted-*`（`process.env`・`console`・`fetch`・`localStorage`・サーバー側のパッケージ）                                                           | 設定・出力・通信・保存の出入口が散らばること                                                                                                                                                                                                                                                                   | 出入口を足すときは `eslint.config.mjs` の許す場所を直す                                                                                                                                                                                                               |
+| ストーリーだけが読むもの（`no-restricted-imports`）・`check:deployed-bundle`・`check:storybook:app`                                                      | 置く版の画面のビルドに、擬似ログイン・ストーリー用の偽のログイン・MSW が入ること。review-canvas 自身のストーリーが、状態の抜け・play 関数の失敗・外への通信で壊れること                                                                                                                                        | `check:storybook:app` は組み立てた Storybook を Chromium で開くので、CI の build のジョブで数十秒。ストーリーを足したら ID の一覧（`APP_STORY_IDS`）も足す                                                                                                            |
 | `switch-exhaustiveness-check`・`consistent-type-imports`・`no-non-null-assertion`・`no-param-reassign`                                                   | case の書き忘れ・型だけの import による循環・`!` で隠した undefined                                                                                                                                                                                                                                            | `!` はテストでは許している                                                                                                                                                                                                                                            |
 | `jsx-a11y`（recommended。画面）                                                                                                                          | キーボードで使えない・読み上げで伝わらない部品（操作しない要素にだけ付けた onClick・tabIndex など）                                                                                                                                                                                                            | `ResizableSidebar.tsx` の境目（フォーカスできる separator の `<hr>`）にだけ、`tabIndex` と `onKeyDown` を許している（WAI-ARIA 1.2 ではウィジェット。プラグインは操作しない要素として扱う）。設定は `eslint.config.mjs` で、recommended の既定のオプションを読んで足す |
 | つくりのテスト（`api/architecture.small.test.ts`）                                                                                                       | DI の登録漏れ・ルーターへの足し忘れ・認証を通らないルート・テストの無いユースケースとルート・OpenAPI に載らないルート（アプリに登録されたルートと 1 対 1 で比べる）                                                                                                                                            | ファイル名と `describe` の題の決まりに頼る（題を変えると落ちる）                                                                                                                                                                                                      |

@@ -57,11 +57,11 @@ git clone https://github.com/ShuntaToda/review-canvas.git
 cd review-canvas
 pnpm install
 pnpm run docker:up          # DynamoDB Local（ポート 8000）
-pnpm run build:storybook    # サンプルのショップの Storybook（examples/sample-storybook）をビルドする
+pnpm run build:storybook    # サンプルのショップ（examples/sample-storybook）と、review-canvas 自身の画面の Storybook をビルドする
 pnpm dev                    # → http://localhost:4100
 ```
 
-最初に名前を入れると（手元は擬似ログイン）、サンプルの「商品一覧」「注文フォーム」の画面が並びます。「コメント（C）」で画面をクリックするとピンを置けます。
+最初に名前を入れると（手元は擬似ログイン）、サンプルの「商品一覧」「注文フォーム」の画面が並びます。「コメント（C）」で画面をクリックするとピンを置けます。上の「ページ」を「review canvas」に替えると、review-canvas 自身の作業の画面を状態ごとに描いた Storybook が並びます（動かし方・ストーリーを足すときの決まりは [docs/development.md](docs/development.md#review-canvas-自身の-storybook)）。
 
 自分のリポジトリの Storybook を並べるときは、[docs/host-setup.md](docs/host-setup.md) のとおりに設定ファイルを置き、`node bin/review-canvas.mjs dev --config ../my-app/review-canvas.config.json` で起こします。
 

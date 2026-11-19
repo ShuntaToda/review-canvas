@@ -115,7 +115,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Screenshots（12 分）と Check app Storybook（8 分）に、組み立ての分を足す
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,44 +146,58 @@ jobs:
           pnpm run build:bridge
           test -s dist-bridge/review-canvas-bridge.js
 
-      # デプロイ先のビルドに擬似ログイン（署名の無いトークンを作る）のコードが入っていないことを確かめる
+      # デプロイ先のビルドに、擬似ログイン（署名の無いトークンを作る）・ストーリー用の偽のログイン・MSW・ストーリーのコードが入っていないことを確かめる
       - name: Build for deploy
         run: |
           pnpm run build:deployed
           pnpm run check:deployed-bundle
 
-      - name: Build sample Storybook
+      # サンプルのショップと、review-canvas 自身の画面の Storybook（設定の storybooks の 2 つ）を組み立てる。
+      # 自身の画面の Storybook には、動く画面で開くサンプルのショップを写す（先にサンプルを組み立てる。scripts/stage-story-storybooks.mjs）
+      - name: Build Storybooks
         run: |
           pnpm run build:storybook
           test -s examples/sample-storybook/storybook-static/index.json
+          test -s storybook-static/index.json
+          grep -q review-canvas-bridge storybook-static/review-canvas-story/main/shop/iframe.html
 
-      # 置くときと同じ手順で、サンプルの全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）
+      # 置くときと同じ手順で、設定の Storybook（サンプルのショップ・review-canvas 自身）の全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）。
+      # 撮影のスクリプトは 10 分（CAPTURE_TIME_LIMIT_MS）で打ち切るので、step の上限はブラウザを入れる分だけ長くする
       - name: Screenshots
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           pnpm --dir infra exec playwright install --with-deps --only-shell chromium
           pnpm --dir infra run screenshots
+          jq -r '.storybooks[] | "\(.outDir) \(.widths | unique | length)"' review-canvas.config.json |
+            while read -r out widths; do
+              stories="$(jq '[.entries[] | select(.type == "story")] | length' "$out/index.json")"
+              shots="$(jq '.shots | length' "$out/review-canvas-shots.json")"
+              if [ "$shots" -ne $((stories * widths)) ]; then
+                echo "::error::$out のスクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
+                exit 1
+              fi
+              # ブラウザへ文字列で渡す読み取り（中身の高さ・主な要素）が、ビルドした形でも動いている
+              measured="$(jq '[.shots[] | select((.contentHeight | type) == "number" and (.elements | type) == "array")] | length' "$out/review-canvas-shots.json")"
+              if [ "$measured" -ne "$shots" ]; then
+                echo "::error::$out に、中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
+                exit 1
+              fi
+            done
+          # ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を、ビルドした Storybook でも読み、どの幅でもボタンが見つかる（遷移を書いているのはサンプルのショップ）
           out=examples/sample-storybook/storybook-static
-          stories="$(jq '[.entries[] | select(.type == "story")] | length' "$out/index.json")"
-          widths="$(jq '.storybooks[0].widths | unique | length' review-canvas.config.json)"
-          shots="$(jq '.shots | length' "$out/review-canvas-shots.json")"
-          if [ "$shots" -ne $((stories * widths)) ]; then
-            echo "::error::スクリーンショットが足りません（$shots 枚。ストーリー $stories × 幅 $widths のはず）"
-            exit 1
-          fi
-          # ブラウザへ文字列で渡す読み取り（中身の高さ・主な要素）が、ビルドした形でも動いている
-          measured="$(jq '[.shots[] | select((.contentHeight | type) == "number" and (.elements | type) == "array")] | length' "$out/review-canvas-shots.json")"
-          if [ "$measured" -ne "$shots" ]; then
-            echo "::error::中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
-            exit 1
-          fi
-          # ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を、ビルドした Storybook でも読み、どの幅でもボタンが見つかる
           missing="$(jq '(.transitions // {} | keys) as $ids | [.shots[] | select(.storyId as $s | $ids | index($s)) | select((.transitions // []) | length == 0)] | length' "$out/review-canvas-shots.json")"
           stories_with_transitions="$(jq '.transitions // {} | length' "$out/review-canvas-shots.json")"
           if [ "$stories_with_transitions" -eq 0 ] || [ "$missing" -ne 0 ]; then
             echo "::error::遷移を読めていない、またはボタンが見つからないスクリーンショットがあります（遷移のあるストーリー $stories_with_transitions 個・ボタンの無い画像 $missing 枚）"
             exit 1
           fi
+
+      # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
+      # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）
+      # 上限は、スクリプト全体の締め切り（6 分。CHECK_TIME_LIMIT_MS）と、最後の 1 本の上限（開くのと描くのを 30 秒ずつ待つ）に、ブラウザを立ち上げる分を足したもの
+      - name: Check app Storybook
+        timeout-minutes: 8
+        run: pnpm run check:storybook:app
 
       # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない
       - name: Synth

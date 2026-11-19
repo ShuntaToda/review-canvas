@@ -3,7 +3,8 @@ import path from "node:path";
 import {
   baseConfig,
   commonIgnores,
-  SRC_FILES_READ_BY_INFRA,
+  SRC_FILES_READ_BY_SCRIPTS,
+  SRC_FILES_WITHOUT_IMPORTS,
 } from "./eslint.config.base.mjs";
 import { localRules } from "./eslint-rules/index.mjs";
 import checkFile from "eslint-plugin-check-file";
@@ -15,7 +16,8 @@ import tseslint from "typescript-eslint";
 
 // API（api/）と画面（src/）を1つのパッケージに持つ。API は層の規約、画面は React の規約を当てる
 const apiFiles = ["api/**/*.ts"];
-const appFiles = ["src/**/*.{ts,tsx}"];
+// Storybook の設定（.storybook/）も画面と同じブラウザで動くので、画面の決まりを当てる
+const appFiles = ["src/**/*.{ts,tsx}", ".storybook/*.{ts,tsx}"];
 
 const API_PROCESS_ENV_MESSAGE =
   "環境変数（process.env）を読めるのは api/di-container と api/handler/api/entrypoint だけです。値は di-container で読み（必須なら unwrapEnv）、クラス・関数には props・引数で渡してください。";
@@ -197,6 +199,53 @@ const featureZones = dirNamesIn("src/features").map((name) => ({
     "feature間の直接importは禁止です。共有するなら部品を src/{constants,utils,...} へ昇格させてください",
 }));
 
+/** 画面（src/）から import できないもの */
+const APP_IMPORT_PATTERNS = [
+  {
+    group: ["@/features/*/*"],
+    message:
+      "features配下のファイルを直接importせずに、Barrelを利用してimportしてください",
+  },
+  {
+    group: [
+      "@aws-sdk/*",
+      "@aws-lambda-powertools/*",
+      "@hono/*",
+      "hono",
+      "hono/*",
+      "inversify",
+      "aws-jwt-verify",
+      "aws-jwt-verify/*",
+      "node:*",
+    ],
+    message:
+      "サーバー側のパッケージ・Node の組み込みは、画面（src/）から import できません（ブラウザのバンドルに入ります）。API の処理は api/ に置き、画面は src/support/api のクライアントで呼んでください。",
+  },
+];
+
+/**
+ * ストーリーを置ける場所。画面（pages/）と部品（components/）の隣だけ。.storybook/main.ts の stories と同じにする
+ * （scripts/eslint-config.small.test.mjs が確かめる）
+ */
+export const STORY_GLOB = "src/features/*/{pages,components}/*.stories.tsx";
+
+/** ストーリー（STORY_FILES）だけが import するもの。画面のコードから読むと、置く版のビルドに MSW・偽のログインが入る */
+const STORY_ONLY_IMPORTS = {
+  // パッケージの名前（storybook・@storybook/*・msw・msw-storybook-addon）、偽のログインの置き場、
+  // ストーリーの置き場（stories/）とストーリーのファイル（*.stories.tsx）。別名・相対パスのどちらでも
+  regex:
+    "^(storybook|msw|msw-storybook-addon)(/.*)?$|^@storybook/|(^|/)support/auth/fake(/|$)|(^|/)stories(/|$)|\\.stories(\\.tsx?)?$",
+  message:
+    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）・ストーリーの置き場（src/features/*/stories/・*.stories.tsx）は、ストーリー（src/features/*/{pages,components}/*.stories.tsx）・src/features/*/stories/・.storybook/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
+};
+
+// ストーリーと、その固定のデータ・MSW の handler・描き方（src/features の下の stories/）と、Storybook の設定
+const STORY_FILES = [
+  STORY_GLOB,
+  "src/features/*/stories/**/*.{ts,tsx}",
+  ".storybook/*.{ts,tsx}",
+];
+
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
@@ -208,6 +257,23 @@ const jsxA11yRecommendedOptions = (rule) => {
 
 const APP_GLOBAL_ALIAS_MESSAGE =
   "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。";
+
+const SRC_FILE_WITHOUT_IMPORTS_MESSAGE =
+  "このファイルは infra（置くスクリプト）・Node のスクリプト（scripts/*.mjs）からも読むので、何も import できません（型だけの import・動的 import も）。要る値は引数で受けるか、このファイルの中に書いてください。どこからも読まなくなったら、eslint.config.base.mjs の SRC_FILES_READ_BY_INFRA・SRC_FILES_READ_BY_SCRIPTS から外します。";
+
+const SCRIPT_SRC_IMPORT_MESSAGE =
+  "スクリプト（scripts/*.mjs）から読める画面（src/）のファイルは、eslint.config.base.mjs の SRC_FILES_READ_BY_SCRIPTS に挙げたもの（何も import しないファイル。拡張子 .ts まで書く）だけです。Node は別名（@/）・拡張子の無い import を解けません。ほかの処理が要るなら、そのファイルへ移すか、一覧に足して import 無しにしてください。";
+
+/** スクリプトから読んでよくない画面（src/）のファイル（一覧の外。../src/…・./../src/… のどちらでも。infra/eslint.config.mjs と同じ形） */
+const SCRIPT_SRC_IMPORT_REGEX = `(^|/)src/(?!(${SRC_FILES_READ_BY_SCRIPTS.map(
+  (file) => file.replace(/^src\//, "").replaceAll(".", "\\."),
+).join("|")})$)`;
+
+/** 動的 import（文字列・テンプレートの頭が正規表現に当たるもの）のセレクタ */
+const importExpressionMatching = (regex) => {
+  const literal = `/${regex.replaceAll("/", String.raw`\x2F`)}/`;
+  return `ImportExpression[source.value=${literal}], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=${literal}]`;
+};
 
 /**
  * no-restricted-syntax のセレクタと、掛ける場所。ここだけに書く。
@@ -245,13 +311,47 @@ const restrictedSyntax = [
     ],
   },
   {
-    files: "src/**/*.{ts,tsx}",
+    // infra・スクリプトから読むファイルの動的 import（no-restricted-imports は動的 import を見ない）。一覧のファイルの外は除く。
+    // 同じ files の行と組み合わせると ignores を合わせるので、否定（!）を先に置くためにこの行を appFiles の行の頭にする
+    files: appFiles,
+    ignores: ["**/*", ...SRC_FILES_WITHOUT_IMPORTS.map((file) => `!${file}`)],
+    selectors: [
+      {
+        selector: "ImportExpression",
+        message: SRC_FILE_WITHOUT_IMPORTS_MESSAGE,
+      },
+    ],
+  },
+  {
+    files: appFiles,
     ignores: ["src/**/*.test.{ts,tsx}"],
     selectors: [DOUBLE_ASSERTION],
   },
   {
+    // ストーリーだけが読むものの動的 import（import("msw")・import("../stories/…")）。no-restricted-imports は動的 import を見ない
+    files: appFiles,
+    ignores: STORY_FILES,
+    selectors: [
+      {
+        selector: importExpressionMatching(STORY_ONLY_IMPORTS.regex),
+        message: STORY_ONLY_IMPORTS.message,
+      },
+    ],
+  },
+  {
+    // スクリプトが Node でそのまま読む画面のファイルの動的 import（import("../src/…")）。テストは vitest が読むので除く
+    files: "scripts/*.mjs",
+    ignores: ["scripts/*.test.mjs"],
+    selectors: [
+      {
+        selector: importExpressionMatching(SCRIPT_SRC_IMPORT_REGEX),
+        message: SCRIPT_SRC_IMPORT_MESSAGE,
+      },
+    ],
+  },
+  {
     // window・document などを別名にすると、通信・保存を「名前で見る」決まりから外れる
-    files: "src/**/*.{ts,tsx}",
+    files: appFiles,
     ignores: ["src/support/**", "src/config/**", "src/**/*.test.{ts,tsx}"],
     selectors: [
       wrappedGlobalOf(
@@ -288,7 +388,7 @@ const restrictedSyntaxBlocks = restrictedSyntax
   )
   .sort((a, b) => a.length - b.length)
   .map((subset) => ({
-    files: [subset[0].files],
+    files: [subset[0].files].flat(),
     ignores: [...new Set(subset.flatMap((entry) => entry.ignores))],
     rules: {
       "no-restricted-syntax": [
@@ -744,30 +844,7 @@ export default tseslint.config(
       "import/no-relative-packages": "error",
       "no-restricted-imports": [
         "error",
-        {
-          patterns: [
-            {
-              group: ["@/features/*/*"],
-              message:
-                "features配下のファイルを直接importせずに、Barrelを利用してimportしてください",
-            },
-            {
-              group: [
-                "@aws-sdk/*",
-                "@aws-lambda-powertools/*",
-                "@hono/*",
-                "hono",
-                "hono/*",
-                "inversify",
-                "aws-jwt-verify",
-                "aws-jwt-verify/*",
-                "node:*",
-              ],
-              message:
-                "サーバー側のパッケージ・Node の組み込みは、画面（src/）から import できません（ブラウザのバンドルに入ります）。API の処理は api/ に置き、画面は src/support/api のクライアントで呼んでください。",
-            },
-          ],
-        },
+        { patterns: [...APP_IMPORT_PATTERNS, STORY_ONLY_IMPORTS] },
       ],
       "no-restricted-properties": [
         "error",
@@ -775,20 +852,26 @@ export default tseslint.config(
       ],
     },
   },
-  // infra（置くスクリプト）からも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように）
+  // ストーリーは Storybook・MSW・偽のログインを読める（ほかの決まりは画面と同じ）
   {
-    files: SRC_FILES_READ_BY_INFRA,
+    files: STORY_FILES,
+    rules: {
+      "no-restricted-imports": ["error", { patterns: APP_IMPORT_PATTERNS }],
+    },
+  },
+  // Storybook の設定（.storybook/）とストーリーは、Storybook の決まりで default export を持つ
+  {
+    files: [STORY_GLOB, ".storybook/*.{ts,tsx}"],
+    rules: { "import/no-default-export": "off" },
+  },
+  // infra（置くスクリプト）・Node のスクリプトからも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように。動的 import は上の no-restricted-syntax）
+  {
+    files: SRC_FILES_WITHOUT_IMPORTS,
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          patterns: [
-            {
-              regex: ".",
-              message:
-                "このファイルは infra（置くスクリプト）からも読むので、何も import できません（型だけの import も）。要る値は引数で受けるか、このファイルの中に書いてください。infra から読まなくなったら、eslint.config.base.mjs の SRC_FILES_READ_BY_INFRA から外します。",
-            },
-          ],
+          patterns: [{ regex: ".", message: SRC_FILE_WITHOUT_IMPORTS_MESSAGE }],
         },
       ],
     },
@@ -901,6 +984,24 @@ export default tseslint.config(
         AbortSignal: "readonly",
         Response: "readonly",
       },
+    },
+  },
+  // スクリプトが Node（--experimental-strip-types）でそのまま読む画面（src/）のファイルは、決めたもの（何も import しないファイル）だけ。テストは vitest が読むので除く
+  {
+    files: ["scripts/*.mjs"],
+    ignores: ["scripts/*.test.mjs"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: SCRIPT_SRC_IMPORT_REGEX,
+              message: SCRIPT_SRC_IMPORT_MESSAGE,
+            },
+          ],
+        },
+      ],
     },
   },
 );

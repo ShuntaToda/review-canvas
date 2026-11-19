@@ -10,9 +10,11 @@
     "dist*",
     "infra/cdk.out",
     "infra/cdk.json",
-    "examples/sample-storybook/public/mockServiceWorker.js"
+    "examples/sample-storybook/public/mockServiceWorker.js",
+    ".storybook/public/mockServiceWorker.js"
   ],
   "words": [
+    "adminorders",
     "argjson",
     "blocklist",
     "cacheinfo",
@@ -47,6 +49,7 @@
     "productlist",
     "pubout",
     "quasis",
+    "sato",
     "shellcheck",
     "spinbutton",
     "SSSZ",
@@ -55,6 +58,7 @@
     "unstub",
     "valuenow",
     "valuetext",
+    "vite",
     "vitest",
     "webacl"
   ],

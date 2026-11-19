@@ -880,6 +880,10 @@ export const Frame = ({
         style={{ height: h }}
         data-story-frame={story.id}
         data-frame-mode={shot === null ? "iframe" : revealed ? "live" : "image"}
+        // 中の橋渡しとつながったか（自身の画面の Storybook の play 関数が待つ印。見た目・振る舞いには使わない）
+        data-frame-bridge={
+          bridgeReady ? "ready" : bridgeMissing ? "missing" : "waiting"
+        }
         // コメント・操作の道具で上に乗った画面は、触る前に iframe へ切り替え始める
         onPointerEnter={() => {
           if (tool !== "move") onActivate(story.id);

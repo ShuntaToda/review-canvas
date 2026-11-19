@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import {
   MAX_BASE_HEIGHT_PX,
@@ -83,6 +84,36 @@ describe("依存（package.json）", () => {
       expect(loose).toStrictEqual([]);
     },
   );
+
+  // 自身の画面の Storybook・サンプルの Storybook・infra の撮影で、同じ版を使う（版がずれると、撮る画面・MSW のサービスワーカーが食い違う）
+  const SHARED_VERSIONS = [
+    "playwright",
+    "msw",
+    "msw-storybook-addon",
+    "storybook",
+    "@storybook/react-vite",
+  ];
+
+  test.each(packageFiles)(
+    `[正常系]%s の ${SHARED_VERSIONS.join("・")} は catalog: で書いている（pnpm-workspace.yaml の catalog）`,
+    (file) => {
+      const manifest = JSON.parse(read(file));
+      const written = [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+      ].flatMap((field) =>
+        Object.entries(manifest[field] ?? {}).filter(([name]) =>
+          SHARED_VERSIONS.includes(name),
+        ),
+      );
+
+      expect(written.length).toBeGreaterThan(0);
+      expect(
+        written.filter(([, version]) => version !== "catalog:"),
+      ).toStrictEqual([]);
+    },
+  );
 });
 
 describe("文書（docs/）", () => {
@@ -145,6 +176,158 @@ describe("ソースの拡張子（api/・src/）", () => {
     expect(
       files.filter((file) => CODE_EXTENSIONS.includes(path.extname(file))),
     ).toStrictEqual([]);
+  });
+});
+
+describe("スクリプトの入口（scripts/*.mjs）", () => {
+  const scripts = fs
+    .readdirSync(path.join(root, "scripts"))
+    .filter((name) => name.endsWith(".mjs") && !name.includes(".test."));
+
+  test("[正常系]スクリプトを読み取れている", () => {
+    expect(scripts.length).toBeGreaterThan(3);
+  });
+
+  // new URL(import.meta.url).pathname は %20・%E3… のまま（空白・日本語を含むパスで argv と合わず、main が動かないまま 0 で終わる）
+  test("[正常系]入口かどうかを new URL(import.meta.url).pathname と argv で比べない（fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url) にする）", () => {
+    expect(
+      scripts.filter((name) =>
+        /new URL\(\s*import\.meta\.url\s*\)\.pathname/u.test(
+          read(`scripts/${name}`),
+        ),
+      ),
+    ).toStrictEqual([]);
+  });
+});
+
+describe("review-canvas 自身の画面の Storybook", () => {
+  // msw の版を上げたら、サービスワーカーも作り直す（pnpm exec msw init）。版がずれると、ストーリー・サンプルの Storybook で MSW が動かない
+  test.each([
+    ".storybook/public/mockServiceWorker.js",
+    "examples/sample-storybook/public/mockServiceWorker.js",
+  ])(
+    "[正常系]%s の PACKAGE_VERSION は、catalog（pnpm-workspace.yaml）の msw と同じ",
+    (file) => {
+      const catalogMsw = /^\s+msw:\s*(\S+)\s*$/mu.exec(
+        read("pnpm-workspace.yaml"),
+      )?.[1];
+      const workerVersion = /const PACKAGE_VERSION = '([^']+)'/u.exec(
+        read(file),
+      )?.[1];
+
+      expect(catalogMsw).toBeDefined();
+      expect(workerVersion).toBe(catalogMsw);
+    },
+  );
+
+  // ブランチのキーの作り方は 3 か所に写してある（api・infra・ストーリー。層の import の決まりで 1 つにできない）。テストの例で揃える
+  test("[正常系]ブランチのキーのテストの例（VECTORS）は、api・infra・ストーリーで同じ", () => {
+    const vectorsOf = (file) =>
+      /const VECTORS = (\[[\s\S]*?\n\]);/u
+        .exec(read(file))?.[1]
+        .replace(/\s+/gu, "");
+    const files = [
+      "api/infrastructure/published-storybooks/branch-key.small.test.ts",
+      "infra/test/branch-key.small.test.ts",
+      "src/features/review/stories/story-branches.small.test.ts",
+    ];
+    const [first, ...rest] = files.map(vectorsOf);
+
+    expect(first).toContain("claude~2Fx-y");
+    for (const vectors of rest) expect(vectors).toBe(first);
+  });
+
+  // play 関数の終わりに settle()（src/features/review/stories/story-play.ts）を呼ぶ。途中で呼んでも、その後の操作で画素がずれる
+  const storyFiles = fs
+    .globSync("src/features/*/{pages,components}/*.stories.tsx", { cwd: root })
+    .sort();
+  const playsOf = (file) => {
+    const source = ts.createSourceFile(
+      file,
+      read(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const plays = [];
+    const visit = (node) => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "play"
+      ) {
+        plays.push(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return plays.map((play) => {
+      const body = play.initializer.body;
+      const last =
+        body !== undefined && ts.isBlock(body)
+          ? body.statements.at(-1)
+          : undefined;
+      return {
+        line: source.getLineAndCharacterOfPosition(play.getStart()).line + 1,
+        last: last?.getText(source),
+      };
+    });
+  };
+
+  test("[正常系]ストーリーのファイルを読み取れている", () => {
+    expect(storyFiles.length).toBeGreaterThan(0);
+    expect(storyFiles.flatMap(playsOf).length).toBeGreaterThan(0);
+  });
+
+  test.each(storyFiles)(
+    "[正常系]%s の play 関数は、どれも最後の文が await settle();",
+    (file) => {
+      expect(
+        playsOf(file)
+          .filter(({ last }) => last !== "await settle();")
+          .map(({ line, last }) => `${String(line)} 行目: ${String(last)}`),
+      ).toStrictEqual([]);
+    },
+  );
+
+  // ストーリーの画像は、ビルドの中に埋め込む（MSW が返す）。大きくすると、リポジトリと置く Storybook が重くなる
+  test("[正常系]ストーリーの固定のデータ（src/features/review/stories/fixtures/）は、合わせて 1MB 以下", () => {
+    const sizeOf = (dir) =>
+      fs
+        .readdirSync(dir, { withFileTypes: true })
+        .reduce(
+          (sum, entry) =>
+            sum +
+            (entry.isDirectory()
+              ? sizeOf(path.join(dir, entry.name))
+              : fs.statSync(path.join(dir, entry.name)).size),
+          0,
+        );
+    const size = sizeOf(
+      path.join(root, "src/features/review/stories/fixtures"),
+    );
+
+    expect(size).toBeGreaterThan(0);
+    expect(size).toBeLessThanOrEqual(1024 * 1024);
+  });
+
+  // 置くとき（設定の build）と手元・CI（pnpm run build:storybook）で、同じ組み立て方にする。
+  // app は、サンプルのショップ（設定で前に並ぶ shop）を組み立てた後に、それを写して組み立てる（scripts/stage-story-storybooks.mjs）
+  test("[正常系]設定の app の build・package.json の build:storybook は、どれも build:storybook:app に --test を付けて呼ぶ", () => {
+    const config = JSON.parse(read("review-canvas.config.json"));
+    const manifest = JSON.parse(read("package.json"));
+    const ids = config.storybooks.map((storybook) => storybook.id);
+    const app = config.storybooks.find((storybook) => storybook.id === "app");
+
+    expect(app?.build).toBe("pnpm run build:storybook:app --test");
+    expect(manifest.scripts["build:storybook"]).toBe(
+      "pnpm run build:storybook:shop && pnpm run build:storybook:app --test",
+    );
+    // 付けた --test が storybook build に届く（最後のコマンドが storybook build）
+    expect(manifest.scripts["build:storybook:app"]).toMatch(
+      /&& storybook build --quiet$/u,
+    );
+    expect(ids.indexOf("shop")).toBeLessThan(ids.indexOf("app"));
   });
 });
 

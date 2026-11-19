@@ -2,7 +2,8 @@
  * ブランチ名を配信の置き場（sb/<キー>/）の 1 つの区切りにする。
  * 英数字と . _ - はそのまま、ほかのバイト（/ や ~ や日本語）は UTF-8 の 1 バイトずつ ~XX（大文字の16進）にする。
  * 例: claude/x-y → claude~2Fx-y。逆に戻せて、別のブランチが同じキーにならない。
- * 配信へ置くスクリプト（review-canvas/infra/scripts/branch-key.ts）にも同じものがある（同じテストの例で揃える）
+ * 配信へ置くスクリプト（review-canvas/infra/scripts/branch-key.ts）と、自身の画面のストーリー（src/features/review/stories/story-branches.ts の storyBranchKey）にも
+ * 同じものがある（同じテストの例で揃える）
  */
 export const encodeBranchKey = (branch: string): string => {
   if (branch === "" || branch === "." || branch === "..") {
