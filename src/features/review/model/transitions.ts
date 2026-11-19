@@ -391,11 +391,40 @@ export const transitionLines = ({
       },
     ];
   });
-  return separateLabels(lines);
+  return separateLabels(lines).map((line) =>
+    line.role === "selected" ? keepLabelInView(line, viewport) : line,
+  );
 };
 
 /** 札どうしの縦の間(px。画面上)。同じボタンから出る線の札が、同じ点に重ならないようにずらす */
 export const LABEL_STEP = 24;
+
+/** 札の幅の上限(px。画面上。TransitionLayer の max-w-72 と同じ)と、画面の端との間 */
+const LABEL_MAX_WIDTH = 288;
+const LABEL_EDGE = 8;
+
+/**
+ * 札を、見えている範囲の中に収める（線の出る点が画面の外にあるとき、例えば画面の右の端から出す線でも、押せるようにする）
+ */
+const keepLabelInView = (
+  line: TransitionLine,
+  viewport: Size,
+): TransitionLine => {
+  const { x, y } = line.shape.labelAt;
+  const next = {
+    x: Math.min(
+      Math.max(x, LABEL_EDGE),
+      Math.max(LABEL_EDGE, viewport.width - LABEL_MAX_WIDTH - LABEL_EDGE),
+    ),
+    y: Math.min(
+      Math.max(y, LABEL_STEP / 2 + LABEL_EDGE),
+      Math.max(LABEL_EDGE, viewport.height - LABEL_STEP / 2 - LABEL_EDGE),
+    ),
+  };
+  return next.x === x && next.y === y
+    ? line
+    : { ...line, shape: { ...line.shape, labelAt: next } };
+};
 
 const separateLabels = (lines: TransitionLine[]): TransitionLine[] => {
   const used = new Map<string, number>();

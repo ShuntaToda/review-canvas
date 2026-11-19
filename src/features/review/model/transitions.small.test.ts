@@ -370,6 +370,26 @@ describe("transitionLines（札の重なり）", () => {
   });
 });
 
+describe("transitionLines（札を見えている範囲に収める）", () => {
+  test("[正常系]線の出る点が画面の外（右の端から出す線など）でも、札は見えている範囲の中に置く", () => {
+    const viewport = { width: 1000, height: 800 };
+    const [line] = transitionLines({
+      mode: "selected",
+      edges: [edge(list, form.id, { rect: null })],
+      rows: rowsAt(1280),
+      selectedStoryId: list.id,
+      storyOf: (id) => stories.find((s) => s.id === id),
+      driftedStoryIds: new Set([list.id]),
+      camera: { x: 0, y: 0, zoom: 1 },
+      viewport,
+    });
+    expect(line?.shape.start.x).toBe(1280);
+    expect(line?.shape.labelAt.x).toBeLessThanOrEqual(viewport.width - 288);
+    expect(line?.shape.labelAt.y).toBeGreaterThan(0);
+    expect(line?.shape.labelAt.y).toBeLessThan(viewport.height);
+  });
+});
+
 describe("storyAtPoint", () => {
   test("[正常系]点を含む画面を返し、画面のすき間なら undefined", () => {
     const rows = rowsAt(1000);
