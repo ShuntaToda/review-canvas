@@ -15,6 +15,9 @@ import {
   waitForText,
 } from "../stories/story-play";
 
+/** 範囲（Shop）の外の、部品の画面の画像の名前 */
+const COMPONENT_SHOT = "Components/Button / Default";
+
 const withComments = {
   msw: {
     handlers: reviewHandlers({
@@ -46,11 +49,12 @@ export const Empty: Story = {
   },
 };
 
-/** 未解決・確認待ち・解決済みが混ざる（返信のあるスレッドを 1 つ含む） */
+/** 未解決・確認待ち・解決済みが混ざる（返信のあるスレッドを 1 つ含む）。範囲を絞らないので、部品（Components/Button）も並ぶ */
 export const WithComments: Story = {
   name: "コメントあり",
   play: async ({ canvas }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
+    await waitForShot(canvas, COMPONENT_SHOT);
     await waitForText(canvas, "ボタンの文言を「カートに追加」にそろえたいです");
     await settle();
   },
@@ -93,8 +97,8 @@ export const Drafting: Story = {
 };
 
 /**
- * 見せる範囲を URL（?scope=）でフォルダ Shop に絞って開く。範囲はタイトルより上のフォルダだけ（model/story-tree.ts の isTitleInScope）で、
- * サンプルのショップの画面はどれも Shop/<画面> なので、並ぶ画面は変わらず、範囲の印（「表示: Shop」）が出る
+ * 見せる範囲を URL（?scope=）でフォルダ Shop に絞って開く。範囲はタイトルより上のフォルダだけ（model/story-tree.ts の isTitleInScope）。
+ * Shop の下の画面（Shop/<画面>）だけが並び、範囲の外の部品（Components/Button）は並ばず、範囲の印（「表示: Shop」）が出る
  */
 export const Scoped: Story = {
   name: "見せる範囲を絞った",
@@ -102,6 +106,9 @@ export const Scoped: Story = {
   play: async ({ canvas }) => {
     await waitForShot(canvas, "Shop/AdminOrders / Default");
     await expect(await waitForText(canvas, "表示: Shop")).toBeVisible();
+    await expect(
+      canvas.queryByRole("img", { name: COMPONENT_SHOT }),
+    ).not.toBeInTheDocument();
     await settle();
   },
 };

@@ -3,7 +3,8 @@ import path from "node:path";
 import {
   baseConfig,
   commonIgnores,
-  SRC_FILES_READ_BY_INFRA,
+  SRC_FILES_READ_BY_SCRIPTS,
+  SRC_FILES_WITHOUT_IMPORTS,
 } from "./eslint.config.base.mjs";
 import { localRules } from "./eslint-rules/index.mjs";
 import checkFile from "eslint-plugin-check-file";
@@ -245,9 +246,6 @@ const STORY_FILES = [
   ".storybook/*.{ts,tsx}",
 ];
 
-/** セレクタ（esquery）の正規表現は / を中に書けないので、\x2F にして書く */
-const STORY_ONLY_SELECTOR_REGEX = `/${STORY_ONLY_IMPORTS.regex.replaceAll("/", String.raw`\x2F`)}/`;
-
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
@@ -259,6 +257,23 @@ const jsxA11yRecommendedOptions = (rule) => {
 
 const APP_GLOBAL_ALIAS_MESSAGE =
   "window・document・globalThis・self を変数に入れません（別名を通すと、fetch・localStorage・document.cookie などを直に使っても見つけられません）。`window.innerWidth` のように、名前を直に書いて使ってください。通信は src/support/api、保存は src/support/storage を通します。";
+
+const SRC_FILE_WITHOUT_IMPORTS_MESSAGE =
+  "このファイルは infra（置くスクリプト）・Node のスクリプト（scripts/*.mjs）からも読むので、何も import できません（型だけの import・動的 import も）。要る値は引数で受けるか、このファイルの中に書いてください。どこからも読まなくなったら、eslint.config.base.mjs の SRC_FILES_READ_BY_INFRA・SRC_FILES_READ_BY_SCRIPTS から外します。";
+
+const SCRIPT_SRC_IMPORT_MESSAGE =
+  "スクリプト（scripts/*.mjs）から読める画面（src/）のファイルは、eslint.config.base.mjs の SRC_FILES_READ_BY_SCRIPTS に挙げたもの（何も import しないファイル。拡張子 .ts まで書く）だけです。Node は別名（@/）・拡張子の無い import を解けません。ほかの処理が要るなら、そのファイルへ移すか、一覧に足して import 無しにしてください。";
+
+/** スクリプトから読んでよくない画面（src/）のファイル（一覧の外。相対パスで ../src/…） */
+const SCRIPT_SRC_IMPORT_REGEX = `^\\.\\./src/(?!(${SRC_FILES_READ_BY_SCRIPTS.map(
+  (file) => file.replace(/^src\//, "").replaceAll(".", "\\."),
+).join("|")})$)`;
+
+/** 動的 import（文字列・テンプレートの頭が正規表現に当たるもの）のセレクタ */
+const importExpressionMatching = (regex) => {
+  const literal = `/${regex.replaceAll("/", String.raw`\x2F`)}/`;
+  return `ImportExpression[source.value=${literal}], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=${literal}]`;
+};
 
 /**
  * no-restricted-syntax のセレクタと、掛ける場所。ここだけに書く。
@@ -296,6 +311,18 @@ const restrictedSyntax = [
     ],
   },
   {
+    // infra・スクリプトから読むファイルの動的 import（no-restricted-imports は動的 import を見ない）。一覧のファイルの外は除く。
+    // 同じ files の行と組み合わせると ignores を合わせるので、否定（!）を先に置くためにこの行を appFiles の行の頭にする
+    files: appFiles,
+    ignores: ["**/*", ...SRC_FILES_WITHOUT_IMPORTS.map((file) => `!${file}`)],
+    selectors: [
+      {
+        selector: "ImportExpression",
+        message: SRC_FILE_WITHOUT_IMPORTS_MESSAGE,
+      },
+    ],
+  },
+  {
     files: appFiles,
     ignores: ["src/**/*.test.{ts,tsx}"],
     selectors: [DOUBLE_ASSERTION],
@@ -306,8 +333,19 @@ const restrictedSyntax = [
     ignores: STORY_FILES,
     selectors: [
       {
-        selector: `ImportExpression[source.value=${STORY_ONLY_SELECTOR_REGEX}], ImportExpression[source.type='TemplateLiteral'][source.quasis.0.value.cooked=${STORY_ONLY_SELECTOR_REGEX}]`,
+        selector: importExpressionMatching(STORY_ONLY_IMPORTS.regex),
         message: STORY_ONLY_IMPORTS.message,
+      },
+    ],
+  },
+  {
+    // スクリプトが Node でそのまま読む画面のファイルの動的 import（import("../src/…")）。テストは vitest が読むので除く
+    files: "scripts/*.mjs",
+    ignores: ["scripts/*.test.mjs"],
+    selectors: [
+      {
+        selector: importExpressionMatching(SCRIPT_SRC_IMPORT_REGEX),
+        message: SCRIPT_SRC_IMPORT_MESSAGE,
       },
     ],
   },
@@ -826,20 +864,14 @@ export default tseslint.config(
     files: [STORY_GLOB, ".storybook/*.{ts,tsx}"],
     rules: { "import/no-default-export": "off" },
   },
-  // infra（置くスクリプト）からも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように）
+  // infra（置くスクリプト）・Node のスクリプトからも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように。動的 import は上の no-restricted-syntax）
   {
-    files: SRC_FILES_READ_BY_INFRA,
+    files: SRC_FILES_WITHOUT_IMPORTS,
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          patterns: [
-            {
-              regex: ".",
-              message:
-                "このファイルは infra（置くスクリプト）からも読むので、何も import できません（型だけの import も）。要る値は引数で受けるか、このファイルの中に書いてください。infra から読まなくなったら、eslint.config.base.mjs の SRC_FILES_READ_BY_INFRA から外します。",
-            },
-          ],
+          patterns: [{ regex: ".", message: SRC_FILE_WITHOUT_IMPORTS_MESSAGE }],
         },
       ],
     },
@@ -952,6 +984,24 @@ export default tseslint.config(
         AbortSignal: "readonly",
         Response: "readonly",
       },
+    },
+  },
+  // スクリプトが Node（--experimental-strip-types）でそのまま読む画面（src/）のファイルは、決めたもの（何も import しないファイル）だけ。テストは vitest が読むので除く
+  {
+    files: ["scripts/*.mjs"],
+    ignores: ["scripts/*.test.mjs"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: SCRIPT_SRC_IMPORT_REGEX,
+              message: SCRIPT_SRC_IMPORT_MESSAGE,
+            },
+          ],
+        },
+      ],
     },
   },
 );

@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { ESLint, Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-import { SRC_FILES_READ_BY_INFRA } from "../eslint.config.base.mjs";
+import {
+  SRC_FILES_READ_BY_INFRA,
+  SRC_FILES_READ_BY_SCRIPTS,
+  SRC_FILES_WITHOUT_IMPORTS,
+} from "../eslint.config.base.mjs";
 import { STORY_GLOB } from "../eslint.config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -241,20 +245,85 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
   });
 });
 
-describe("infra からも読む画面（src/）のファイル", () => {
+describe("infra・スクリプトからも読む画面（src/）のファイル", () => {
   const infraDir = path.join(root, "infra");
   const infraEslint = new ESLint({ cwd: infraDir });
 
-  it.each(SRC_FILES_READ_BY_INFRA)(
-    "%s は何も import できない",
+  it("infra・スクリプトから読むファイルは、どれも何も import しないファイルに挙がっている", () => {
+    expect(SRC_FILES_WITHOUT_IMPORTS).toStrictEqual(
+      expect.arrayContaining([
+        ...SRC_FILES_READ_BY_INFRA,
+        ...SRC_FILES_READ_BY_SCRIPTS,
+      ]),
+    );
+  });
+
+  it.each(SRC_FILES_WITHOUT_IMPORTS)(
+    "%s は何も import できない（動的 import も）",
     async (file) => {
       for (const importPath of ["./camera", "@/support/auth", "react"]) {
         expect(
           (await refusedBy(eslint, path.join(root, file), importPath)).join(),
         ).toContain("何も import できません");
       }
+      expect(
+        (
+          await restrictedSyntaxHitsOf(
+            file,
+            'export const load = () => import("./camera");',
+          )
+        ).join(),
+      ).toContain("何も import できません");
     },
   );
+
+  it("ほかの画面のファイルでは、動的 import に掛からない", async () => {
+    expect(
+      await restrictedSyntaxHitsOf(
+        "src/features/review/model/layout.ts",
+        'export const load = () => import("./camera");',
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it("スクリプト（scripts/*.mjs）から読める画面のファイルは、決めたもの（SRC_FILES_READ_BY_SCRIPTS）だけ（テストは除く）", async () => {
+    const file = path.join(root, "scripts/stage-story-storybooks.mjs");
+    const refused = (importPath) => refusedBy(eslint, file, importPath);
+    const dynamic = (importPath) =>
+      restrictedSyntaxHitsOf(
+        "scripts/stage-story-storybooks.mjs",
+        `await import(${JSON.stringify(importPath)});`,
+      );
+
+    for (const allowed of [
+      ...SRC_FILES_READ_BY_SCRIPTS.map((srcFile) => `../${srcFile}`),
+      "./check-issue-text.mjs",
+      "../api/infrastructure/config/review-canvas-config.ts",
+    ]) {
+      expect(await refused(allowed)).toStrictEqual([]);
+      expect(await dynamic(allowed)).toStrictEqual([]);
+    }
+    for (const other of [
+      "../src/features/review/model/layout.ts",
+      "../src/features/review/stories/story-branches",
+      "../src/features/review/stories/story-branches.tsx",
+      "../src/main.tsx",
+    ]) {
+      expect((await refused(other)).join()).toContain(
+        "SRC_FILES_READ_BY_SCRIPTS",
+      );
+      expect((await dynamic(other)).join()).toContain(
+        "SRC_FILES_READ_BY_SCRIPTS",
+      );
+    }
+    expect(
+      await refusedBy(
+        eslint,
+        path.join(root, "scripts/repo-rules.small.test.mjs"),
+        "../src/features/review/model/layout.ts",
+      ),
+    ).toStrictEqual([]);
+  });
 
   it("ほかの画面のファイルには掛からない", async () => {
     expect(

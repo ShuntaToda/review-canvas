@@ -3,6 +3,7 @@ import type { Comment } from "../model/threads";
 import {
   DEFAULT_BRANCH,
   FEATURE_BRANCH,
+  STORY_SOURCE,
   storyBasePrefixOf,
   storyBranchKey,
 } from "./story-branches";
@@ -25,10 +26,10 @@ const published = (branch: string, commit: string, builtAt: string) => ({
   commit,
   builtAt,
   basePath: `${STORY_BASE_PREFIX}${storyBranchKey(branch)}/`,
-  storybooks: [{ source: "shop", available: true }],
+  storybooks: [{ source: STORY_SOURCE, available: true }],
 });
 
-/** /api/meta の応答。並べるのはサンプルのショップ 1 つ（撮った幅は 375 だけ） */
+/** /api/meta の応答。並べるのはサンプルのショップ 1 つ（撮った幅は 375 だけ。部品も外さない） */
 export const storyMeta: ReviewMeta = {
   defaultBranch: DEFAULT_BRANCH,
   branches: [
@@ -38,14 +39,15 @@ export const storyMeta: ReviewMeta = {
   sources: {
     storybooks: [
       {
-        id: "shop",
+        id: STORY_SOURCE,
         label: "サンプルショップ",
         widths: [375],
         defaultWidth: 375,
         baseHeight: 812,
       },
     ],
-    excludeTitlePrefixes: ["Components/"],
+    // 部品（Components/Button）も並べる（「見せる範囲を絞った」で、範囲の外の画面が消えるのを見せるため）
+    excludeTitlePrefixes: [],
   },
 };
 
@@ -55,7 +57,7 @@ type CommentSeed = Pick<Comment, "id" | "storyId" | "x" | "y" | "body"> &
 const comment = (seed: CommentSeed): Comment => ({
   branch: DEFAULT_BRANCH,
   parentId: null,
-  source: "shop",
+  source: STORY_SOURCE,
   frameWidth: 375,
   ...YAMADA,
   commit: "a1b2c3d",

@@ -49,6 +49,13 @@
       "title": "Shop/AdminOrders",
       "name": "Default",
       "importPath": "./src/pages/AdminOrders.stories.tsx"
+    },
+    "components-button--default": {
+      "type": "story",
+      "id": "components-button--default",
+      "title": "Components/Button",
+      "name": "Default",
+      "importPath": "./src/components/Button.stories.tsx"
     }
   }
 }

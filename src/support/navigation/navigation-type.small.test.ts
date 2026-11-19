@@ -7,7 +7,10 @@ class FakeNavigationTiming implements PerformanceEntry {
   readonly entryType = "navigation";
   readonly startTime = 0;
   readonly duration = 0;
-  constructor(readonly type: NavigationTimingType) {}
+  readonly type: NavigationTimingType;
+  constructor(type: NavigationTimingType) {
+    this.type = type;
+  }
   toJSON() {
     return { type: this.type };
   }

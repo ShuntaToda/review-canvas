@@ -1,7 +1,7 @@
 import type { StoryContext } from "@storybook/react-vite";
 import { expect, waitFor } from "storybook/test";
 import { BRIDGE_CONNECT_TIMEOUT_MS } from "../bridge/frame-bridge";
-import type { StorybookWindow } from "../model/story-render";
+import { readRenderState } from "../model/story-render";
 
 type Canvas = StoryContext["canvas"];
 
@@ -21,7 +21,7 @@ export const waitForText = (canvas: Canvas, text: string | RegExp) =>
 
 /**
  * 置いたコメントの下書きが出るのを待つ。画面の側は、動く画面（置き場に写したサンプルのショップ）の橋渡しがつながってから、
- * 指した要素を手がかりにして置く（手元では 1 秒ほど）。上限は橋渡しを待つ上限まで（つながらないときは下の waitForLiveFrame が落とす）
+ * 指した要素を手がかりにして置く（手元では 1 秒ほど）。上限は橋渡しを待つ上限まで（つながらないときは、下書きは時間切れの後に出るが、下の waitForLiveFrame が落とす）
  */
 export const waitForDraft = (canvas: Canvas) =>
   canvas.findByPlaceholderText("コメントを書く", undefined, {
@@ -29,24 +29,39 @@ export const waitForDraft = (canvas: Canvas) =>
   });
 
 /**
- * 画面（storyId）が動く画面に切り替わり、中のストーリー（サンプルのショップ）が描き終えるのを待つ。
- * 待たないと、撮る時間で中身が変わる。橋渡しがつながらない（「一部の機能が使えません」）ときは、切り替わらないので落ちる
+ * 画面（storyId）が動く画面に切り替わり、中の橋渡しとつながり（Frame の data-frame-bridge が ready）、
+ * 中のストーリー（サンプルのショップ）が描き終えるのを待つ。待たないと、撮る時間で中身が変わる。
+ * 橋渡しがつながらないとき（data-canvas-origin が合わない・橋渡しが無い）は、画像の上に動く画面を出しても「一部の機能が使えません」が出るので、
+ * 印が ready にならず、その文字も出ていないことを確かめて落とす
  */
 export const waitForLiveFrame = (canvasElement: HTMLElement, storyId: string) =>
   waitFor(
     async () => {
-      const frame = canvasElement.querySelector(
-        `[data-story-frame="${storyId}"][data-frame-mode="live"] iframe`,
+      const holder = canvasElement.querySelector(
+        `[data-story-frame="${storyId}"]`,
       );
-      const phase =
-        frame instanceof HTMLIFrameElement
-          ? (frame.contentWindow as StorybookWindow | null)
-              ?.__STORYBOOK_PREVIEW__?.currentRender?.phase
-          : undefined;
+      const frame = holder?.querySelector("iframe");
       await expect(
-        { storyId, phase },
-        "動く画面に切り替わり、中のストーリーが描き終える",
-      ).toStrictEqual({ storyId, phase: "finished" });
+        {
+          storyId,
+          mode: holder?.getAttribute("data-frame-mode"),
+          bridge: holder?.getAttribute("data-frame-bridge"),
+          phase:
+            frame instanceof HTMLIFrameElement
+              ? readRenderState(frame.contentWindow).phase
+              : null,
+        },
+        "動く画面に切り替わり、中の橋渡しとつながり、中のストーリーが描き終える",
+      ).toStrictEqual({
+        storyId,
+        mode: "live",
+        bridge: "ready",
+        phase: "finished",
+      });
+      await expect(
+        canvasElement.ownerDocument.body.textContent,
+        "橋渡しが使えないという知らせ（一部の機能が使えません）が出ていない",
+      ).not.toContain("一部の機能が使えません");
     },
     { timeout: BRIDGE_CONNECT_TIMEOUT_MS + MARGIN_MS },
   );

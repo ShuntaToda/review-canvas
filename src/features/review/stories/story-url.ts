@@ -1,3 +1,5 @@
+import { SHOTS_DIR, SHOTS_MANIFEST_FILE } from "../model/story-shots";
+
 /**
  * ストーリーの中の URL。キャンバスは状態を URL のクエリ（?branch=・?comment= など）で読み書きするが、
  * ストーリーの中ではそれが Storybook の iframe の URL で、Storybook 自身のクエリ（?id=・?viewMode= など）も持つ。
@@ -59,6 +61,14 @@ export const applyStoryUrl = (search: string): void => {
   );
 };
 
+const escapeRegExp = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 置き場の画像の目録・画像の道（…/review-canvas-shots.json・…/review-canvas-shots/…） */
+const SHOTS_PATH_PATTERN = new RegExp(
+  `/(${escapeRegExp(SHOTS_MANIFEST_FILE)}$|${escapeRegExp(SHOTS_DIR)}/)`,
+);
+
 /**
  * ストーリーの通信のうち、MSW を通して（そのまま）読ませてよいもの。この Storybook の置き場の中の、Storybook 自身のファイル
  * （ビルドの読み込み・ストーリーの一覧など）と、置いてあるブランチの置き場（basePrefix）に置いたサンプルのショップの Storybook のファイル
@@ -76,7 +86,7 @@ export const isStorybookOwnFile = (
     return false;
   }
   if (url.pathname.startsWith(basePrefix)) {
-    return !/\/review-canvas-shots(\.json$|\/)/.test(url.pathname);
+    return !SHOTS_PATH_PATTERN.test(url.pathname);
   }
   return !url.pathname.startsWith(`${dir.pathname}api/`);
 };

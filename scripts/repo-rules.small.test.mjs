@@ -179,6 +179,27 @@ describe("ソースの拡張子（api/・src/）", () => {
   });
 });
 
+describe("スクリプトの入口（scripts/*.mjs）", () => {
+  const scripts = fs
+    .readdirSync(path.join(root, "scripts"))
+    .filter((name) => name.endsWith(".mjs") && !name.includes(".test."));
+
+  test("[正常系]スクリプトを読み取れている", () => {
+    expect(scripts.length).toBeGreaterThan(3);
+  });
+
+  // new URL(import.meta.url).pathname は %20・%E3… のまま（空白・日本語を含むパスで argv と合わず、main が動かないまま 0 で終わる）
+  test("[正常系]入口かどうかを new URL(import.meta.url).pathname と argv で比べない（fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url) にする）", () => {
+    expect(
+      scripts.filter((name) =>
+        /new URL\(\s*import\.meta\.url\s*\)\.pathname/u.test(
+          read(`scripts/${name}`),
+        ),
+      ),
+    ).toStrictEqual([]);
+  });
+});
+
 describe("review-canvas 自身の画面の Storybook", () => {
   // msw の版を上げたら、サービスワーカーも作り直す（pnpm exec msw init）。版がずれると、ストーリー・サンプルの Storybook で MSW が動かない
   test.each([

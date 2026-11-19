@@ -6,6 +6,7 @@ import {
   passthrough,
   type RequestHandler,
 } from "msw";
+import { SHOTS_DIR, SHOTS_MANIFEST_FILE } from "../model/story-shots";
 import type { Comment } from "../model/threads";
 import shopIndex from "./fixtures/shop-index.json";
 import featureShots from "./fixtures/shots-feature-new-cart.json";
@@ -13,6 +14,7 @@ import mainShots from "./fixtures/shots-main.json";
 import {
   DEFAULT_BRANCH,
   FEATURE_BRANCH,
+  STORY_SOURCE,
   storyBranchKey,
 } from "./story-branches";
 import { branchItemsOf, STORY_BASE_PREFIX, storyMeta } from "./story-fixtures";
@@ -54,34 +56,31 @@ const indexOf = (manifest: typeof mainShots) => {
   };
 };
 
+/** 置いてあるブランチの、サンプルのショップの Storybook の置き場（MSW の道。:branchKey はブランチのキー） */
+const SOURCE_PATH = `${STORY_BASE_PREFIX}:branchKey/${STORY_SOURCE}`;
+
 /** 置いてあるブランチの Storybook（ストーリーの一覧・画像の目録・画像） */
 const storybookHandlers: RequestHandler[] = [
-  http.get(`${STORY_BASE_PREFIX}:branchKey/shop/index.json`, ({ params }) => {
+  http.get(`${SOURCE_PATH}/index.json`, ({ params }) => {
     const manifest = shotsByBranchKey[String(params["branchKey"])];
     return manifest === undefined
       ? new HttpResponse(null, { status: 404 })
       : HttpResponse.json(indexOf(manifest));
   }),
-  http.get(
-    `${STORY_BASE_PREFIX}:branchKey/shop/review-canvas-shots.json`,
-    ({ params }) => {
-      const manifest = shotsByBranchKey[String(params["branchKey"])];
-      return manifest === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : HttpResponse.json(manifest);
-    },
-  ),
-  http.get(
-    `${STORY_BASE_PREFIX}:branchKey/shop/review-canvas-shots/:file`,
-    ({ params }) => {
-      const dataUrl = shotImages[String(params["file"])];
-      return dataUrl === undefined
-        ? new HttpResponse(null, { status: 404 })
-        : new HttpResponse(bytesOf(dataUrl), {
-            headers: { "Content-Type": "image/png" },
-          });
-    },
-  ),
+  http.get(`${SOURCE_PATH}/${SHOTS_MANIFEST_FILE}`, ({ params }) => {
+    const manifest = shotsByBranchKey[String(params["branchKey"])];
+    return manifest === undefined
+      ? new HttpResponse(null, { status: 404 })
+      : HttpResponse.json(manifest);
+  }),
+  http.get(`${SOURCE_PATH}/${SHOTS_DIR}/:file`, ({ params }) => {
+    const dataUrl = shotImages[String(params["file"])];
+    return dataUrl === undefined
+      ? new HttpResponse(null, { status: 404 })
+      : new HttpResponse(bytesOf(dataUrl), {
+          headers: { "Content-Type": "image/png" },
+        });
+  }),
 ];
 
 /** API の答え方。ok=データを返す、pending=応答を返さない、unauthorized=ログインが切れた（401）、not-allowed=閲覧を許されていない（403） */
@@ -146,8 +145,9 @@ export const reviewHandlers = ({
 
 /**
  * 上の handler に無い道への通信を止める（Storybook の preview で、どのストーリーにも効く最後の handler として渡す）。
- * 通すのは、この Storybook の置き場の中の、Storybook 自身のファイル（ビルドの読み込み・ストーリーの一覧など）だけ。
- * API（api/）と置いてあるブランチの置き場（STORY_BASE_PREFIX）は、ストーリーの handler に無ければ止める。
+ * 通すのは、この Storybook の置き場の中の、Storybook 自身のファイル（ビルドの読み込み・ストーリーの一覧など）と、
+ * 置いてあるブランチの置き場（STORY_BASE_PREFIX）に写したサンプルのショップのファイル（動く画面の読み込み。story-url.ts の isStorybookOwnFile）。
+ * API（api/）と、置き場の画像の目録・画像は、ストーリーの handler に無ければ止める。
  * 止めた通信は失敗にし、MSW と同じ形（[MSW]）でコンソールに出す（scripts/check-app-storybook.mjs がこれを数える）
  */
 export const blockOutsideStories = (storybookUrl: string): RequestHandler =>

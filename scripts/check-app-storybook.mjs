@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import {
@@ -124,9 +125,16 @@ export const isOutsideDocument = (url, origin) => {
 const serve = async (dir) => {
   const root = path.resolve(dir);
   const server = http.createServer((request, response) => {
-    const pathname = decodeURIComponent(
-      new URL(request.url ?? "/", "http://127.0.0.1").pathname,
-    );
+    // %2F（パスの区切り）は解かない（decodeURI）。解くと、区切りを隠したパスで配る範囲を外れうる
+    let pathname = "";
+    try {
+      pathname = decodeURI(
+        new URL(request.url ?? "/", "http://127.0.0.1").pathname,
+      );
+    } catch {
+      response.writeHead(400).end();
+      return;
+    }
     const file = path.join(root, path.posix.normalize(pathname));
     const target = pathname.endsWith("/")
       ? path.join(file, "index.html")
@@ -317,6 +325,9 @@ const main = async () => {
   console.log(`${ids.length} 件のストーリーを確かめました`);
 };
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (
+  process.argv[1] !== undefined &&
+  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   await main();
 }

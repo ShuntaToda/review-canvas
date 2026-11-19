@@ -637,6 +637,25 @@
         }
       ],
       "thumb": "review-canvas-shots/shop-productlist--loading-375-c8b0e2ec71d816cd-thumb.png"
+    },
+    {
+      "storyId": "components-button--default",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/components-button--default-375-972fe9cf9e1f5b72.png",
+      "contentHeight": 34,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 0,
+          "y": 0,
+          "width": 132,
+          "height": 34,
+          "text": "カートに入れる",
+          "heading": ""
+        }
+      ],
+      "thumb": "review-canvas-shots/components-button--default-375-972fe9cf9e1f5b72-thumb.png"
     }
   ],
   "playFunctions": {
@@ -646,6 +665,7 @@
     "shop-orderform--validation-error": true,
     "shop-productlist--empty": false,
     "shop-orderform--filled": true,
-    "shop-productlist--loading": false
+    "shop-productlist--loading": false,
+    "components-button--default": false
   }
 }
