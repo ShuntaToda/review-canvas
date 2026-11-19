@@ -32,7 +32,7 @@ export const StorySidebar = ({
     aria-label="画面の一覧"
     data-story-list
     // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（右のコメント一覧と同じ）
-    className="flex w-60 shrink-0 flex-col border-r border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-r-0"
+    className="flex w-full shrink-0 flex-col border-r border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-r-0"
   >
     <div className="flex flex-col gap-2 border-b border-line px-3 py-2">
       <h2 className="text-sm font-bold">画面</h2>

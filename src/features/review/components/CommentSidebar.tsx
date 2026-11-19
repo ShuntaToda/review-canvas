@@ -63,7 +63,7 @@ export const CommentSidebar = ({
     tabIndex={-1}
     aria-label="コメント一覧"
     // 狭い幅では、キャンバスの上に重ねて幅いっぱいに出す（並べるとキャンバスが見えなくなるため）
-    className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-l-0"
+    className="flex w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full max-md:border-l-0"
   >
     <div className="flex items-center gap-2 border-b border-line px-3 py-2">
       <h2 className="mr-auto min-w-0 truncate text-sm font-bold">
