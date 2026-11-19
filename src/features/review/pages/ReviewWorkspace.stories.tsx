@@ -61,6 +61,39 @@ export const Empty: Story = {
 /** 未解決・確認待ち・解決済みが混ざる（返信のあるスレッドを 1 つ含む）。部品（Components/Button）は既定では並ばない */
 export const WithComments: Story = {
   name: "コメントあり",
+  parameters: {
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { role: "button", name: "使い方・ショートカット（?）" },
+          to: "review-help--opened",
+        },
+        {
+          from: { role: "button", name: "コメント（C）" },
+          to: "review-workspace--drafting",
+          label: "画面を押して書く",
+        },
+        {
+          from: { text: "ボタンの文言を「カートに追加」にそろえたいです" },
+          to: "review-workspace--shared-thread",
+        },
+        {
+          from: { role: "button", name: "Shop だけを表示" },
+          to: "review-workspace--scoped",
+        },
+        {
+          from: { role: "combobox", name: "ブランチ" },
+          to: "review-compare--compare-with-default",
+          label: "feature/new-cart に替えたとき",
+        },
+        {
+          from: { text: "画面のつながり" },
+          to: "review-transitions--all",
+          label: "すべてを選んだとき",
+        },
+      ],
+    },
+  },
   play: async ({ canvas }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
     await waitForText(canvas, "ボタンの文言を「カートに追加」にそろえたいです");

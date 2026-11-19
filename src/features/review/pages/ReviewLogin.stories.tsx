@@ -13,4 +13,17 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /** ログインしていない。ログインの入口が、ログインの画面（Auth0）へ移ると知らせる */
-export const BeforeLogin: Story = { name: "ログインの前" };
+export const BeforeLogin: Story = {
+  name: "ログインの前",
+  parameters: {
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { text: "ログインの画面へ移ります…" },
+          to: "review-workspace--with-comments",
+          label: "ログインしたとき",
+        },
+      ],
+    },
+  },
+};

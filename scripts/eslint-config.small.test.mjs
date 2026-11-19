@@ -245,6 +245,101 @@ describe("ストーリーだけが読むもの（Storybook・MSW・偽のログ�
   });
 });
 
+/** そのファイルに掛かる no-restricted-imports だけで、code を確かめる（型の情報の要るルールを動かさず、速く見る） */
+const restrictedImportHitsOf = async (file, code) => {
+  const config = await eslint.calculateConfigForFile(path.join(root, file));
+  return new Linter({ configType: "flat" })
+    .verify(code, [
+      {
+        languageOptions: { ecmaVersion: "latest", sourceType: "module" },
+        rules: {
+          "no-restricted-imports": config.rules["no-restricted-imports"],
+        },
+      },
+    ])
+    .map((message) => message.message);
+};
+
+describe("覚える先をメモリへ差し替える関数（replaceLocalStorageWithMemory）", () => {
+  const SWAP_MESSAGE =
+    "replaceLocalStorageWithMemory（覚える先をメモリへ差し替える）";
+  const SWAP_IMPORTS = [
+    'import { replaceLocalStorageWithMemory } from "@/support/storage/local-storage";',
+    'import { replaceLocalStorageWithMemory as reset } from "../../support/storage/local-storage";',
+    'import * as storage from "@/support/storage/local-storage";',
+    'import { replaceLocalStorageWithMemory } from "./local-storage.ts";',
+    'await import("@/support/storage/local-storage");',
+    "await import(`./local-storage`);",
+  ];
+  /** 静的な import（no-restricted-imports）と動的 import（no-restricted-syntax）の両方で見る */
+  const swapHitsOf = async (file, code) => [
+    ...(await restrictedImportHitsOf(file, code)),
+    ...(await restrictedSyntaxHitsOf(file, code)),
+  ];
+
+  it.each([
+    "src/main.tsx",
+    "src/features/review/hooks/useLocalSetting.ts",
+    "src/support/auth/dev/dev-session.ts",
+    "src/features/review/pages/ReviewPage.small.test.tsx",
+  ])(
+    "画面のコード（%s）からは読めない（名前を変えても・import * as でも・動的 import でも）",
+    async (file) => {
+      for (const code of SWAP_IMPORTS) {
+        expect((await swapHitsOf(file, code)).join()).toContain(SWAP_MESSAGE);
+      }
+    },
+  );
+
+  it("画面のコードから、ほかの関数（readLocalStorage）は読める", async () => {
+    expect(
+      await restrictedImportHitsOf(
+        "src/features/review/hooks/useLocalSetting.ts",
+        'import { readLocalStorage } from "@/support/storage/local-storage";',
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it.each([
+    ".storybook/preview.tsx",
+    "src/features/review/pages/ReviewTransitions.stories.tsx",
+    "src/features/review/stories/story-play.ts",
+    "src/support/storage/local-storage.small.test.ts",
+  ])(
+    "Storybook の設定・ストーリー・そのテスト（%s）からは読める",
+    async (file) => {
+      for (const code of SWAP_IMPORTS) {
+        expect(await swapHitsOf(file, code)).toStrictEqual([]);
+      }
+    },
+  );
+});
+
+describe("遷移（parameters.reviewCanvas）は meta に書かない", () => {
+  const META_MESSAGE = "meta に書かず";
+  const FILE = "src/features/review/pages/ReviewTransitions.stories.tsx";
+
+  it("meta に書くと止める", async () => {
+    expect(
+      (
+        await restrictedSyntaxHitsOf(
+          FILE,
+          "const meta = { parameters: { reviewCanvas: { transitions: [] } } };\nexport default meta;",
+        )
+      ).join(),
+    ).toContain(META_MESSAGE);
+  });
+
+  it("ストーリー（export）に書くのは止めない。ストーリーの動的 import も止めない", async () => {
+    expect(
+      await restrictedSyntaxHitsOf(
+        FILE,
+        'const meta = { title: "レビュー/画面のつながり" };\nexport default meta;\nexport const Selected = { parameters: { reviewCanvas: { transitions: [] } } };\nvoid import("msw");',
+      ),
+    ).toStrictEqual([]);
+  });
+});
+
 describe("infra・スクリプトからも読む画面（src/）のファイル", () => {
   const infraDir = path.join(root, "infra");
   const infraEslint = new ESLint({ cwd: infraDir });

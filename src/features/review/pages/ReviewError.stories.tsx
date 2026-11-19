@@ -30,7 +30,17 @@ export const BranchMissing: Story = {
 /** 招待されていないアカウントでログインした（API が 403 を返す） */
 export const NotAllowed: Story = {
   name: "閲覧を許されていない",
-  parameters: { msw: { handlers: reviewHandlers({ mode: "not-allowed" }) } },
+  parameters: {
+    msw: { handlers: reviewHandlers({ mode: "not-allowed" }) },
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { role: "button", name: "別のアカウントでログイン" },
+          to: "review-login--before-login",
+        },
+      ],
+    },
+  },
   play: async ({ canvas }) => {
     await waitForText(canvas, messages.notAllowed);
     await settle();
@@ -40,7 +50,17 @@ export const NotAllowed: Story = {
 /** ログインの期限が切れた（API が 401 を返す） */
 export const SessionExpired: Story = {
   name: "ログインが切れた",
-  parameters: { msw: { handlers: reviewHandlers({ mode: "unauthorized" }) } },
+  parameters: {
+    msw: { handlers: reviewHandlers({ mode: "unauthorized" }) },
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { role: "button", name: "ログインし直す" },
+          to: "review-login--before-login",
+        },
+      ],
+    },
+  },
   play: async ({ canvas }) => {
     await waitForText(canvas, messages.unauthorized);
     await settle();

@@ -7,6 +7,8 @@ import {
 import {
   APP_STORY_IDS,
   checkStoryIndex,
+  checkStoryTransitions,
+  manifestShapeProblem,
   isOutsideDocument,
 } from "./check-app-storybook.mjs";
 
@@ -83,5 +85,142 @@ describe("isOutsideDocument", () => {
     ["https://example.com/iframe.html", true],
   ])("%s → %s", (url, outside) => {
     expect(isOutsideDocument(url, origin)).toBe(outside);
+  });
+});
+
+describe("checkStoryTransitions", () => {
+  const storyIds = ["a--one", "b--two"];
+  const widths = [1280, 1440];
+  const shot = (storyId, width, indexes) => ({
+    storyId,
+    width,
+    transitions: indexes.map((index) => ({
+      index,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    })),
+  });
+  const manifest = {
+    transitions: {
+      "a--one": [
+        { index: 0, to: "b--two" },
+        { index: 1, to: "a--one", label: "戻る" },
+      ],
+    },
+    shots: [shot("a--one", 1280, [0, 1]), shot("a--one", 1440, [0, 1])],
+  };
+
+  it("書いた行がすべて目録に残り、どの幅でもボタンがあり、行き先が一覧にあれば、何も挙げない", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2, "b--two": 0 },
+        manifest,
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("目録に残らなかった行（撮影が読まなかった）を、行の数の違いで挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 3 },
+        manifest,
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "a--one: 書いた遷移は 3 行ですが、目録には 2 行しかありません",
+    ]);
+  });
+
+  it("ボタンが見つからない幅と行（書いた順で 1 から）を挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest: {
+          ...manifest,
+          shots: [shot("a--one", 1280, [0, 1]), shot("a--one", 1440, [0])],
+        },
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "a--one（幅 1440）の 2 行目: 遷移のボタンが見つかりません",
+    ]);
+  });
+
+  it("一覧に無い行き先を挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest,
+        storyIds: ["a--one"],
+        widths,
+      }),
+    ).toStrictEqual([
+      "a--one の 1 行目: 行き先のストーリー b--two が一覧にありません",
+    ]);
+  });
+
+  it("設定の幅の画像が目録に無い、遷移のあるストーリーを挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "a--one": 2 },
+        manifest: { ...manifest, shots: [shot("a--one", 1280, [0, 1])] },
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "a--one（幅 1440）: 目録に画像がありません（遷移のボタンを確かめられません）",
+    ]);
+  });
+
+  it("transitions が並びでないストーリーを挙げる", () => {
+    expect(
+      checkStoryTransitions({
+        writtenCounts: { "b--two": null },
+        manifest,
+        storyIds,
+        widths,
+      }),
+    ).toStrictEqual([
+      "b--two: parameters.reviewCanvas.transitions が並び（配列）ではありません",
+    ]);
+  });
+});
+
+describe("manifestShapeProblem", () => {
+  it("読む形がそろっていれば null（transitions が無い目録も）", () => {
+    expect(
+      manifestShapeProblem({
+        shots: [{ storyId: "a--one", width: 1280 }],
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [null, "目録が JSON のオブジェクトではありません"],
+    [{ shots: {} }, "shots が並びではありません"],
+    [
+      { shots: [], transitions: [] },
+      "transitions がオブジェクトではありません",
+    ],
+    [
+      { shots: [], transitions: { "a--one": [{ index: "0", to: "b--two" }] } },
+      "transitions の a--one の行の形が違います",
+    ],
+    [
+      { shots: [], transitions: { "a--one": {} } },
+      "transitions の a--one の行の形が違います",
+    ],
+    [
+      { shots: [{ storyId: "a--one", width: 1280, transitions: {} }] },
+      "shots の行の形が違います",
+    ],
+  ])("%j → %s", (manifest, problem) => {
+    expect(manifestShapeProblem(manifest)).toBe(problem);
   });
 });

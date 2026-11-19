@@ -239,12 +239,32 @@ const STORY_ONLY_IMPORTS = {
     "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）・ストーリーの置き場（src/features/*/stories/・*.stories.tsx）は、ストーリー（src/features/*/{pages,components}/*.stories.tsx）・src/features/*/stories/・.storybook/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
 };
 
+/**
+ * 覚える先をメモリへ差し替える関数（src/support/storage/local-storage.ts）。呼べるのは Storybook の設定・ストーリーと、その関数のテストだけ
+ * （置く版のビルドでは関数ごと消えるので check:deployed-bundle の文字では見分けられない。画面のコードから呼ぶと、置く版で設定を覚えなくなる）
+ */
+const STORAGE_SWAP_IMPORT = {
+  regex: "(^|/)local-storage(\\.ts)?$",
+  importNames: ["replaceLocalStorageWithMemory"],
+  message:
+    "replaceLocalStorageWithMemory（覚える先をメモリへ差し替える）は、Storybook の設定（.storybook/）・ストーリー（src/features/*/{pages,components}/*.stories.tsx・src/features/*/stories/）・src/support/storage/local-storage.small.test.ts からだけ import します（画面のコードから呼ぶと、置く版で設定を覚えなくなります）。",
+};
+
 // ストーリーと、その固定のデータ・MSW の handler・描き方（src/features の下の stories/）と、Storybook の設定
 const STORY_FILES = [
   STORY_GLOB,
   "src/features/*/stories/**/*.{ts,tsx}",
   ".storybook/*.{ts,tsx}",
 ];
+
+/** 覚える先を差し替える関数を読めるファイル（ストーリー・Storybook の設定と、その関数のテスト） */
+const STORAGE_SWAP_ALLOWED_FILES = [
+  ...STORY_FILES,
+  "src/support/storage/local-storage.small.test.ts",
+];
+
+const TRANSITIONS_IN_META_MESSAGE =
+  "遷移（parameters.reviewCanvas）は meta に書かず、ストーリー（export）の側に書きます（meta に書くと、その画面のどのストーリーにも同じ遷移が付きます。docs/development.md「review-canvas 自身の Storybook」）。";
 
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
@@ -335,6 +355,29 @@ const restrictedSyntax = [
       {
         selector: importExpressionMatching(STORY_ONLY_IMPORTS.regex),
         message: STORY_ONLY_IMPORTS.message,
+      },
+    ],
+  },
+  {
+    // 覚える先を差し替える関数の動的 import（import("@/support/storage/local-storage")）。no-restricted-imports は動的 import を見ない
+    files: appFiles,
+    ignores: STORAGE_SWAP_ALLOWED_FILES,
+    selectors: [
+      {
+        selector: importExpressionMatching(STORAGE_SWAP_IMPORT.regex),
+        message: STORAGE_SWAP_IMPORT.message,
+      },
+    ],
+  },
+  {
+    // 遷移は、ストーリーごとに書く（meta に書かない）
+    files: appFiles,
+    ignores: [],
+    selectors: [
+      {
+        selector:
+          "VariableDeclarator[id.name='meta'] Property[key.name='reviewCanvas']",
+        message: TRANSITIONS_IN_META_MESSAGE,
       },
     ],
   },
@@ -844,7 +887,13 @@ export default tseslint.config(
       "import/no-relative-packages": "error",
       "no-restricted-imports": [
         "error",
-        { patterns: [...APP_IMPORT_PATTERNS, STORY_ONLY_IMPORTS] },
+        {
+          patterns: [
+            ...APP_IMPORT_PATTERNS,
+            STORY_ONLY_IMPORTS,
+            STORAGE_SWAP_IMPORT,
+          ],
+        },
       ],
       "no-restricted-properties": [
         "error",
@@ -857,6 +906,16 @@ export default tseslint.config(
     files: STORY_FILES,
     rules: {
       "no-restricted-imports": ["error", { patterns: APP_IMPORT_PATTERNS }],
+    },
+  },
+  // 覚える先を差し替える関数のテストは、その関数を読む（ほかの決まりは画面と同じ）
+  {
+    files: ["src/support/storage/local-storage.small.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [...APP_IMPORT_PATTERNS, STORY_ONLY_IMPORTS] },
+      ],
     },
   },
   // Storybook の設定（.storybook/）とストーリーは、Storybook の決まりで default export を持つ

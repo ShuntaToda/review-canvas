@@ -19,6 +19,17 @@ type Story = StoryObj<typeof meta>;
 /** ヘルプのボタンを押した */
 export const Opened: Story = {
   name: "ヘルプを開いた",
+  parameters: {
+    reviewCanvas: {
+      transitions: [
+        {
+          from: { role: "button", name: "閉じる" },
+          to: "review-workspace--with-comments",
+          label: "閉じたとき",
+        },
+      ],
+    },
+  },
   play: async ({ canvas, userEvent }) => {
     await waitForShot(canvas, "Shop/ProductList / Default");
     await userEvent.click(

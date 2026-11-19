@@ -98,9 +98,11 @@ export const decideSize = (
     const follows = state.follows + 1;
     // 画面の高さが変わったのと同時に中身も伸びた（play 関数など）。画面の高さに引きずられた分を除いた高さを知らせる
     // （そのまま知らせると、100vh の帯がその分だけ伸びたまま残る）。除くと前より伸びていないときは、画面の高さに合わせて伸びる中身ではない
+    // 除くのは、画面の高さが起点より伸びたときだけ（縮んだときに followedHeight を使うと、縮んだ分を足して高く知らせる）
     if (
       !sameExcess &&
       follows <= MAX_VIEWPORT_FOLLOWS &&
+      current.viewport > state.baseViewport + TOLERANCE &&
       followedHeight > state.height + TOLERANCE
     ) {
       return reported(follows, followedHeight, state.baseViewport);
@@ -116,14 +118,18 @@ export const decideSize = (
     }
     return reported(follows);
   }
+  // 引きずられた分を除いて知らせた直後は、知らせた高さ（state.height）と測った中身（state.measured）が違う。
+  // 同じ中身を測り直しただけなら変わっていない（そのまま知らせると、除いた分を足して伸ばし、100vh の帯が埋めて戻らない）。
+  // 画面の高さが変わって中身が前のままのときは、上（決まった高さ）で先に返るので、ここに来るのは同じ画面の高さのときだけ
   const unchanged =
     near(state.height, current.height) ||
-    (state.ignored !== null && near(state.ignored, current.height));
+    (state.ignored !== null && near(state.ignored, current.height)) ||
+    near(state.measured, current.height);
   if (unchanged) return keep({ ...state, viewport: current.viewport });
-  // 画面の高さに引きずられた伸びを知らせずにいるあいだに、同じ画面の高さのまま中身が変わった（play 関数など）。
+  // 画面の高さに引きずられた伸びを知らせずにいるあいだ、または引きずられた分を除いて知らせた後に、同じ画面の高さのまま中身が変わった（play 関数など）。
   // 中身がまだ画面の高さより高ければ（帯が画面の高さに合っている）、引きずられた分を除いた高さを知らせる
   if (
-    state.ignored !== null &&
+    (state.ignored !== null || !near(state.height, state.measured)) &&
     !viewportChanged &&
     current.height > current.viewport + TOLERANCE &&
     !near(current.viewport, state.baseViewport)
