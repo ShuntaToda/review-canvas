@@ -54,6 +54,23 @@ describe("buildStoryTree", () => {
     ]);
   });
 
+  test("[正常系]5 段のタイトルは、4 段のフォルダを入れ子にし、最後の段を画面にする", () => {
+    expect(
+      shape(buildStoryTree([row("A/B/C/D/E"), row("A/B/X")])),
+    ).toStrictEqual([
+      {
+        "A/": [
+          {
+            "A/B/": [
+              { "A/B/C/": [{ "A/B/C/D/": ["E=A/B/C/D/E"] }] },
+              "X=A/B/X",
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
   test("[正常系]区切りの無いタイトルは、フォルダに入れずに一番上の、キャンバスと同じ位置に置く", () => {
     expect(
       shape(

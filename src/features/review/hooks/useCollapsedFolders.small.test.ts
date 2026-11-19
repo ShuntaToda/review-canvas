@@ -30,4 +30,18 @@ describe("useCollapsedFolders", () => {
     act(() => reloaded.result.current[1]("Shop/Order"));
     expect([...reloaded.result.current[0]]).toStrictEqual([]);
   });
+
+  test.each(["{", "null", "[]", '"Shop"'])(
+    "[異常系]覚えた値が壊れていれば（%s）、全部開いた状態で始め、閉じると覚え直す",
+    (raw) => {
+      window.localStorage.setItem(KEY, raw);
+      const { result } = renderHook(() => useCollapsedFolders("shop"));
+      expect([...result.current[0]]).toStrictEqual([]);
+
+      act(() => result.current[1]("Shop"));
+      expect(
+        JSON.parse(window.localStorage.getItem(KEY) ?? "null"),
+      ).toStrictEqual({ shop: ["Shop"] });
+    },
+  );
 });

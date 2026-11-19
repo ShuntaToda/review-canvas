@@ -358,4 +358,20 @@ describe("StorySidebar", () => {
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByText("変更")).toBeNull();
   });
+
+  test("[正常系]見せる範囲で絞った木の、入れ子のフォルダの中でも比べた印を出す", () => {
+    renderSidebar(nested.slice(0, 1), undefined, {
+      scope: "Shop/Order",
+      marks: new Map([["shop-order-form--default", "changed"]]),
+    });
+
+    expect(screen.getByText("表示: Shop/Order")).not.toBeNull();
+    const order = screen.getByRole("button", { name: "Order" }).closest("li");
+    expect(order).not.toBeNull();
+    if (order === null) return;
+    expect(
+      within(order).getByRole("button", { name: "Default（変更）" })
+        .textContent,
+    ).toBe("Default変更");
+  });
 });
