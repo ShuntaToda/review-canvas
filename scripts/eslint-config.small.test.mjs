@@ -85,18 +85,64 @@ describe("no-restricted-syntax の掛かる場所", () => {
   });
 });
 
+/** そのファイルで、import の先が no-restricted-imports の regex に掛かるか（ESLint と同じ見方: u フラグの正規表現に合えば禁止） */
+const refusedBy = async (linter, file, importPath) => {
+  const config = await linter.calculateConfigForFile(file);
+  const [, options] = config.rules["no-restricted-imports"] ?? [];
+  return (options?.patterns ?? []).flatMap((pattern) =>
+    pattern.regex !== undefined &&
+    new RegExp(pattern.regex, "u").test(importPath)
+      ? [pattern.message]
+      : [],
+  );
+};
+
+describe("ストーリーだけが読むもの（Storybook・MSW・偽のログイン）", () => {
+  const STORY_ONLY = [
+    "storybook/test",
+    "@storybook/react-vite",
+    "msw",
+    "msw/browser",
+    "msw-storybook-addon",
+    "@/support/auth/fake",
+    "../../support/auth/fake/FakeAuthProvider",
+  ];
+
+  it.each([
+    "src/features/review/pages/ReviewPage.tsx",
+    "src/support/auth/index.ts",
+    "src/main.tsx",
+  ])("画面のコード（%s）からは読めない", async (file) => {
+    for (const importPath of STORY_ONLY) {
+      expect(
+        (await refusedBy(eslint, path.join(root, file), importPath)).join(),
+      ).toContain("ストーリー（*.stories.tsx）");
+    }
+  });
+
+  it.each([
+    "src/features/review/pages/ReviewWorkspace.stories.tsx",
+    "src/features/review/stories/story-handlers.ts",
+  ])("ストーリー（%s）からは読める", async (file) => {
+    for (const importPath of STORY_ONLY) {
+      expect(
+        await refusedBy(eslint, path.join(root, file), importPath),
+      ).toStrictEqual([]);
+    }
+  });
+
+  it("名前の似た画面のファイル（model/storybook.ts）には掛からない", async () => {
+    expect(
+      await refusedBy(
+        eslint,
+        path.join(root, "src/features/review/model/markdown.ts"),
+        "./storybook",
+      ),
+    ).toStrictEqual([]);
+  });
+});
+
 describe("infra からも読む画面（src/）のファイル", () => {
-  /** そのファイルで、import の先が no-restricted-imports の regex に掛かるか（ESLint と同じ見方: u フラグの正規表現に合えば禁止） */
-  const refusedBy = async (linter, file, importPath) => {
-    const config = await linter.calculateConfigForFile(file);
-    const [, options] = config.rules["no-restricted-imports"] ?? [];
-    return (options?.patterns ?? []).flatMap((pattern) =>
-      pattern.regex !== undefined &&
-      new RegExp(pattern.regex, "u").test(importPath)
-        ? [pattern.message]
-        : [],
-    );
-  };
   const infraDir = path.join(root, "infra");
   const infraEslint = new ESLint({ cwd: infraDir });
 

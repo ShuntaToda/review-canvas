@@ -197,6 +197,42 @@ const featureZones = dirNamesIn("src/features").map((name) => ({
     "feature間の直接importは禁止です。共有するなら部品を src/{constants,utils,...} へ昇格させてください",
 }));
 
+/** 画面（src/）から import できないもの */
+const APP_IMPORT_PATTERNS = [
+  {
+    group: ["@/features/*/*"],
+    message:
+      "features配下のファイルを直接importせずに、Barrelを利用してimportしてください",
+  },
+  {
+    group: [
+      "@aws-sdk/*",
+      "@aws-lambda-powertools/*",
+      "@hono/*",
+      "hono",
+      "hono/*",
+      "inversify",
+      "aws-jwt-verify",
+      "aws-jwt-verify/*",
+      "node:*",
+    ],
+    message:
+      "サーバー側のパッケージ・Node の組み込みは、画面（src/）から import できません（ブラウザのバンドルに入ります）。API の処理は api/ に置き、画面は src/support/api のクライアントで呼んでください。",
+  },
+];
+
+/** ストーリー（STORY_FILES）だけが import するもの。画面のコードから読むと、置く版のビルドに MSW・偽のログインが入る */
+const STORY_ONLY_IMPORTS = {
+  // パッケージの名前（storybook・@storybook/*・msw・msw-storybook-addon）と、偽のログインの置き場（別名・相対パスのどちらでも）
+  regex:
+    "^(storybook|msw|msw-storybook-addon)(/.*)?$|^@storybook/|(^|/)support/auth/fake(/|$)",
+  message:
+    "Storybook・MSW・ストーリー用の偽のログイン（src/support/auth/fake）は、ストーリー（*.stories.tsx）と src/**/stories/ からだけ import します（画面のコードから読むと、置く版のビルドに入ります）。",
+};
+
+// ストーリーと、その固定のデータ・MSW の handler・描き方（src の下の stories/）
+const STORY_FILES = ["src/**/*.stories.tsx", "src/**/stories/**/*.{ts,tsx}"];
+
 /** 画面向けの設定を src/ のファイルだけに当てる */
 const forApp = (config) => ({ ...config, files: appFiles });
 
@@ -744,36 +780,25 @@ export default tseslint.config(
       "import/no-relative-packages": "error",
       "no-restricted-imports": [
         "error",
-        {
-          patterns: [
-            {
-              group: ["@/features/*/*"],
-              message:
-                "features配下のファイルを直接importせずに、Barrelを利用してimportしてください",
-            },
-            {
-              group: [
-                "@aws-sdk/*",
-                "@aws-lambda-powertools/*",
-                "@hono/*",
-                "hono",
-                "hono/*",
-                "inversify",
-                "aws-jwt-verify",
-                "aws-jwt-verify/*",
-                "node:*",
-              ],
-              message:
-                "サーバー側のパッケージ・Node の組み込みは、画面（src/）から import できません（ブラウザのバンドルに入ります）。API の処理は api/ に置き、画面は src/support/api のクライアントで呼んでください。",
-            },
-          ],
-        },
+        { patterns: [...APP_IMPORT_PATTERNS, STORY_ONLY_IMPORTS] },
       ],
       "no-restricted-properties": [
         "error",
         ...processEnvProperties(APP_PROCESS_ENV_MESSAGE),
       ],
     },
+  },
+  // ストーリーは Storybook・MSW・偽のログインを読める（ほかの決まりは画面と同じ）
+  {
+    files: STORY_FILES,
+    rules: {
+      "no-restricted-imports": ["error", { patterns: APP_IMPORT_PATTERNS }],
+    },
+  },
+  // Storybook の設定（.storybook/）とストーリーは、Storybook の決まりで default export を持つ
+  {
+    files: ["src/**/*.stories.tsx", ".storybook/*.{ts,tsx}"],
+    rules: { "import/no-default-export": "off" },
   },
   // infra（置くスクリプト）からも読むファイルは、何も import しない（型だけの import も。infra の tsconfig と Node でそのまま読めるように）
   {

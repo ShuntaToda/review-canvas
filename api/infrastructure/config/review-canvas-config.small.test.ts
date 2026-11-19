@@ -29,7 +29,7 @@ describe("parseReviewCanvasConfig", () => {
     const config = parseReviewCanvasConfig(
       JSON.parse(readFileSync(join(root, "review-canvas.config.json"), "utf8")),
     );
-    expect(config.storybooks.map((s) => s.id)).toStrictEqual(["shop"]);
+    expect(config.storybooks.map((s) => s.id)).toStrictEqual(["shop", "app"]);
   });
 
   test("[正常系]省いた値は空で埋める（excludeTitlePrefixes・watchPaths）", () => {

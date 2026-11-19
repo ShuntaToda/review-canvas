@@ -20,7 +20,7 @@
     },
     "types": ["vitest/globals"]
   },
-  "include": ["src"],
+  "include": ["src", ".storybook/*.ts", ".storybook/*.tsx"],
   "exclude": ["src/generated/**"],
   "references": [
     {

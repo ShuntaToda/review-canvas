@@ -151,10 +151,12 @@ jobs:
           pnpm run build:deployed
           pnpm run check:deployed-bundle
 
-      - name: Build sample Storybook
+      # サンプルのショップと、review-canvas 自身の画面の Storybook（設定の storybooks の 2 つ）を組み立てる
+      - name: Build Storybooks
         run: |
           pnpm run build:storybook
           test -s examples/sample-storybook/storybook-static/index.json
+          test -s storybook-static/index.json
 
       # 置くときと同じ手順で、サンプルの全ストーリーを撮れることを確かめる（設定の幅ごとに 1 枚ずつ）
       - name: Screenshots
@@ -176,6 +178,12 @@ jobs:
             echo "::error::中身の高さ・主な要素を読めていないスクリーンショットがあります（$measured / $shots 枚）"
             exit 1
           fi
+
+      # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
+      # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）
+      - name: Check app Storybook
+        timeout-minutes: 5
+        run: pnpm run check:storybook:app
 
       # CDK アプリを組み立てる（Lambda のバンドルを含む）。値は架空のもので、AWS にはつながない
       - name: Synth

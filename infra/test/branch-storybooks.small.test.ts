@@ -446,7 +446,10 @@ describe("parseStorybookConfig", () => {
       ),
     );
 
-    expect(config.storybooks.map(({ id }) => id)).toStrictEqual(["shop"]);
+    expect(config.storybooks.map(({ id }) => id)).toStrictEqual([
+      "shop",
+      "app",
+    ]);
     // 配る Storybook は docs を外したビルド（--test）にする（画面ごとの iframe が DocsRenderer を読まない）
     for (const { build } of config.storybooks) {
       expect(build).toMatch(/ --test$/);

@@ -9,8 +9,22 @@
       "widths": [375, 768, 1280],
       "defaultWidth": 375,
       "baseHeight": 812
+    },
+    {
+      "id": "app",
+      "label": "review canvas",
+      "build": "pnpm exec storybook build --quiet --test",
+      "outDir": "storybook-static",
+      "widths": [1280, 1440],
+      "defaultWidth": 1280,
+      "baseHeight": 800
     }
   ],
   "excludeTitlePrefixes": ["Components/"],
-  "watchPaths": ["examples/sample-storybook/", "review-canvas.config.json"]
+  "watchPaths": [
+    "examples/sample-storybook/",
+    "src/",
+    ".storybook/",
+    "review-canvas.config.json"
+  ]
 }

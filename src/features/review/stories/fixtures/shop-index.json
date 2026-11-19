@@ -1,0 +1,54 @@
+{
+  "v": 5,
+  "entries": {
+    "shop-productlist--default": {
+      "type": "story",
+      "id": "shop-productlist--default",
+      "title": "Shop/ProductList",
+      "name": "Default",
+      "importPath": "./src/pages/ProductList.stories.tsx"
+    },
+    "shop-productlist--empty": {
+      "type": "story",
+      "id": "shop-productlist--empty",
+      "title": "Shop/ProductList",
+      "name": "Empty",
+      "importPath": "./src/pages/ProductList.stories.tsx"
+    },
+    "shop-productlist--loading": {
+      "type": "story",
+      "id": "shop-productlist--loading",
+      "title": "Shop/ProductList",
+      "name": "Loading",
+      "importPath": "./src/pages/ProductList.stories.tsx"
+    },
+    "shop-orderform--default": {
+      "type": "story",
+      "id": "shop-orderform--default",
+      "title": "Shop/OrderForm",
+      "name": "Default",
+      "importPath": "./src/pages/OrderForm.stories.tsx"
+    },
+    "shop-orderform--filled": {
+      "type": "story",
+      "id": "shop-orderform--filled",
+      "title": "Shop/OrderForm",
+      "name": "Filled",
+      "importPath": "./src/pages/OrderForm.stories.tsx"
+    },
+    "shop-orderform--validation-error": {
+      "type": "story",
+      "id": "shop-orderform--validation-error",
+      "title": "Shop/OrderForm",
+      "name": "Validation Error",
+      "importPath": "./src/pages/OrderForm.stories.tsx"
+    },
+    "admin-orders--default": {
+      "type": "story",
+      "id": "admin-orders--default",
+      "title": "Admin/Orders",
+      "name": "Default",
+      "importPath": "./src/pages/AdminOrders.stories.tsx"
+    }
+  }
+}

@@ -7,7 +7,7 @@
 ```bash
 pnpm install
 pnpm run docker:up          # DynamoDB Local（ポート 8000）
-pnpm run build:storybook    # サンプルの Storybook をビルドする（examples/sample-storybook/storybook-static）
+pnpm run build:storybook    # サンプルの Storybook（examples/sample-storybook/storybook-static）と、review-canvas 自身の画面の Storybook（storybook-static）をビルドする
 pnpm dev                    # → http://localhost:4100（Storybook は http://localhost:4102 で配る）
 ```
 
@@ -79,6 +79,33 @@ pnpm --dir examples/sample-storybook run validate
 - コミットメッセージの決まりは `scripts/check-commit-message.mjs` にあり、CI のジョブ commit-messages が PR のコミットの範囲にも同じものをかけます（`--no-verify`・GitHub の画面で作ったコミットも見る）。マージコミットは見ません（「Update branch」などで GitHub が作り、文面を選べない）。`git revert` が付ける本文（`This reverts commit …`。件名が `Revert "`・`Reapply "` で始まるもの）だけは 1 行の例外として認めます（戻したコミットを指す決まった形のため）。手元（commit-msg）では、エディタに出る git の案内（`#` だけの行と、`#` の後ろが空白（スペース・タブ）の行。`# On branch …`・`#<TAB>modified: …`・`# Conflicts:`）と、`git commit -v` の切り取り線から後ろを除いてから数えます（コメントの文字を `core.commentChar` で変えていれば、その文字で見る）。`-m "# 本文"` のように案内と同じ形で付けた本文は手元では見分けられないので、CI が見つけます。PR をまとめてマージするときのメッセージは、人が 1 行に直します
 - API を 1 本足すときは `pnpm run new:api`（[architecture.md](architecture.md#api-を-1-本足すとき)）。CI の scaffold ジョブが、雛形で作った直後の状態で `validate` と `test:small` を通します
 
+## review-canvas 自身の Storybook
+
+review-canvas の作業の画面を、状態ごとに描いたストーリーです。設定ファイルの 2 つ目の Storybook（`id` は `app`、名前は「review canvas」）として、手元のキャンバスのサンプルのショップの後ろに並びます。
+
+```bash
+pnpm run storybook              # 開発しながら見る（http://localhost:6007）
+pnpm run build:storybook:app    # 組み立てる（storybook-static）。build:storybook はサンプルのショップと両方を組み立てる
+pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つずつ開いて確かめる（下）
+```
+
+- 設定は `.storybook/`（`main.ts`・`preview.tsx`）、ストーリーは画面のコードの隣（`src/features/review/pages/*.stories.tsx`）、ストーリーが使う固定のデータ・MSW の handler・描き方は `src/features/review/stories/` に置きます。画面と同じ vite の設定（React Compiler・`@/` の別名）と Tailwind（`src/index.css`）を使います
+- 1 つのストーリーは、画面の入口と同じ `App` を、ストーリー用の偽のログイン（`src/support/auth/fake`。山田 太郎でログイン済み、または未ログイン）で描きます（`stories/ReviewStory.tsx`）。擬似ログイン（`src/support/auth/dev`）は使いません。SWR のキャッシュはストーリーごとに作り直します
+- API（`/api/*`）と、置いてあるブランチの Storybook（ストーリーの一覧・画像の目録・画像）は MSW が返します（`stories/story-handlers.ts`）。置いてあるブランチは `main` と `feature/new-cart`（架空）、キャンバスの中身はサンプルのショップを撮った画像と目録（`stories/fixtures/`。幅 375 だけ）です。画像を撮り直すときは、サンプルの Storybook を組み立ててから `pnpm --dir infra run screenshots --repo-root <根> --config <shop だけの設定>` で撮り、要る画面を写します
+- ストーリーの handler に無い道への通信（Storybook の外・API の知らない道）は、`.storybook/preview.tsx` が最後の handler で止めて失敗にし、コンソールに `[MSW]` で出します。動く画面（操作のモードで開く iframe）は出しません（空になる）
+- URL の状態（`?branch=`・`?comment=`・`?scope=` など）は、ストーリーの `parameters.reviewUrl` に書きます。描く前に iframe の URL へ入れ、キャンバスが URL を書き換えても Storybook のクエリ（`?id=`・`?viewMode=`）を残します（`stories/story-url.ts`）
+- 押して開く状態（コメントを書いている・ヘルプを開いた・変わった画面だけ）は、play 関数で押して作ります。置くときの撮影は play 関数の終わりを待ちます
+
+ストーリーを足すときの決まり:
+
+- タイトルは画面ごとに日本語で `レビュー/<画面>`、ストーリーの `name` は状態を日本語で書きます。ID は英字に保ちます（遷移の行き先にストーリーの ID を使うため）。meta に英字の `id`（`review-workspace` など）を書き、export の名前を英字にします（ID は `<meta の id>--<export の名前の kebab>`）。並べる順は `.storybook/preview.tsx` の `storySort`
+- 作業の画面全体を主にします。部品のストーリーは、画面で出しにくい状態があるときだけ `Components/` の下に置きます（既定では並ばない）
+- 名前・文字は架空のもの（山田 太郎・佐藤 花子・サンプルのショップ・`example.com`）にします
+- 足したら `scripts/check-app-storybook.mjs` の `APP_STORY_IDS` に ID を足します
+- Storybook・MSW・偽のログインを import できるのは、ストーリー（`*.stories.tsx`）と `src/**/stories/` だけです（eslint の `no-restricted-imports`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
+
+`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、Storybook の外・MSW に無い道へ通信しないことを確かめます。
+
 ## Issue から PR まで
 
 このリポジトリ自身の開発は、AI（Claude Code）と次の順に回します。人の手は「Issue で選ぶ」と「PR の本文を読んでマージを決める」の 2 つに絞り、AI は人がすぐ決められる形で書きます。**仕様は人が決め、AI は実装しながら決めません。**
@@ -131,6 +158,7 @@ main はルールセットで PR を必須にし、直に push しません。�
 | `check-file`（ファイル名・ディレクトリ名・テストの名前）                                                                                                 | 名前のゆれ。つくりのテスト・雛形が名前から対応を探すので、ゆれると検査が効かなくなる                                                                                                                                                                                                                           | 入口（`src/main.tsx`）とモードの設定（`src/config.test.ts`）の 2 つを対象から外している                                                                                                                                                                               |
 | `eslint-comments`・`reportUnusedDisableDirectives`                                                                                                       | 理由の無い disable・直したあとに残った disable・構造を守るルール（`local/*`・層の向き・循環・`no-restricted-*`・`check-file/*`）の disable・コメントでの設定の変更（`/* eslint ルール: "off" */`・`/* global */`・範囲やファイルの `/* eslint-disable */`。使えるのは 1 行だけの disable）                     | メッセージは英語（プラグインのもの。hook が直し方を添える）。構造のルールの例外は、コメントではなく `eslint.config.mjs` の対象・`ignores` に理由つきで書く                                                                                                            |
 | `no-restricted-*`（`process.env`・`console`・`fetch`・`localStorage`・サーバー側のパッケージ）                                                           | 設定・出力・通信・保存の出入口が散らばること                                                                                                                                                                                                                                                                   | 出入口を足すときは `eslint.config.mjs` の許す場所を直す                                                                                                                                                                                                               |
+| ストーリーだけが読むもの（`no-restricted-imports`）・`check:deployed-bundle`・`check:storybook:app`                                                      | 置く版の画面のビルドに、擬似ログイン・ストーリー用の偽のログイン・MSW が入ること。review-canvas 自身のストーリーが、状態の抜け・play 関数の失敗・外への通信で壊れること                                                                                                                                        | `check:storybook:app` は組み立てた Storybook を Chromium で開くので、CI の build のジョブで数十秒。ストーリーを足したら ID の一覧（`APP_STORY_IDS`）も足す                                                                                                            |
 | `switch-exhaustiveness-check`・`consistent-type-imports`・`no-non-null-assertion`・`no-param-reassign`                                                   | case の書き忘れ・型だけの import による循環・`!` で隠した undefined                                                                                                                                                                                                                                            | `!` はテストでは許している                                                                                                                                                                                                                                            |
 | `jsx-a11y`（recommended。画面）                                                                                                                          | キーボードで使えない・読み上げで伝わらない部品（操作しない要素にだけ付けた onClick・tabIndex など）                                                                                                                                                                                                            | `ResizableSidebar.tsx` の境目（フォーカスできる separator の `<hr>`）にだけ、`tabIndex` と `onKeyDown` を許している（WAI-ARIA 1.2 ではウィジェット。プラグインは操作しない要素として扱う）。設定は `eslint.config.mjs` で、recommended の既定のオプションを読んで足す |
 | つくりのテスト（`api/architecture.small.test.ts`）                                                                                                       | DI の登録漏れ・ルーターへの足し忘れ・認証を通らないルート・テストの無いユースケースとルート・OpenAPI に載らないルート（アプリに登録されたルートと 1 対 1 で比べる）                                                                                                                                            | ファイル名と `describe` の題の決まりに頼る（題を変えると落ちる）                                                                                                                                                                                                      |
