@@ -105,7 +105,7 @@ pnpm run check:storybook:app    # 組み立てたものを Chromium で 1 つず
 - 足したら `scripts/check-app-storybook.mjs` の `APP_STORY_IDS` に ID を足します
 - Storybook・MSW・ストーリー用の偽のログイン（`src/support/auth/fake`）と、ストーリーの置き場（`src/features/*/stories/`・`*.stories.tsx`）を import できるのは、ストーリー（`src/features/*/{pages,components}/*.stories.tsx`）・`src/features/*/stories/`・`.storybook/` だけです（eslint の `no-restricted-imports`。動的 import（`import("msw")`）は `no-restricted-syntax`。画面のコードから読むと置く版のビルドに入る）。置く版のビルドに入っていないことは `pnpm run check:deployed-bundle` も確かめます
 
-`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、Storybook の外・MSW に無い道へ通信しないこと（iframe.html の外へのページの移動も含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
+`check:storybook:app`（CI の build のジョブでも動く）は、決めた状態のストーリーが一覧（`index.json`）にそろって載り ID が英字であること、どのストーリーも描画と play 関数が通ること、play 関数（一覧の tags の `play-fn` で見る）の終わりに `settle()` を呼んでいること（最後の文であることは `scripts/repo-rules.small.test.mjs` が見る）、Storybook の外・MSW に無い道へ通信しないこと（iframe.html の外へのページの移動も含む）を確かめます。Storybook・MSW・Playwright の版は、サンプルの Storybook・infra と同じものを `pnpm-workspace.yaml` の catalog に書き、`catalog:` で使います。
 
 ## Issue から PR まで
 

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import {
   MAX_BASE_HEIGHT_PX,
@@ -179,6 +180,95 @@ describe("ソースの拡張子（api/・src/）", () => {
 });
 
 describe("review-canvas 自身の画面の Storybook", () => {
+  // msw の版を上げたら、サービスワーカーも作り直す（pnpm exec msw init）。版がずれると、ストーリー・サンプルの Storybook で MSW が動かない
+  test.each([
+    ".storybook/public/mockServiceWorker.js",
+    "examples/sample-storybook/public/mockServiceWorker.js",
+  ])(
+    "[正常系]%s の PACKAGE_VERSION は、catalog（pnpm-workspace.yaml）の msw と同じ",
+    (file) => {
+      const catalogMsw = /^\s+msw:\s*(\S+)\s*$/mu.exec(
+        read("pnpm-workspace.yaml"),
+      )?.[1];
+      const workerVersion = /const PACKAGE_VERSION = '([^']+)'/u.exec(
+        read(file),
+      )?.[1];
+
+      expect(catalogMsw).toBeDefined();
+      expect(workerVersion).toBe(catalogMsw);
+    },
+  );
+
+  // ブランチのキーの作り方は 3 か所に写してある（api・infra・ストーリー。層の import の決まりで 1 つにできない）。テストの例で揃える
+  test("[正常系]ブランチのキーのテストの例（VECTORS）は、api・infra・ストーリーで同じ", () => {
+    const vectorsOf = (file) =>
+      /const VECTORS = (\[[\s\S]*?\n\]);/u
+        .exec(read(file))?.[1]
+        .replace(/\s+/gu, "");
+    const files = [
+      "api/infrastructure/published-storybooks/branch-key.small.test.ts",
+      "infra/test/branch-key.small.test.ts",
+      "src/features/review/stories/story-fixtures.small.test.ts",
+    ];
+    const [first, ...rest] = files.map(vectorsOf);
+
+    expect(first).toContain("claude~2Fx-y");
+    for (const vectors of rest) expect(vectors).toBe(first);
+  });
+
+  // play 関数の終わりに settle()（src/features/review/stories/story-play.ts）を呼ぶ。途中で呼んでも、その後の操作で画素がずれる
+  const storyFiles = fs
+    .globSync("src/features/*/{pages,components}/*.stories.tsx", { cwd: root })
+    .sort();
+  const playsOf = (file) => {
+    const source = ts.createSourceFile(
+      file,
+      read(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const plays = [];
+    const visit = (node) => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "play"
+      ) {
+        plays.push(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return plays.map((play) => {
+      const body = play.initializer.body;
+      const last =
+        body !== undefined && ts.isBlock(body)
+          ? body.statements.at(-1)
+          : undefined;
+      return {
+        line: source.getLineAndCharacterOfPosition(play.getStart()).line + 1,
+        last: last?.getText(source),
+      };
+    });
+  };
+
+  test("[正常系]ストーリーのファイルを読み取れている", () => {
+    expect(storyFiles.length).toBeGreaterThan(0);
+    expect(storyFiles.flatMap(playsOf).length).toBeGreaterThan(0);
+  });
+
+  test.each(storyFiles)(
+    "[正常系]%s の play 関数は、どれも最後の文が await settle();",
+    (file) => {
+      expect(
+        playsOf(file)
+          .filter(({ last }) => last !== "await settle();")
+          .map(({ line, last }) => `${String(line)} 行目: ${String(last)}`),
+      ).toStrictEqual([]);
+    },
+  );
+
   // ストーリーの画像は、ビルドの中に埋め込む（MSW が返す）。大きくすると、リポジトリと置く Storybook が重くなる
   test("[正常系]ストーリーの固定のデータ（src/features/review/stories/fixtures/）は、合わせて 1MB 以下", () => {
     const sizeOf = (dir) =>

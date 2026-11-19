@@ -6,10 +6,10 @@ import {
   isOutsideDocument,
 } from "./check-app-storybook.mjs";
 
-const indexOf = (ids) => ({
+const indexOf = (ids, tagsOf = () => ["dev", "test", "play-fn"]) => ({
   v: 5,
   entries: Object.fromEntries([
-    ...ids.map((id) => [id, { type: "story", id }]),
+    ...ids.map((id) => [id, { type: "story", id, tags: tagsOf(id) }]),
     ["docs--page", { type: "docs", id: "docs--page" }],
   ]),
 });
@@ -34,6 +34,30 @@ describe("checkStoryIndex", () => {
       unexpected: ["review-extra--new", "レビュー--状態"],
       nonAscii: ["レビュー--状態"],
     });
+  });
+});
+
+describe("checkStoryIndex の play 関数（tags の play-fn）", () => {
+  it("play-fn の付いたものだけを、play 関数を持つものにする", () => {
+    const [first, second] = APP_STORY_IDS;
+    expect(
+      checkStoryIndex(
+        indexOf([first, second], (id) =>
+          id === first ? ["dev", "play-fn"] : ["dev"],
+        ),
+        [first, second],
+      ),
+    ).toMatchObject({ withPlay: [first], unreadableTags: [] });
+  });
+
+  it("tags を読めないもの（Storybook の形が変わったとき）を挙げる", () => {
+    const [first] = APP_STORY_IDS;
+    expect(
+      checkStoryIndex(
+        indexOf([first], () => undefined),
+        [first],
+      ),
+    ).toMatchObject({ withPlay: [], unreadableTags: [first] });
   });
 });
 

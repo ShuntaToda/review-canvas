@@ -46,6 +46,12 @@ const FAILURE_EVENTS = [
   "unhandledErrorsWhilePlaying",
 ];
 
+/**
+ * スクリプト全体の締め切り(ms)。CI の step の上限（.github/workflows/ci.yml の Check app Storybook。8 分）より短くし、
+ * 超えたらそこまでの問題を出して落ちる（最後の 1 本が開くのと描くのを STORY_TIMEOUT_MS ずつ待っても、step の上限に収まる）
+ */
+const CHECK_TIME_LIMIT_MS = 6 * 60_000;
+
 /** play 関数の終わりの settle() が付ける印（story-play.ts の SETTLED_MARK を html の属性にした名前） */
 const SETTLED_MARK_ATTRIBUTE = "data-story-settled";
 
@@ -62,16 +68,32 @@ const CONTENT_TYPES = {
   ".woff2": "font/woff2",
 };
 
-/** 一覧（index.json）から、足りない・決めていない（多い）ストーリーと、英字でない ID を挙げる */
+/** play 関数を持つストーリーに Storybook が付ける tag（index.json の公開の形） */
+const PLAY_FUNCTION_TAG = "play-fn";
+
+/**
+ * 一覧（index.json）から、足りない・決めていない（多い）ストーリーと、英字でない ID を挙げる。
+ * play 関数を持つもの（tags の play-fn）と、tags を読めないもの（Storybook の形が変わったとき）も分ける
+ */
 export const checkStoryIndex = (index, expected = APP_STORY_IDS) => {
-  const ids = Object.values(index?.entries ?? {})
-    .filter((entry) => entry.type === "story")
-    .map((entry) => entry.id);
+  const stories = Object.values(index?.entries ?? {}).filter(
+    (entry) => entry.type === "story",
+  );
+  const ids = stories.map((entry) => entry.id);
   return {
     ids,
     missing: expected.filter((id) => !ids.includes(id)),
     unexpected: ids.filter((id) => !expected.includes(id)),
     nonAscii: ids.filter((id) => !STORY_ID_PATTERN.test(id)),
+    withPlay: stories
+      .filter(
+        (entry) =>
+          Array.isArray(entry.tags) && entry.tags.includes(PLAY_FUNCTION_TAG),
+      )
+      .map((entry) => entry.id),
+    unreadableTags: stories
+      .filter((entry) => !Array.isArray(entry.tags))
+      .map((entry) => entry.id),
   };
 };
 
@@ -124,7 +146,9 @@ const main = async () => {
   const index = JSON.parse(
     fs.readFileSync(path.join(values.dir, "index.json"), "utf8"),
   );
-  const { ids, missing, unexpected, nonAscii } = checkStoryIndex(index);
+  const deadline = Date.now() + CHECK_TIME_LIMIT_MS;
+  const { ids, missing, unexpected, nonAscii, withPlay, unreadableTags } =
+    checkStoryIndex(index);
   const problems = [
     ...missing.map((id) => `一覧（index.json）にありません: ${id}`),
     ...unexpected.map(
@@ -132,6 +156,15 @@ const main = async () => {
         `決めていないストーリーがあります（足したなら APP_STORY_IDS にも足す）: ${id}`,
     ),
     ...nonAscii.map((id) => `ストーリーの ID が英字ではありません: ${id}`),
+    ...unreadableTags.map(
+      (id) =>
+        `一覧（index.json）の tags を読めません（play 関数があるかを見られません）: ${id}`,
+    ),
+    ...(ids.length > 0 && withPlay.length === 0
+      ? [
+          `一覧（index.json）の tags に ${PLAY_FUNCTION_TAG} が 1 本もありません（Storybook の形が変わっていないか）`,
+        ]
+      : []),
   ];
   if (values.shots !== undefined)
     fs.mkdirSync(values.shots, { recursive: true });
@@ -159,6 +192,12 @@ const main = async () => {
       }, 5);
     }, FAILURE_EVENTS);
     for (const id of ids) {
+      if (Date.now() >= deadline) {
+        problems.push(
+          `全体の締め切り（${String(CHECK_TIME_LIMIT_MS / 60_000)} 分）を過ぎたので、ここから先は確かめていません: ${id} ほか`,
+        );
+        break;
+      }
       const page = await context.newPage();
       const outside = [];
       const mswErrors = [];
@@ -188,21 +227,27 @@ const main = async () => {
         (url) => url.origin !== server.origin,
         (route) => route.abort(),
       );
-      await page.goto(
-        `${server.origin}/iframe.html?id=${encodeURIComponent(id)}&viewMode=story`,
-      );
-      const settled = await page
-        .waitForFunction(
-          (phases) => {
-            const value =
-              globalThis.__STORYBOOK_PREVIEW__?.currentRender?.phase;
-            return phases.includes(value) ? value : false;
-          },
-          [...SETTLED_PHASES, ...FAILED_PHASES],
+      const loaded = await page
+        .goto(
+          `${server.origin}/iframe.html?id=${encodeURIComponent(id)}&viewMode=story`,
           { timeout: STORY_TIMEOUT_MS },
         )
-        .then((handle) => handle.jsonValue())
-        .catch(() => "timeout");
+        .then(() => true)
+        .catch(() => false);
+      const settled = loaded
+        ? await page
+            .waitForFunction(
+              (phases) => {
+                const value =
+                  globalThis.__STORYBOOK_PREVIEW__?.currentRender?.phase;
+                return phases.includes(value) ? value : false;
+              },
+              [...SETTLED_PHASES, ...FAILED_PHASES],
+              { timeout: STORY_TIMEOUT_MS },
+            )
+            .then((handle) => handle.jsonValue())
+            .catch(() => "timeout")
+        : "timeout（ページを開けません）";
       // play 関数が失敗しても、段階は finished まで進む。失敗は Storybook が送る知らせ（下の addInitScript で受けたもの）で見る
       const failures = await page.evaluate(
         () => globalThis.__reviewCanvasStoryFailures ?? [],
@@ -210,13 +255,14 @@ const main = async () => {
       const phase =
         failures.length > 0 ? `errored: ${failures.join(" / ")}` : settled;
       // play 関数の終わりに settle()（src/features/review/stories/story-play.ts）を呼んだか。呼ばないと、撮るたびに画素がずれうる
-      const unsettled = await page.evaluate(
-        (mark) =>
-          typeof globalThis.__STORYBOOK_PREVIEW__?.currentRender?.story
-            ?.playFunction === "function" &&
-          globalThis.document.documentElement.getAttribute(mark) !== "true",
-        SETTLED_MARK_ATTRIBUTE,
-      );
+      // play 関数があるかは、一覧（index.json）の tags（play-fn）で見る
+      const unsettled =
+        withPlay.includes(id) &&
+        (await page.evaluate(
+          (mark) =>
+            globalThis.document.documentElement.getAttribute(mark) !== "true",
+          SETTLED_MARK_ATTRIBUTE,
+        ));
       // 描き終えた後の読み込み（画像・定期の取り直し）も見る
       await page.waitForTimeout(500);
       if (!SETTLED_PHASES.includes(phase)) {

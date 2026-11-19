@@ -184,7 +184,7 @@ jobs:
 
       # review-canvas 自身の画面の Storybook: 決めた状態のストーリーがそろい、どれも play 関数まで通り、
       # Storybook の外・MSW に無い道へ通信しないことを確かめる（Chromium は上の Screenshots で入れたもの）
-      # 上限は、スクリプトが 1 本を待つ上限（30 秒）× 12 本に、ブラウザを開く分を足したもの
+      # 上限は、スクリプト全体の締め切り（6 分。CHECK_TIME_LIMIT_MS）と、最後の 1 本の上限（開くのと描くのを 30 秒ずつ待つ）に、ブラウザを立ち上げる分を足したもの
       - name: Check app Storybook
         timeout-minutes: 8
         run: pnpm run check:storybook:app
