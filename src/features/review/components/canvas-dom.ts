@@ -30,6 +30,48 @@ export const focusCompareButton = (storyId: string): void => {
   else button.focus({ preventScroll: true });
 };
 
+/** 画面のつながりの「← …へ戻る」と札（TransitionLayer。札の値は線の key） */
+const TRANSITION_BACK_SELECTOR = "[data-transition-back]";
+const TRANSITION_LABEL_SELECTOR = "[data-transition-label]";
+
+/** 札で飛んだあと、「戻る」へフォーカスを移す（キーボードで押したときに body へ落とさない。無ければキャンバスへ） */
+export const focusTransitionBack = (): void => {
+  const button = document.querySelector<HTMLElement>(TRANSITION_BACK_SELECTOR);
+  if (button === null) focusCanvas();
+  else button.focus({ preventScroll: true });
+};
+
+/** 戻りきったあと、飛ぶ前に押した札へフォーカスを戻す（その札が無ければキャンバスへ） */
+export const focusTransitionLabel = (key: string): void => {
+  const label = Array.from(
+    document.querySelectorAll<HTMLElement>(TRANSITION_LABEL_SELECTOR),
+  ).find((element) => element.dataset["transitionLabel"] === key);
+  if (label === undefined) focusCanvas();
+  else label.focus({ preventScroll: true });
+};
+
+/**
+ * キャンバスの上に重ねたもの（画面のつながりの札など）の上で回したホイールを、キャンバスへ回す
+ * （キャンバスの上で回したのと同じに、動かす・拡大縮小する）
+ */
+export const forwardWheelToCanvas = (event: WheelEvent): void => {
+  document.querySelector(CANVAS_ROOT_SELECTOR)?.dispatchEvent(
+    new WheelEvent("wheel", {
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      deltaMode: event.deltaMode,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      bubbles: true,
+      cancelable: true,
+    }),
+  );
+};
+
 /** 中がスクロールしてしまったら戻す（clip でも、フォーカスの移動などで動いたときの保険） */
 export const resetScroll = (event: React.UIEvent<HTMLElement>) => {
   const target = event.currentTarget;

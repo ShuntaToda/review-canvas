@@ -151,6 +151,63 @@ describe("buildShotCatalog", () => {
   });
 });
 
+describe("buildShotCatalog（遷移）", () => {
+  const manifest = parseShotsManifest({
+    version: 1,
+    shots: [
+      shot({
+        transitions: [{ index: 0, x: 10, y: 20, width: 100, height: 40 }],
+      }),
+      shot({ width: 375, height: 812 }),
+    ],
+    playFunctions: {},
+    transitions: {
+      "shop-list--default": [
+        { index: 0, to: "shop-cart--default", label: "在庫があるとき" },
+        { index: 1, to: "shop-detail--default" },
+      ],
+    },
+  });
+  const catalog = buildShotCatalog(
+    manifest,
+    "https://sb.example.com/sb/main/shop/",
+  );
+
+  test("[正常系]ストーリーに書いた遷移の行と、幅ごとの画像の上のボタンの矩形を引く", () => {
+    expect(catalog.transitionsOf("shop-list--default")).toStrictEqual([
+      { index: 0, to: "shop-cart--default", label: "在庫があるとき" },
+      { index: 1, to: "shop-detail--default" },
+    ]);
+    expect(catalog.find("shop-list--default", 1000)?.transitions).toStrictEqual(
+      [{ index: 0, x: 10, y: 20, width: 100, height: 40 }],
+    );
+    expect(
+      catalog.find("shop-list--default", 375)?.transitions,
+    ).toBeUndefined();
+  });
+
+  test("[正常系]遷移の無いストーリー・古い目録・目録の無い Storybook は、遷移なし", () => {
+    expect(catalog.transitionsOf("shop-cart--default")).toStrictEqual([]);
+    expect(catalog.transitionsOf("toString")).toStrictEqual([]);
+    expect(
+      buildShotCatalog(
+        { version: 1, shots: [shot()], playFunctions: {} },
+        "",
+      ).transitionsOf("shop-list--default"),
+    ).toStrictEqual([]);
+    expect(
+      EMPTY_SHOT_CATALOG.transitionsOf("shop-list--default"),
+    ).toStrictEqual([]);
+  });
+
+  test("[正常系]その幅の画像を 1 枚でも持つかを答える（自分用に足した幅・画像の無いブランチは持たない）", () => {
+    expect(catalog.hasWidth(1000)).toBe(true);
+    expect(catalog.hasWidth(375)).toBe(true);
+    expect(catalog.hasWidth(1200)).toBe(false);
+    expect(EMPTY_SHOT_CATALOG.hasWidth(1000)).toBe(false);
+  });
+});
+
 describe("縮小した画像", () => {
   const thumb =
     "review-canvas-shots/shop-list--default-1000-0123456789abcdef-thumb.png";
