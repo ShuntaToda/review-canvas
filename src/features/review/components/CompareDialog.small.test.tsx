@@ -101,7 +101,7 @@ describe("CompareDialog", () => {
   test("[異常系]新しい画面で今の幅の画像も無ければ、右は幅の画像が無いことだけを出す", () => {
     renderDialog({ kind: "new", head: undefined, width: 1280 });
 
-    expect(screen.getByText("1280px の画像がありません。")).not.toBeNull();
+    expect(screen.getByText("1280px の画像がありません")).not.toBeNull();
     expect(screen.queryByText(/設定の幅のどれかに切り替える/)).toBeNull();
   });
 

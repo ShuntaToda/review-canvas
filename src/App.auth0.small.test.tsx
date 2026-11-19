@@ -696,6 +696,30 @@ describe("ブランチの切り替え", () => {
       expect(statusRow("Shop/Cart / Empty")).toBeTruthy();
     });
 
+    test("[境界値]画面名の絞り込みが空白だけのときは文字が無いものとみなし、キャンバスのボタンで「変わった画面だけ」を外す", async () => {
+      sdk.state = { isAuthenticated: true, error: undefined };
+      fetchMock.mockImplementation(compareFetch({ manifests: sameManifests }));
+      await renderApp("/?branch=feature%2Fa&page=shop");
+
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: "変わった画面だけ" }),
+      );
+      fireEvent.change(
+        screen.getByRole("searchbox", { name: "画面名で絞り込む" }),
+        { target: { value: "  " } },
+      );
+      expect(
+        screen.getByText("既定のブランチから変わった画面はありません。"),
+      ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "「変わった画面だけ」を外す" }),
+      );
+
+      expect(changedOnlyBox().checked).toBe(false);
+      expect(statusRow("Shop/Cart / Empty")).toBeTruthy();
+    });
+
     test("[正常系]コメント一覧から「変わった画面だけ」で隠れた画面のスレッドへ移ると、「変わった画面だけ」を外す", async () => {
       sdk.state = { isAuthenticated: true, error: undefined };
       fetchMock.mockImplementation(compareFetch({ comments: [cartComment] }));

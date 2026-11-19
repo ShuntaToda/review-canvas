@@ -1110,7 +1110,8 @@ export const ReviewWorkspace = ({
                   query={query}
                   changedOnly={branchCompare.changedOnly}
                   onClear={() => {
-                    if (query !== "") setQuery("");
+                    // 知らせの文言（Notices.tsx）と同じく、空白だけの文字は無いものとみなす
+                    if (query.trim() !== "") setQuery("");
                     else if (branchCompare.changedOnly) {
                       branchCompare.setChangedOnly(false);
                     } else setShowComponents(true);

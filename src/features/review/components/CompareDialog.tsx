@@ -20,8 +20,7 @@ const compareMessages = {
   missingWidth: (width: number) =>
     `${String(width)}px の画像がありません。設定の幅のどれかに切り替えると比べられます`,
   /** 新しい画面（比べる相手が無い）で、今の幅の画像も無い。幅を替えても比べられないので、切り替えは勧めない */
-  missingWidthOnly: (width: number) =>
-    `${String(width)}px の画像がありません。`,
+  missingWidthOnly: (width: number) => `${String(width)}px の画像がありません`,
   loadFailed: "画像を読み込めませんでした",
 } as const;
 

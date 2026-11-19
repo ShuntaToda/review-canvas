@@ -86,11 +86,11 @@ export const ReviewPage = ({
   const defaultPublished =
     meta.data?.branches.find((b) => b.branch === meta.data?.defaultBranch) ??
     null;
-  const comparing =
+  const onFeatureBranch =
     published !== null &&
     meta.data !== undefined &&
     branch !== meta.data.defaultBranch;
-  const baseShots = useShots(
+  const defaultBranchShots = useShots(
     `${storybookOrigin}${defaultPublished?.basePath ?? DEFAULT_STORYBOOK_BASE}`,
     catalog.ids.filter(
       (source) =>
@@ -99,7 +99,7 @@ export const ReviewPage = ({
     ),
     {
       access: session.access,
-      ready: session.ready && comparing && defaultPublished !== null,
+      ready: session.ready && onFeatureBranch && defaultPublished !== null,
     },
   );
 
@@ -225,13 +225,13 @@ export const ReviewPage = ({
           // 読み終えるまでは null（キャンバスは待たせず、印・絞り込み・比べるボタンを後から出す）。
           // 既定のブランチを置いていなければ、目録の無いものとして渡す
           baseShots={
-            comparing &&
+            onFeatureBranch &&
             defaultPublished !== null &&
-            baseShots.data === undefined
+            defaultBranchShots.data === undefined
               ? null
               : mapSources(
                   catalog.ids,
-                  (id) => baseShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
+                  (id) => defaultBranchShots.data?.[id] ?? EMPTY_SHOT_CATALOG,
                 )
           }
           initialUrl={urlState}

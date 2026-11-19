@@ -2,7 +2,8 @@ import { GitCompare } from "lucide-react";
 import type { Story } from "../model/storybook";
 
 /**
- * 画面の見出しの「既定のブランチと比べる」ボタン（「Storybook で開く」の隣）。既定のブランチを見ているときは出さない（Frame が onCompare を受けたときだけ出す）
+ * 画面の見出しの「既定のブランチと比べる」ボタン（「Storybook で開く」の隣）。Frame が onCompare を受けたときだけ出す
+ * （既定のブランチを見ているとき・既定のブランチの目録を読み終える前は渡さない（useBranchCompare の canOpen））
  */
 export const CompareButton = ({
   story,
