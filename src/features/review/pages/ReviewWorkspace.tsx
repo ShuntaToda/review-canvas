@@ -24,6 +24,7 @@ import { ThreadPopover } from "../components/ThreadPopover";
 import { Toolbar } from "../components/Toolbar";
 import { ZoomControls } from "../components/ZoomControls";
 import { focusCanvas, isInsideStoryList } from "../components/canvas-dom";
+import { useCollapsedFolders } from "../hooks/useCollapsedFolders";
 import { useCustomWidths } from "../hooks/useCustomWidths";
 import { useElementSize } from "../hooks/useElementSize";
 import { useLocalSetting } from "../hooks/useLocalSetting";
@@ -35,6 +36,7 @@ import {
 } from "../hooks/useReviewData";
 import { useSources } from "../hooks/useSources";
 import { useStoryListOpen } from "../hooks/useStoryListOpen";
+import { useStoryScope } from "../hooks/useStoryScope";
 import { useStorybookBase } from "../hooks/useStorybookBase";
 import { useThreadNavigation } from "../hooks/useThreadNavigation";
 import {
@@ -77,6 +79,11 @@ import {
 } from "../model/shortcuts";
 import { mapSources, type StorySource } from "../model/sources";
 import { EMPTY_SHOT_CATALOG, type ShotCatalog } from "../model/story-shots";
+import {
+  filterStoriesByScope,
+  isTitleInScope,
+  resolveInitialScope,
+} from "../model/story-tree";
 import { isComponentStory, type Story, storyKey } from "../model/storybook";
 import {
   buildThreads,
@@ -125,11 +132,12 @@ type ReviewWorkspaceProps = {
   published: ReviewMetaBranch | null;
   /** Storybook を置いてあるブランチ（切り替える欄の行） */
   publishedBranches: ReadonlyArray<ReviewMetaBranch>;
-  /** ブランチを切り替える（いまのページと、真ん中に見えている画面は保つ） */
+  /** ブランチを切り替える（いまのページと、真ん中に見えている画面・見せる範囲は保つ） */
   onBranchChange: (
     branch: string,
     page: StorySource,
     story: string | undefined,
+    scope: string | undefined,
   ) => void;
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
@@ -188,6 +196,11 @@ export const ReviewWorkspace = ({
       storyId === undefined
         ? undefined
         : storiesByKey.get(storyKey(page, storyId));
+    // 見せる範囲。合う画面が無ければ外して知らせる
+    const scope = resolveInitialScope(initialUrl.scope, {
+      stories: storiesOf(page),
+      focused: story,
+    });
     const cameras = mapSources<CameraState>(sources.ids, () => ({
       kind: "initial",
     }));
@@ -206,6 +219,8 @@ export const ReviewWorkspace = ({
     }
     return {
       page,
+      scope: scope.scope,
+      scopeMissing: scope.missing,
       cameras,
       // 見つからないスレッド（削除された・別のブランチ）へのリンクでも ID を残し、見つからないと知らせる
       threadId: thread?.root.id ?? initialUrl.comment ?? null,
@@ -220,6 +235,9 @@ export const ReviewWorkspace = ({
   const [page, setPage] = useState<StorySource>(initial.page);
   const [tool, setTool] = useState<Tool>("move");
   const [query, setQuery] = useState("");
+  // 見せる範囲（画面の一覧のフォルダのパス）。キャンバス・画面の一覧・コメント一覧をその中の画面だけにする（見せ方だけで、守りではない）
+  const [scope, setScope] = useStoryScope(page, initial.scope);
+  const [collapsedFolders, toggleFolder] = useCollapsedFolders(page);
   const [showComponents, setShowComponents] = useState(initial.showComponents);
   // ページごとの画面の幅（いまの幅と、見る人が自分で足した幅）
   const pageWidths = useCustomWidths(sources);
@@ -267,7 +285,9 @@ export const ReviewWorkspace = ({
   const [status, setStatus] = useState<StatusFilter>(initial.status);
   const [titleFilter, setTitleFilter] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogKind | null>(null);
-  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string } | null>(() =>
+    initial.scopeMissing ? { message: "この範囲の画面はありません" } : null,
+  );
   // 書き込みが 401 になった（ログインの期限切れ）。消えるお知らせではなく、ログインし直す操作と一緒に出しておく
   const [writeUnauthorized, setWriteUnauthorized] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -315,12 +335,15 @@ export const ReviewWorkspace = ({
   const pageWidthOptions = pageWidths.optionsOf(page);
   const rowsFor = (
     source: StorySource,
-    filters: { showComponents: boolean; query: string },
+    {
+      scope: scopeFilter,
+      ...filters
+    }: { showComponents: boolean; query: string; scope: string | undefined },
   ) => {
-    const visible = filterStories(storiesOf(source), {
-      ...filters,
-      excludeTitlePrefixes: sources.excludeTitlePrefixes,
-    });
+    const visible = filterStories(
+      filterStoriesByScope(storiesOf(source), scopeFilter),
+      { ...filters, excludeTitlePrefixes: sources.excludeTitlePrefixes },
+    );
     // 高さは、iframe で測ったもの。まだ測っていなければ、発行のときの画像の高さ（読み込む前から、並びを本物の高さにする）
     const measured: Record<string, number> = {};
     for (const story of visible) {
@@ -336,7 +359,7 @@ export const ReviewWorkspace = ({
       perRow,
     });
   };
-  const rows = rowsFor(page, { showComponents, query });
+  const rows = rowsFor(page, { showComponents, query, scope });
   const bounds = boundsOfRows(rows);
   const viewport = canvas.size;
   const cameraContext = {
@@ -396,6 +419,7 @@ export const ReviewWorkspace = ({
     const search = buildSearch({
       ...(branch === defaultBranch ? {} : { branch }),
       page,
+      ...(scope === undefined ? {} : { scope }),
       ...(urlCommentId === null && centerStoryId !== undefined
         ? { story: centerStoryId }
         : {}),
@@ -408,7 +432,7 @@ export const ReviewWorkspace = ({
       "",
       `${window.location.pathname}${search}`,
     );
-  }, [branch, defaultBranch, page, urlCommentId, centerStoryId, status]);
+  }, [branch, defaultBranch, page, scope, urlCommentId, centerStoryId, status]);
 
   /**
    * API の失敗を、呼んだ側（入力欄・吹き出し）へそのまま伝える。失敗は消えるお知らせにせず、送った所に残して送り直せるようにする
@@ -427,6 +451,7 @@ export const ReviewWorkspace = ({
     `${window.location.origin}${window.location.pathname}${buildSearch({
       branch,
       ...state,
+      ...(scope === undefined ? {} : { scope }),
       ...(status === "open" ? {} : { status }),
     })}`;
   const copyLink = (state: UrlState) => {
@@ -440,6 +465,22 @@ export const ReviewWorkspace = ({
     setPage(next);
     setDraft(null);
     setTitleFilter(undefined);
+  };
+
+  /** 見せる範囲を替える（並びが変わるので、見え方は初めに戻す。範囲の外の画面で絞った一覧は外す） */
+  const changeScope = (next: string | undefined) => {
+    setScope(next);
+    setCameraStates((previous) => ({
+      ...previous,
+      [page]: { kind: "initial" },
+    }));
+    if (
+      next !== undefined &&
+      titleFilter !== undefined &&
+      !isTitleInScope(titleFilter, next)
+    ) {
+      setTitleFilter(undefined);
+    }
   };
 
   /** 画面の一覧で選んだ状態へ移る（並びに出ているものだけを選べるので、絞り込みは変えない） */
@@ -468,6 +509,13 @@ export const ReviewWorkspace = ({
       // 絞り込みで隠れているときは、見えるように戻す
       let nextShowComponents = showComponents;
       let nextQuery = query;
+      // 範囲はいまのページの中だけ。ほかのページ・範囲の外の画面へ移るときは外す
+      const nextScope =
+        root.source === page &&
+        scope !== undefined &&
+        isTitleInScope(story.title, scope)
+          ? scope
+          : undefined;
       if (isComponentStory(story, sources.excludeTitlePrefixes)) {
         nextShowComponents = true;
       }
@@ -482,12 +530,14 @@ export const ReviewWorkspace = ({
       }
       setShowComponents(nextShowComponents);
       setQuery(nextQuery);
+      setScope(nextScope);
       const currentZoom = resolveCamera(
         cameraStateOf(cameraStates, root.source),
         {
           rows: rowsFor(root.source, {
             showComponents: nextShowComponents,
             query: nextQuery,
+            scope: nextScope,
           }),
           bounds: null,
           viewport,
@@ -633,8 +683,13 @@ export const ReviewWorkspace = ({
       .map((t) => t.root.id),
   );
 
-  // 一覧（いまのページ・解決の状態・画面で絞り込む）
-  const titleThreads = filterThreads(pageThreads, {
+  // 一覧（いまのページ・見せる範囲・解決の状態・画面で絞り込む）
+  const scopeThreads = filterThreads(pageThreads, {
+    status: "all",
+    scope,
+    stories: storiesByKey,
+  });
+  const titleThreads = filterThreads(scopeThreads, {
     status: "all",
     title: titleFilter,
     stories: storiesByKey,
@@ -751,7 +806,7 @@ export const ReviewWorkspace = ({
 
   const titles = [
     ...new Set(
-      pageThreads.flatMap((t) => {
+      scopeThreads.flatMap((t) => {
         const story = storiesByKey.get(storyKey(t.root.source, t.root.storyId));
         return story === undefined ? [] : [story.title];
       }),
@@ -857,7 +912,9 @@ export const ReviewWorkspace = ({
         commit={commit}
         branchOptions={branchOptions}
         onBranchChange={(next) => {
-          if (next !== branch) onBranchChange(next, page, centerStoryId);
+          if (next !== branch) {
+            onBranchChange(next, page, centerStoryId, scope);
+          }
         }}
         userName={me.name}
         onLogout={onLogout}
@@ -876,6 +933,10 @@ export const ReviewWorkspace = ({
             onQueryChange={setQuery}
             searchRef={searchRef}
             onSelectStory={focusStory}
+            scope={scope}
+            onScopeChange={changeScope}
+            collapsed={collapsedFolders}
+            onToggleFolder={toggleFolder}
           >
             <DisplaySettings
               showComponents={showComponents}

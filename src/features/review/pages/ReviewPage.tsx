@@ -178,11 +178,12 @@ export const ReviewPage = ({
           defaultBranch={meta.data.defaultBranch}
           published={published}
           publishedBranches={meta.data.branches}
-          // 切り替える前に真ん中に見えていた画面を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
-          onBranchChange={(next, page, story) =>
+          // 切り替える前に真ん中に見えていた画面・見せる範囲を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
+          onBranchChange={(next, page, story, scope) =>
             setUrlState({
               branch: next,
               page,
+              ...(scope === undefined ? {} : { scope }),
               ...(story === undefined ? {} : { story }),
             })
           }
