@@ -678,6 +678,38 @@ export default tseslint.config(
       "react/self-closing-comp": ["error", { component: true, html: true }],
       "react/jsx-curly-brace-presence": "error",
       "react/prop-types": "off",
+      // フォーカスできる separator はウィジェット（WAI-ARIA 1.2 https://www.w3.org/TR/wai-aria-1.2/#separator ・window splitter のパターン）。
+      // jsx-a11y は操作しない要素として扱う。recommended の既定を保ったまま、境目の <hr>（もともと separator）にだけ、フォーカスと矢印キーを許す
+      // （no-noninteractive-element-interactions の個別の許可は role ではなく要素の名前で引くので、role="separator" の div ではなく hr にする）
+      "jsx-a11y/no-noninteractive-tabindex": [
+        "error",
+        {
+          tags: ["hr"],
+          roles: ["tabpanel"],
+          allowExpressionValues: true,
+        },
+      ],
+      "jsx-a11y/no-noninteractive-element-interactions": [
+        "error",
+        {
+          handlers: [
+            "onClick",
+            "onError",
+            "onLoad",
+            "onMouseDown",
+            "onMouseUp",
+            "onKeyPress",
+            "onKeyDown",
+            "onKeyUp",
+          ],
+          alert: ["onKeyUp", "onKeyDown", "onKeyPress"],
+          body: ["onError", "onLoad"],
+          dialog: ["onKeyUp", "onKeyDown", "onKeyPress"],
+          iframe: ["onError", "onLoad"],
+          img: ["onError", "onLoad"],
+          hr: ["onKeyDown"],
+        },
+      ],
       "@typescript-eslint/no-misused-promises": "off",
       "import/no-restricted-paths": [
         "error",
