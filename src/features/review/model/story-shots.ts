@@ -727,6 +727,8 @@ export type ShotView = {
   thumbUrl?: string;
   contentHeight?: number;
   elements?: ReadonlyArray<ShotElement>;
+  /** 画像の上の遷移のボタンの矩形（見つからなかった行は無い） */
+  transitions?: ReadonlyArray<ShotTransition>;
 };
 
 /**
@@ -754,6 +756,10 @@ export type ShotCatalog = {
   hasManifest: boolean;
   /** そのストーリーの画像を、どれかの幅で 1 枚でも持つか */
   hasStory: (storyId: string) => boolean;
+  /** その幅の画像を 1 枚でも持つか（持たない幅は、撮っていない幅。自分用に足した幅など） */
+  hasWidth: (width: number) => boolean;
+  /** ストーリーに書いた遷移の行（書いた順。無ければ空） */
+  transitionsOf: (storyId: string) => ReadonlyArray<StoryTransition>;
 };
 
 const shotKey = (storyId: string, width: number): string =>
@@ -777,11 +783,16 @@ export const buildShotCatalog = (
           ? {}
           : { contentHeight: shot.contentHeight }),
         ...(shot.elements === undefined ? {} : { elements: shot.elements }),
+        ...(shot.transitions === undefined
+          ? {}
+          : { transitions: shot.transitions }),
       },
     ]),
   );
   const playFunctions = manifest?.playFunctions ?? {};
+  const transitions = manifest?.transitions ?? {};
   const storyIds = new Set((manifest?.shots ?? []).map((shot) => shot.storyId));
+  const widths = new Set((manifest?.shots ?? []).map((shot) => shot.width));
   return {
     find: (storyId, width) => byKey.get(shotKey(storyId, width)),
     hasPlayFunction: (storyId) =>
@@ -791,6 +802,9 @@ export const buildShotCatalog = (
     size: byKey.size,
     hasManifest: manifest !== null,
     hasStory: (storyId) => storyIds.has(storyId),
+    hasWidth: (width) => widths.has(width),
+    transitionsOf: (storyId) =>
+      Object.hasOwn(transitions, storyId) ? (transitions[storyId] ?? []) : [],
   };
 };
 
