@@ -1,0 +1,133 @@
+name: deploy
+
+# このリポジトリのスタック（infra/ の CDK アプリ。bin/review-canvas.ts）を、既定のブランチから AWS へ出す（docs/deploy.md「ワークフローから出す」）。
+# リポジトリの変数 REVIEW_CANVAS_DEPLOY_ENABLED が true で、既定のブランチで動いたときだけ出す。
+# 有効にしていないリポジトリ（フォーク・使う側の写し）では、Environment に入らず AWS にもつながずに飛ばす。
+# 出す前に、出す Environment の承認（Required reviewers）を待つ。出せるブランチを既定のブランチに絞るのも Environment の設定で行う。
+#
+# 値は出す Environment の変数・Secret に置く（コードには書かない）。表示しない: 設定ファイル・IP の範囲・使ってよいメール・M2M の client。
+# そのため cdk diff・synth は動かさない（差は、初めて出す前に手元で同じ値を使って確かめる）。
+#
+# Action はコミットの SHA で固定する（ci.yml・publish.yml と同じ）。認証情報を扱うので、ほかのジョブが書いたキャッシュ（pnpm のキャッシュ等）を読まない。
+# push の branches は main にしてある。既定のブランチが main でないリポジトリに写すときは、ここを既定のブランチに変える（ジョブの if も既定のブランチを確かめる）
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 出すのは 1 つずつ。動いている途中のものは止めない（CloudFormation の更新中に次の deploy を重ねない）。
+# 承認待ちのまま古くなった実行は、人が却下する
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    if: >-
+      vars.REVIEW_CANVAS_DEPLOY_ENABLED == 'true' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    # 依存・ビルドと、CloudFront の更新を含む deploy（1 時間を超えることがある。ロールは 2 時間で引き受ける）
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      # OIDC で出す用のロール（infra/bin/deploy-role.ts）を引き受ける
+      id-token: write
+    # ロールの信頼ポリシーは environment を sub に入れて完全一致させる
+    environment: ${{ vars.REVIEW_CANVAS_DEPLOY_ENVIRONMENT || 'review-canvas-deploy' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 必須の値が無ければ、資格情報を取る前に、無い名前を出して止める（値は出さない）
+      - name: Check settings
+        env:
+          REVIEW_CANVAS_AUTH0_DOMAIN: ${{ vars.REVIEW_CANVAS_AUTH0_DOMAIN }}
+          REVIEW_CANVAS_AUTH0_CLIENT_ID: ${{ vars.REVIEW_CANVAS_AUTH0_CLIENT_ID }}
+          REVIEW_CANVAS_AUTH0_AUDIENCE: ${{ vars.REVIEW_CANVAS_AUTH0_AUDIENCE }}
+          REVIEW_CANVAS_AWS_REGION: ${{ vars.REVIEW_CANVAS_AWS_REGION }}
+          REVIEW_CANVAS_DEPLOY_ROLE_ARN: ${{ secrets.REVIEW_CANVAS_DEPLOY_ROLE_ARN }}
+          REVIEW_CANVAS_CONFIG_BASE64: ${{ secrets.REVIEW_CANVAS_CONFIG_BASE64 }}
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: ${{ vars.REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY }}
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS: ${{ secrets.REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS }}
+        run: pnpm --silent --dir infra run deploy-env check
+
+      # 設定ファイル（並べる Storybook）は、base64 にした Secret から書き出す。空・base64 として読めなければ、
+      # リポジトリのサンプルの設定で出さずに止める
+      - name: Write config
+        env:
+          CONFIG_BASE64: ${{ secrets.REVIEW_CANVAS_CONFIG_BASE64 }}
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/review-canvas.config.json"
+          if [ -z "$CONFIG_BASE64" ]; then
+            echo "::error::出す Environment の Secret REVIEW_CANVAS_CONFIG_BASE64 が空です"
+            exit 1
+          fi
+          if ! printf '%s' "$CONFIG_BASE64" | base64 --decode > "$config" 2>/dev/null || [ ! -s "$config" ]; then
+            echo "::error::Secret REVIEW_CANVAS_CONFIG_BASE64 を base64 として読めません（base64 -w 0 review-canvas.config.json の出力を置きます）"
+            exit 1
+          fi
+          echo "REVIEW_CANVAS_CONFIG=$config" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: pnpm run build:deployed
+
+      # 資格情報を取るのは、設定の書き出しとビルドの後。アカウント ID は記録で伏せる
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.REVIEW_CANVAS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.REVIEW_CANVAS_AWS_REGION }}
+          role-duration-seconds: 7200
+          mask-aws-account-id: true
+
+      # 置いていない任意の値は環境変数にしない（空の文字列で渡すと、使ってよいメールのドメインなどが「空を指定した」になる）。
+      # 振り分けは infra/scripts/deploy-env.ts。pnpm --dir infra run deploy:no-build --require-approval never を動かす
+      # （deploy-env は infra に移ってから動くので、その中では pnpm run deploy:no-build）。
+      # ワークフローでは確認に答えられないので --require-approval never にする（IAM などの権限を変える変更は、PR のレビューで人が見る）
+      - name: Deploy
+        env:
+          REVIEW_CANVAS_AUTH0_DOMAIN: ${{ vars.REVIEW_CANVAS_AUTH0_DOMAIN }}
+          REVIEW_CANVAS_AUTH0_CLIENT_ID: ${{ vars.REVIEW_CANVAS_AUTH0_CLIENT_ID }}
+          REVIEW_CANVAS_AUTH0_AUDIENCE: ${{ vars.REVIEW_CANVAS_AUTH0_AUDIENCE }}
+          REVIEW_CANVAS_STACK_NAME: ${{ vars.REVIEW_CANVAS_STACK_NAME }}
+          REVIEW_CANVAS_DEFAULT_BRANCH: ${{ vars.REVIEW_CANVAS_DEFAULT_BRANCH }}
+          REVIEW_CANVAS_GITHUB_ENVIRONMENT: ${{ vars.REVIEW_CANVAS_GITHUB_ENVIRONMENT }}
+          REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT: ${{ vars.REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT }}
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: ${{ vars.REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY }}
+          REVIEW_CANVAS_ACCOUNT: ${{ secrets.REVIEW_CANVAS_ACCOUNT }}
+          REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS: ${{ secrets.REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS }}
+          REVIEW_CANVAS_GITHUB_OIDC_PROVIDER: ${{ secrets.REVIEW_CANVAS_GITHUB_OIDC_PROVIDER }}
+          REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX: ${{ secrets.REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX }}
+          REVIEW_CANVAS_ALLOWED_IP_CIDRS: ${{ secrets.REVIEW_CANVAS_ALLOWED_IP_CIDRS }}
+          REVIEW_CANVAS_WEB_ACL_ARN: ${{ secrets.REVIEW_CANVAS_WEB_ACL_ARN }}
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS: ${{ secrets.REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS }}
+          REVIEW_CANVAS_ALLOWED_EMAILS: ${{ secrets.REVIEW_CANVAS_ALLOWED_EMAILS }}
+          REVIEW_CANVAS_M2M_CLIENTS: ${{ secrets.REVIEW_CANVAS_M2M_CLIENTS }}
+          # 手元の esbuild でバンドルできないときに Docker へ逃げず、その場で落とす
+          CDK_DOCKER: "false"
+        run: pnpm --silent --dir infra run deploy-env run pnpm run deploy:no-build --require-approval never

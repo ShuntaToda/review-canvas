@@ -43,13 +43,13 @@ review-canvas/
 │   ├── features/review/      # model（座標・配置・スレッド・Markdown など純粋な処理）・components・hooks・pages・bridge（Storybook との橋渡し）
 │   ├── support/ utils/
 │   └── generated/            # openapi.json から作る API の型（生成物・コミットしない）
-├── infra/                    # CDK（コンストラクト ReviewCanvas・そのまま出すアプリ）と、ブランチの Storybook を置くスクリプト（scripts/）
+├── infra/                    # CDK（コンストラクト ReviewCanvas・そのまま出すアプリ・出す用のロールのアプリ）と、ブランチの Storybook を置くスクリプト（scripts/）
 ├── examples/sample-storybook # 架空のショップのサンプル Storybook（React + Vite・play 関数・msw）
 ├── bin/                      # CLI（review-canvas.mjs）・MCP サーバー（review-canvas-mcp.mjs）
 ├── eslint-rules/             # このリポジトリだけの ESLint ルール（層ごとのファイルの形など）
 ├── scripts/                  # 開発用のスクリプト（new-api.mjs: API の雛形）・リポジトリの決まりのテスト
 ├── .claude/                  # Claude Code の hook・スキル（dev-*: このリポジトリの開発用）・レビュー用のサブエージェント（agents/）
-├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）
+├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）・deploy.yml（既定のブランチからスタックを出す。変数で有効にしたときだけ）
 ├── .github/ISSUE_TEMPLATE/   # 親 Issue・PR 単位の Issue・不具合のテンプレート（pull_request_template.md は PR の本文）
 ├── review-canvas.config.json # サンプルの設定（並べる Storybook）。review-canvas.config.schema.json は生成物
 └── openapi.json              # API の契約（生成物）
