@@ -115,10 +115,21 @@ describe(".github/workflows/deploy.yml の値の受け渡し", () => {
   });
 
   test("[正常系]cdk diff・synth を動かさない（設定ファイル・IP の範囲が、伏せ字にならない形で記録に出るため）", () => {
-    const commands = codeLines.filter((line) =>
-      /\b(cdk\s+(diff|synth)|run\s+(diff|synth))\b/.test(line),
-    );
+    // cdk diff・pnpm run diff・run を省いた pnpm --dir infra synth・deploy-role:diff のどれも、語としての diff・synth で拾う
+    const commands = codeLines.filter((line) => /\b(diff|synth)\b/.test(line));
     expect(commands).toStrictEqual([]);
+  });
+
+  test("[正常系]必須の値の確かめ・設定の書き出し・ビルドは資格情報を取る前に、出すのはその後に動く", () => {
+    const order = Object.keys(steps);
+    const credentials = order.indexOf("Configure AWS credentials");
+
+    expect(credentials).toBeGreaterThan(0);
+    for (const before of ["Check settings", "Write config", "Build"]) {
+      expect(order.indexOf(before), before).toBeGreaterThanOrEqual(0);
+      expect(order.indexOf(before), before).toBeLessThan(credentials);
+    }
+    expect(order.indexOf("Deploy")).toBeGreaterThan(credentials);
   });
 
   test("[正常系]守るアカウントのファイルと、独自ドメイン・ログイン連動の値を渡さない", () => {
