@@ -96,9 +96,9 @@ pnpm dev                    # → http://localhost:4100
 | 文書                                                             | 内容                                                                                                                   |
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | [docs/host-setup.md](docs/host-setup.md)                         | 使う側のリポジトリでの準備（設定ファイルの項目・ストーリーに遷移を書く・CLI・呼ぶワークフローの例・CDK に組み込む）    |
-| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順）                                                             |
+| [docs/deploy.md](docs/deploy.md)                                 | AWS へ出す・片付ける（設定・出力・はじめて使うときの手順・ワークフローから出す）                                       |
 | [docs/auth0.md](docs/auth0.md)                                   | Auth0 の設定（メールのワンタイムコード・招待制・使う人を足す・Post Login の Action・AI が呼ぶ M2M）                    |
-| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・Environment・変数）                                                            |
+| [docs/github-aws-permissions.md](docs/github-aws-permissions.md) | GitHub と AWS に要る権限（発行用ロール・出す用のロール・Environment・変数）                                            |
 | [docs/publishing.md](docs/publishing.md)                         | ブランチの Storybook を置く・消す（置き場・手元から・GitHub Actions から）                                             |
 | [docs/security.md](docs/security.md)                             | セキュリティの考え方（別のオリジン・橋渡し・ログイン・置くときの守り）                                                 |
 | [docs/ai.md](docs/ai.md)                                         | AI に直してもらう（MCP サーバーの道具・環境変数・Claude Code への登録・スキル）                                        |

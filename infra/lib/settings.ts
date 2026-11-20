@@ -141,11 +141,11 @@ export const DEFAULT_GITHUB_ENVIRONMENTS = {
 } as const;
 
 /** GitHub Actions の OIDC プロバイダーの ARN の形 */
-const OIDC_PROVIDER_ARN_PATTERN =
+export const OIDC_PROVIDER_ARN_PATTERN =
   /^arn:aws[a-z-]*:iam::\d{12}:oidc-provider\/token\.actions\.githubusercontent\.com$/;
 
 /** スタックの名前の形（CloudFormation のスタック名。ロールの名前の頭にも使うので短く） */
-const STACK_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
+export const STACK_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
 
 /** 設定の名前（コンテキストのキーと環境変数の名前） */
 export const SETTING_KEYS = {
@@ -339,6 +339,100 @@ const toList = (raw: string | undefined): string[] =>
 /** ブランチ名の形（API の branchSchema と同じ。合わないと画面からコメントを書けない） */
 const BRANCH_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._\-/]*$/;
 
+/** 設定の名前（コンテキストのキーと環境変数の名前） */
+export type SettingName = { context: string; env: string };
+
+/**
+ * 設定を 1 つ読む関数を作る（コンテキストが先、無ければ環境変数。前後の空白を落とし、空は指定しなかったとみなす）。
+ * 本体（readSettings）と出す用のロール（deploy-role-settings.ts）で同じ読み方にする
+ */
+export const createSettingReader =
+  ({
+    context,
+    env,
+  }: {
+    context: (key: string) => unknown;
+    env: NodeJS.ProcessEnv;
+  }) =>
+  ({ context: contextKey, env: envKey }: SettingName): string | undefined => {
+    const fromContext = context(contextKey);
+    const value =
+      typeof fromContext === "string" && fromContext !== ""
+        ? fromContext
+        : env[envKey];
+    return value === undefined || value.trim() === ""
+      ? undefined
+      : value.trim();
+  };
+
+/**
+ * 出し先のアカウントと、出してはいけないアカウント（protectedAccountIds と protectedAccountsFile を合わせたもの）を読む。
+ * 本体と出す用のロールで同じ確かめ方にする
+ */
+export const readDeployTarget = ({
+  read,
+  cwd,
+}: {
+  read: (
+    key: "account" | "protectedAccountIds" | "protectedAccountsFile",
+  ) => string | undefined;
+  cwd: string;
+}): Pick<ReviewCanvasSettings, "account" | "protectedAccountIds"> => {
+  const account = read("account");
+  if (account !== undefined && !/^\d{12}$/.test(account)) {
+    throw new Error(`account は12桁の数字にしてください: "${account}"`);
+  }
+  const protectedAccountIds = toList(read("protectedAccountIds"));
+  const badAccount = protectedAccountIds.find((id) => !/^\d{12}$/.test(id));
+  if (badAccount !== undefined) {
+    throw new Error(
+      `protectedAccountIds は12桁の数字をカンマ区切りで指定してください: "${badAccount}"`,
+    );
+  }
+  const protectedAccountsFile = read("protectedAccountsFile");
+  if (protectedAccountsFile !== undefined) {
+    protectedAccountIds.push(
+      ...readProtectedAccountsFile(path.resolve(cwd, protectedAccountsFile)),
+    );
+  }
+  return { account, protectedAccountIds };
+};
+
+/** OIDC トークンの sub の接頭辞の形を確かめる（repo:<owner>/<repo>。* や : を含めない） */
+export const assertSubPrefix = (subPrefix: string): void => {
+  if (!/^repo:[^:*\s]+$/.test(subPrefix)) {
+    throw new Error(
+      `githubOidcSubPrefix は repo:<owner>/<repo>（immutable subject なら ID 付き）にしてください（* や : を含めない）: "${subPrefix}"`,
+    );
+  }
+};
+
+/** GitHub の Environment の名前の形を確かめる */
+export const assertEnvironmentName = (name: string, value: string): void => {
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error(`${name} は英数字と . _ - だけにしてください: "${value}"`);
+  }
+};
+
+/** 発行用ロールの Environment（指定しなければ既定の名前）を読む */
+export const readPublishEnvironments = (
+  read: (
+    key: "githubEnvironment" | "githubMainEnvironment",
+  ) => string | undefined,
+): Pick<
+  ReviewCanvasSettings["publisher"],
+  "environment" | "mainEnvironment"
+> => {
+  const environment =
+    read("githubEnvironment") ?? DEFAULT_GITHUB_ENVIRONMENTS.githubEnvironment;
+  const mainEnvironment =
+    read("githubMainEnvironment") ??
+    DEFAULT_GITHUB_ENVIRONMENTS.githubMainEnvironment;
+  assertEnvironmentName("githubEnvironment", environment);
+  assertEnvironmentName("githubMainEnvironment", mainEnvironment);
+  return { environment, mainEnvironment };
+};
+
 /**
  * コンテキストと環境変数からデプロイの設定を読む。足りない・形の誤りは synth の時点で例外にする（出してから気づかない）
  */
@@ -353,17 +447,9 @@ export const readSettings = ({
   /** 相対パス（設定ファイル・守るアカウントのファイル）の起点。既定は pnpm を動かした場所（INIT_CWD）か、いまの場所 */
   cwd?: string;
 }): ReviewCanvasSettings => {
-  const read = (key: SettingKey): string | undefined => {
-    const { context: contextKey, env: envKey } = SETTING_KEYS[key];
-    const fromContext = context(contextKey);
-    const value =
-      typeof fromContext === "string" && fromContext !== ""
-        ? fromContext
-        : env[envKey];
-    return value === undefined || value.trim() === ""
-      ? undefined
-      : value.trim();
-  };
+  const readName = createSettingReader({ context, env });
+  const read = (key: SettingKey): string | undefined =>
+    readName(SETTING_KEYS[key]);
   /** 空も「指定した」とみなして読む（指定しなければ undefined、空を指定したら ""） */
   const readOrEmpty = (key: SettingKey): string | undefined => {
     const { context: contextKey, env: envKey } = SETTING_KEYS[key];
@@ -405,23 +491,7 @@ export const readSettings = ({
       `stackName は英字で始まる英数字と - の40文字までにしてください: "${stackName}"`,
     );
   }
-  const account = read("account");
-  if (account !== undefined && !/^\d{12}$/.test(account)) {
-    throw new Error(`account は12桁の数字にしてください: "${account}"`);
-  }
-  const protectedAccountIds = toList(read("protectedAccountIds"));
-  const badAccount = protectedAccountIds.find((id) => !/^\d{12}$/.test(id));
-  if (badAccount !== undefined) {
-    throw new Error(
-      `protectedAccountIds は12桁の数字をカンマ区切りで指定してください: "${badAccount}"`,
-    );
-  }
-  const protectedAccountsFile = read("protectedAccountsFile");
-  if (protectedAccountsFile !== undefined) {
-    protectedAccountIds.push(
-      ...readProtectedAccountsFile(path.resolve(cwd, protectedAccountsFile)),
-    );
-  }
+  const { account, protectedAccountIds } = readDeployTarget({ read, cwd });
   const configFile = path.resolve(
     cwd,
     read("configFile") ?? DEFAULT_CONFIG_FILE,
@@ -452,26 +522,8 @@ export const readSettings = ({
       "githubOidcProvider を指定したときは githubOidcSubPrefix（REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX。repo:<owner>/<repo>）も指定してください（既定は持ちません）",
     );
   }
-  if (subPrefix !== "" && !/^repo:[^:*\s]+$/.test(subPrefix)) {
-    throw new Error(
-      `githubOidcSubPrefix は repo:<owner>/<repo>（immutable subject なら ID 付き）にしてください（* や : を含めない）: "${subPrefix}"`,
-    );
-  }
-  const environment =
-    read("githubEnvironment") ?? DEFAULT_GITHUB_ENVIRONMENTS.githubEnvironment;
-  const mainEnvironment =
-    read("githubMainEnvironment") ??
-    DEFAULT_GITHUB_ENVIRONMENTS.githubMainEnvironment;
-  for (const [name, value] of [
-    ["githubEnvironment", environment],
-    ["githubMainEnvironment", mainEnvironment],
-  ] as const) {
-    if (!/^[A-Za-z0-9._-]+$/.test(value)) {
-      throw new Error(
-        `${name} は英数字と . _ - だけにしてください: "${value}"`,
-      );
-    }
-  }
+  if (subPrefix !== "") assertSubPrefix(subPrefix);
+  const { environment, mainEnvironment } = readPublishEnvironments(read);
   if (environment === mainEnvironment) {
     throw new Error(
       `githubEnvironment と githubMainEnvironment は別の名前にしてください（既定のブランチだけを書けるロールを分けるため）: "${environment}"`,

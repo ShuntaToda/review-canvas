@@ -10,6 +10,21 @@
 
 出してはいけないアカウントは `REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS`・`REVIEW_CANVAS_PROTECTED_ACCOUNTS_FILE` に入れておくと、組み立てる時点で止まります（[deploy.md](deploy.md)）。
 
+GitHub Actions（`deploy.yml`）から出すときは、出す人の代わりに下の「出す用のロール」が、同じブートストラップのロールを引き受けます。
+
+## AWS: 出す用のロール（deploy.yml が引き受ける）
+
+このリポジトリの `.github/workflows/deploy.yml` からスタックを出すときに、ワークフローが OIDC で引き受けるロールです。本体とは別の CDK アプリ（`infra/bin/deploy-role.ts`。スタック既定 `ReviewCanvasDeployRole`、出力 `DeployRoleArn`）で、手元から 1 度作ります（手順は [deploy.md](deploy.md#ワークフローから出す)）。
+
+- 信頼: OIDC トークンの `aud`（`sts.amazonaws.com`）と `sub`（`<接頭辞>:environment:<出す Environment>`。既定 `review-canvas-deploy`）の完全一致だけ。OIDC プロバイダーは作らず、今あるもの（出し先のアカウントのもの）の ARN を受けます
+- 権限: `sts:AssumeRole` を、出し先のリージョンと us-east-1 の `cdk-<修飾子>-{deploy,file-publishing,image-publishing,lookup}-role-<アカウント>-<リージョン>` にだけ許します。ほかの権限は持ちません（リソースを作るのは、ブートストラップの CloudFormation の実行ロール）
+- 時間: 最大のセッション時間は 2 時間（CloudFront の更新を含む deploy が 1 時間を超えても切れないように）
+- 発行用ロール（Storybook を置くだけ）とは別のロール・別の Environment です。本体のスタックに作らせないのは、自分を出すロールを自分で作ると初回に出せず、権限を広げたときに自分で自分を広げられてしまうためです
+- 受け入れているリスク:
+  - ブートストラップの実行ロールは、既定では `AdministratorAccess` を持ちます（`cdk bootstrap --cloudformation-execution-policies` で絞れる）。このロールを引き受けられれば、CloudFormation を通してアカウントの中のものを変えられるので、出す Environment に承認（Required reviewers）と、既定のブランチだけから動かせる制限を必ず付けます
+  - `sub` にはブランチ（ref）が入らないため、既定のブランチからだけ出すことは、Environment の制限に頼ります（発行用ロールの `review-canvas-main` と同じ）
+  - `id-token: write` はジョブ単位なので、OIDC のトークンを取る権利は、同じジョブの依存のインストール・ビルドのステップ（依存のスクリプト）にも渡ります。既定のブランチの lockfile の依存だけが動く前提です（依存を上げる変更は PR のレビューで見る）
+
 ## AWS: 発行用ロール（GitHub Actions が引き受ける）
 
 `REVIEW_CANVAS_GITHUB_OIDC_PROVIDER` と `REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX` を指定して出すと、スタックが 2 つのロールを作ります（`infra/lib/github-publish-role.ts`）。
@@ -37,3 +52,10 @@
 4. **Actions の許可**: 組織・リポジトリで使える Action を絞っているときは、`ShuntaToda/review-canvas`（フォークを使うときはそのリポジトリ。`review_canvas_repository` にも同じものを渡す）の再利用ワークフローと、`publish.yml` が使う Action（`actions/checkout`・`actions/setup-node`・`actions/upload-artifact`・`actions/download-artifact`・`pnpm/action-setup`・`aws-actions/configure-aws-credentials`。どれもコミットの SHA で固定）を許す
 
 ロールの ARN・アカウント ID は秘密ではありませんが、公開リポジトリから呼ぶときは変数に入れ、ワークフローのファイルに直に書かないでおくと出し直したときに直しやすくなります。
+
+## GitHub: このリポジトリから出す（deploy.yml）
+
+1. **Environment を作る**: 出す Environment（既定 `review-canvas-deploy`。発行用の `review-canvas`・`review-canvas-main` と別の名前）に、Required reviewers と、デプロイできるブランチを既定のブランチだけにする制限（Deployment branches and tags → Selected branches）を付ける
+2. **ワークフローの権限**: ワークフロー全体は `contents: read` だけで、出すジョブにだけ `id-token: write` を付けてあります（AWS を使うのはそのジョブだけ）。出すジョブは、既定のブランチのコードだけを動かします
+3. **変数・Secret**: [deploy.md の「値を置く」](deploy.md#3-値を置く)の表のとおり。出すことを有効にするのは、リポジトリの変数 `REVIEW_CANVAS_DEPLOY_ENABLED`（`true`）です。置いていないリポジトリ（フォークなど）では、AWS につながずに終わります
+4. **Actions の許可**: 使える Action を絞っているときは、`deploy.yml` が使う Action（`actions/checkout`・`actions/setup-node`・`pnpm/action-setup`・`aws-actions/configure-aws-credentials`。どれもコミットの SHA で固定）を許す

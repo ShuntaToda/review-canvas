@@ -54,6 +54,50 @@ describe("ワークフロー（.github/workflows）", () => {
   );
 });
 
+/** id-token: write の指定（コメントの中の言及は数えない） */
+const ID_TOKEN_WRITE = /^\s*id-token:\s*write\b/m;
+
+/** ワークフローを、jobs の前（ワークフロー全体の設定）とジョブごとの本文に分ける */
+const jobsOf = (file) => {
+  const [head = "", body = ""] = read(file).split(/\njobs:\n/);
+  const parts = `\n${body}`.split(/\n {2}([\w-]+):\n/).slice(1);
+  const jobs = [];
+  for (let index = 0; index < parts.length; index += 2) {
+    jobs.push({ name: parts[index], text: parts[index + 1] ?? "" });
+  }
+  return { head, jobs };
+};
+
+describe("ワークフローの OIDC のトークン（id-token: write）", () => {
+  test.each(workflowFiles)(
+    "[正常系]%s は、ワークフロー全体には id-token: write を付けず、付けたジョブはどれも AWS の資格情報を取る（AWS を使うジョブにだけ付ける）",
+    (file) => {
+      const { head, jobs } = jobsOf(file);
+
+      expect(jobs.length).toBeGreaterThan(0);
+      expect(head).not.toMatch(ID_TOKEN_WRITE);
+      const unused = jobs
+        .filter(({ text }) => ID_TOKEN_WRITE.test(text))
+        .filter(
+          ({ text }) =>
+            !text.includes("aws-actions/configure-aws-credentials@"),
+        )
+        .map(({ name }) => name);
+      expect(unused).toStrictEqual([]);
+    },
+  );
+
+  test("[正常系]deploy.yml で id-token: write を持つのは、出すジョブ（deploy）だけ", () => {
+    const { jobs } = jobsOf(".github/workflows/deploy.yml");
+
+    expect(
+      jobs
+        .filter(({ text }) => ID_TOKEN_WRITE.test(text))
+        .map(({ name }) => name),
+    ).toStrictEqual(["deploy"]);
+  });
+});
+
 describe("依存（package.json）", () => {
   const packageFiles = [
     "package.json",
