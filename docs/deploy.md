@@ -27,7 +27,7 @@ pnpm run deploy --profile <プロファイル>
 
 ## 設定
 
-値は環境変数か CDK のコンテキスト（`-c`）で渡します（`infra/lib/settings.ts`）。使う人・組織に固有の値の既定は持ちません。
+値は環境変数か CDK のコンテキスト（`-c`）で渡します（`infra/lib/settings.ts`）。使う人・組織に固有の値の既定は持ちません。ワークフローから出すときの置き場は下の「ワークフローから出す」にあります（`REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY` はワークフローだけが読むもので、手元では使いません）。
 
 | 環境変数（コンテキスト）                                               | 内容                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -95,13 +95,13 @@ pnpm --dir infra run diff --profile <プロファイル>     # destroy・synth �
 
 `.github/workflows/deploy.yml` は、既定のブランチへの push と、手で動かしたとき（Actions → deploy → Run workflow）に、出す Environment の承認を待ってから、上の「出す」と同じスクリプト（`pnpm --dir infra run deploy:no-build`）でスタックを出します。リポジトリの変数 `REVIEW_CANVAS_DEPLOY_ENABLED` が `true` で、既定のブランチで動いたときだけ出し、それ以外（有効にしていないリポジトリ・フォーク・ほかのブランチ）は Environment に入らず、AWS にもつながずに飛ばします。
 
-ワークフローが引き受けるのは、本体とは別の小さな CDK アプリ（`infra/bin/deploy-role.ts`）で作る「出す用のロール」です。権限は CDK のブートストラップのロールを引き受けることだけです（[github-aws-permissions.md](github-aws-permissions.md#aws-出す用のロールdeployyml-が引き受ける)）。使う側のリポジトリで使うときは `deploy.yml` を写し、push の `branches` を自分の既定のブランチにします（ジョブも既定のブランチかを確かめる）。
+ワークフローが引き受けるのは、本体とは別の小さな CDK アプリ（`infra/bin/deploy-role.ts`）で作る「出す用のロール」です。権限は CDK のブートストラップのロールを引き受けることだけです（[github-aws-permissions.md](github-aws-permissions.md#aws-出す用のロールdeployyml-が引き受ける)）。このリポジトリをフォーク・写したリポジトリで使うときは、push の `branches` を自分の既定のブランチにします（ジョブも既定のブランチかを確かめる）。コンストラクト `ReviewCanvas` を自分の CDK アプリに組み込む使う側は、自分のワークフローを書きます（このワークフローは `infra/bin/review-canvas.ts` を出すもの）。
 
 ### 前提
 
 - 本体のスタックを、上の「出す」で手元から 1 度出してある
 - 出し先のアカウントに GitHub の OIDC プロバイダーがある。無ければ、本体を `REVIEW_CANVAS_GITHUB_OIDC_PROVIDER=create` で出して作る（あるかは `aws iam list-open-id-connect-providers --profile <プロファイル>` で確かめ、あればその ARN を使う）。出す用のロールのアプリはプロバイダーを作りません（アカウントに 1 つしか作れず、本体のスタックが持っていることがあるため）
-- 出し先のリージョンと us-east-1 の両方で、同じ修飾子で `cdk bootstrap` 済み（IP 制限を us-east-1 以外で使うときは、Web ACL のスタックを us-east-1 に出すため）。修飾子は、本体のアプリが使うもの（既定 `hnb659fds`）にそろえる
+- 出し先のリージョンと us-east-1 の両方で、同じ修飾子で `cdk bootstrap` 済み（IP 制限を us-east-1 以外で使うときは、Web ACL のスタックを us-east-1 に出すため）。本体の修飾子は `infra/cdk.json` の `@aws-cdk/core:bootstrapQualifier`（無ければ `hnb659fds`）です。変えたら、同じ値を `REVIEW_CANVAS_BOOTSTRAP_QUALIFIER` に付けて出す用のロールを出し直します
 
 ### 1. 出す用のロールを作る（手元から 1 度）
 
@@ -133,43 +133,47 @@ pnpm --dir infra run deploy-role:deploy --profile <プロファイル>
 
 ### 3. 値を置く
 
-手元で出すときに渡している値（上の「設定」）を、次のとおりに置きます。公開リポジトリの Actions の記録は誰でも読めるので、Auth0 の値・スタック名・リージョン・既定のブランチ・Environment の名前のほかは Secret に置きます（Secret は、値がそのまま記録に出たときに伏せ字になる）。
+手元で出すときに渡している値（上の「設定」）を、次のとおりに置きます。独自ドメイン・ログイン連動（`REVIEW_CANVAS_CANVAS_DOMAIN` など）を使っているスタックでは、ワークフローはそれらの値を渡さず、出すと独自ドメイン・ログイン連動が外れるので、有効にしません。公開リポジトリの Actions の記録は誰でも読めるので、Auth0 の値・スタック名・リージョン・既定のブランチ・Environment の名前のほかは Secret に置きます（Secret は、値がそのまま記録に出たときに伏せ字になる）。
 
 | 置き場                                                                        | 名前                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| リポジトリの変数（Settings → Secrets and variables → Actions → Variables）    | `REVIEW_CANVAS_DEPLOY_ENABLED`（`true` で有効。下の 5 で置く）・`REVIEW_CANVAS_DEPLOY_ENVIRONMENT`（任意）                                                                                                                                                                                                                                                                                                                                                |
-| 出す Environment の変数（Environment secrets ではなく Environment variables） | 必須: `REVIEW_CANVAS_AUTH0_DOMAIN`・`REVIEW_CANVAS_AUTH0_CLIENT_ID`・`REVIEW_CANVAS_AUTH0_AUDIENCE`・`REVIEW_CANVAS_AWS_REGION`（出し先のリージョン）。任意: `REVIEW_CANVAS_STACK_NAME`・`REVIEW_CANVAS_DEFAULT_BRANCH`・`REVIEW_CANVAS_GITHUB_ENVIRONMENT`・`REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT`・`REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY`                                                                                                         |
+| リポジトリの変数（Settings → Secrets and variables → Actions → Variables）    | `REVIEW_CANVAS_DEPLOY_ENABLED`（`true` で有効。大文字小文字を区別しない。下の 5 で置く）・`REVIEW_CANVAS_DEPLOY_ENVIRONMENT`（任意）                                                                                                                                                                                                                                                                                                                      |
+| 出す Environment の変数（Environment secrets ではなく Environment variables） | 必須: `REVIEW_CANVAS_AUTH0_DOMAIN`・`REVIEW_CANVAS_AUTH0_CLIENT_ID`・`REVIEW_CANVAS_AUTH0_AUDIENCE`・`REVIEW_CANVAS_AWS_REGION`（出し先のリージョン）。任意: `REVIEW_CANVAS_STACK_NAME`・`REVIEW_CANVAS_DEFAULT_BRANCH`（Storybook の既定のブランチ。本体の設定）・`REVIEW_CANVAS_GITHUB_ENVIRONMENT`・`REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT`・`REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY`                                                               |
 | 出す Environment の Secret                                                    | 必須: `REVIEW_CANVAS_DEPLOY_ROLE_ARN`（出力の `DeployRoleArn`）・`REVIEW_CANVAS_CONFIG_BASE64`（設定ファイルを base64 にしたもの）。任意: `REVIEW_CANVAS_ACCOUNT`・`REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS`・`REVIEW_CANVAS_GITHUB_OIDC_PROVIDER`・`REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX`・`REVIEW_CANVAS_ALLOWED_IP_CIDRS`・`REVIEW_CANVAS_WEB_ACL_ARN`・`REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS`・`REVIEW_CANVAS_ALLOWED_EMAILS`・`REVIEW_CANVAS_M2M_CLIENTS` |
 
-- 設定ファイルは `base64 -w 0 review-canvas.config.json`（macOS は `base64 -i review-canvas.config.json`）の出力を置きます。ワークフローは `$RUNNER_TEMP` の下に書き出し、その絶対パスを `REVIEW_CANVAS_CONFIG` に渡します。空・base64 として読めなければ、リポジトリのサンプルの設定で出さずに止まります
+- 設定ファイルは `base64 -w 0 review-canvas.config.json`（macOS は `base64 -i review-canvas.config.json`）の出力を置きます。ワークフローは `$RUNNER_TEMP` の下に書き出し、その絶対パスを `REVIEW_CANVAS_CONFIG` に渡します。空・base64 として読めなければ、リポジトリにあるサンプルの設定のまま出さないよう止まります
 - 任意の値は、置いていなければ環境変数として渡しません（手元で付けずに出したときと同じ既定になる）
-- 使ってよいメールのドメインを空にする（メールアドレスだけで絞る）ときは、Environment の変数 `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY` を `true` にし、Secret `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS` は置きません（GitHub の Secret は空の値を置けず、置かないと既定の `*` になるため）。両方あると、出さずに止まります
+- GitHub は、出す Environment に無い名前を、リポジトリ・組織の同じ名前の変数・Secret から引き継ぎます。ほかの用途で同じ名前を置いていると、それが渡ります（Environment に置いたものが先）
+- 使ってよいメールのドメインを空にする（メールアドレスだけで絞る）ときは、Environment の変数 `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY` を `true`（大文字小文字は区別しない）にし、Secret `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS` は置きません（GitHub の Secret は空の値を置けず、置かないと既定の `*` になるため）。両方あると、出さずに止まります。`true`・`false` のほかの値も止まります
 - 出してはいけないアカウントは `REVIEW_CANVAS_PROTECTED_ACCOUNT_IDS` に入れます（`REVIEW_CANVAS_PROTECTED_ACCOUNTS_FILE` は渡しません）。独自ドメイン・ログイン連動の値（`REVIEW_CANVAS_CANVAS_DOMAIN` など）も渡しません
 - 必須の値が無ければ、AWS の資格情報を取る前に、無い名前を出して止まります
 
 ### 4. 初めて出す前に、手元で同じ値の差を確かめる
 
-ワークフローは `cdk diff`・`synth` を動かしません（設定ファイルの中身・IP の範囲が、伏せ字にならない形で記録に出るため）。有効にする前に、Environment に置いたのと同じ値を手元で付けて差を見ます。
+ワークフローは `cdk diff`・`synth` を動かしません（設定ファイルの中身・IP の範囲が、伏せ字にならない形で記録に出るため）。有効にする前に、Environment に置いたのと同じ値を手元で付けて差を見ます。先に画面をビルドしておきます（しないと画面を置くリソース `AppAssetsDeployment` が組み立てに入らず、その削除が差に混ざる）。
 
 ```bash
+pnpm run build:deployed
 REVIEW_CANVAS_AUTH0_DOMAIN=... REVIEW_CANVAS_AUTH0_CLIENT_ID=... REVIEW_CANVAS_AUTH0_AUDIENCE=... \
 REVIEW_CANVAS_CONFIG=<Secret に置いたのと同じ設定ファイル> \
 <置いたほかの値> \
 pnpm --dir infra run diff --profile <プロファイル>
 ```
 
-発行用ロール（`PublishRoleArn`・`PublishMainRoleArn`）・IP 制限の Web ACL の削除や置き換え、Auth0 の値・設定ファイル・使ってよいメール・M2M の client・スタック名の変更が出ないことを確かめます。出たら、置いた値の漏れ・誤りを直してから有効にします。
+`REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY` を `true` にしたときは、手元では代わりに `REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS=`（空）を付けます（`_EMPTY` はワークフローだけが読む）。
+
+発行用ロール（`PublishRoleArn`・`PublishMainRoleArn`）・IP 制限の Web ACL の削除や置き換え、独自ドメイン・証明書・CloudFront の別名（Aliases）・ログイン連動（署名付きクッキーの鍵など）の削除、Auth0 の値・設定ファイル・使ってよいメール・M2M の client・スタック名の変更が出ないことを確かめます。出たら、置いた値の漏れ・誤りを直してから有効にします。
 
 ### 5. 有効にする
 
-リポジトリの変数 `REVIEW_CANVAS_DEPLOY_ENABLED` を `true` にします。次の既定のブランチへの push か、Run workflow で動き、承認を待ちます。止めるときは変数を消すか `true` 以外にします。
+リポジトリの変数 `REVIEW_CANVAS_DEPLOY_ENABLED` を `true` にします。次の既定のブランチへの push か、Run workflow で動き、承認を待ちます。止めるときは変数を消すか `false` にします（`true` の比べ方は大文字小文字を区別しない）。
 
 ### 動かすときに気をつけること
 
 - 出すのは 1 つずつです（`concurrency` は 1 つのグループで、動いている途中のものは止めない）。承認待ちのまま古くなった実行は、承認せずに却下します（Review deployments → Reject。古いコミットを出さないため）
 - 資格情報を取るのは、設定の書き出しとビルドの後です。アカウント ID は記録で伏せ字になります（`mask-aws-account-id`）。ロールは 2 時間で引き受けます（CloudFront の更新を含む deploy が 1 時間を超えても切れないように）
 - ワークフローの `cdk deploy` は `--require-approval never` で動きます（確認に答えられないため）。IAM などの権限を変える変更は、PR のレビューで人が見ます
-- 値が誤っていて組み立てが止まったときは、エラーに値の一部（IP の範囲・メールアドレスなど）が出ることがあります。Secret の伏せ字は、値全体と一致したときだけ効くためです。Actions の記録を誰が読めるかを踏まえて、値は手元の diff で確かめてから置きます
+- 値が誤っていて組み立てが止まったときは、エラーに値の一部（IP の範囲・メールアドレス・設定ファイルの中身など）が出ることがあります。Secret の伏せ字は、値全体と一致したときだけ効くためです。Actions の記録を誰が読めるかを踏まえて、値は手元の diff で確かめてから置きます
 - `.claude/` だけの PR の自動マージ（`auto-merge-claude.yml`）では、GitHub の仕組み上、このワークフローは動きません（出す必要の無い変更なので、そのままにしてあります）
 
 ## 片付ける

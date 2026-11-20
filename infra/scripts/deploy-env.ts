@@ -27,7 +27,7 @@ export const REQUIRED_INPUT_NAMES = [
 ] as const;
 
 /** スタックに必ず渡すもの（REVIEW_CANVAS_CONFIG は、ワークフローが Secret から書き出したファイルの絶対パス） */
-const REQUIRED_STACK_NAMES = [
+export const REQUIRED_STACK_NAMES = [
   SETTING_KEYS.auth0Domain.env,
   SETTING_KEYS.auth0ClientId.env,
   SETTING_KEYS.auth0Audience.env,
@@ -54,6 +54,17 @@ export const OPTIONAL_STACK_NAMES = [
   SETTING_KEYS.m2mClients.env,
 ] as const;
 
+/**
+ * 空のドメインの変数を読む。置いていない・false なら false、true なら true（大文字小文字は区別しない。GitHub の式の == と同じ）。
+ * ほかの値は undefined（黙って * に戻さず、止める）
+ */
+const emptyDomainsOf = (source: NodeJS.ProcessEnv): boolean | undefined => {
+  const value = (source[EMPTY_DOMAINS_NAME] ?? "").trim().toLowerCase();
+  if (value === "" || value === "false") return false;
+  if (value === "true") return true;
+  return undefined;
+};
+
 const problemsOf = (
   source: NodeJS.ProcessEnv,
   required: ReadonlyArray<string>,
@@ -67,8 +78,13 @@ const problemsOf = (
   }
   // GitHub の Secret は空の値を置けず、置かないと既定の *（どのドメインも通す）になるので、空は変数で表す。
   // ドメインの Secret も置いてあると、どちらのつもりか分からないので出さない
-  if (
-    source[EMPTY_DOMAINS_NAME] === "true" &&
+  const emptyDomains = emptyDomainsOf(source);
+  if (emptyDomains === undefined) {
+    problems.push(
+      `出す Environment の変数 ${EMPTY_DOMAINS_NAME} は true か false にしてください（置かなければ false）`,
+    );
+  } else if (
+    emptyDomains &&
     isSet(source[SETTING_KEYS.allowedEmailDomains.env])
   ) {
     problems.push(
@@ -94,7 +110,7 @@ export const stackEnv = (source: NodeJS.ProcessEnv): Record<string, string> => {
     const value = source[name];
     if (isSet(value)) env[name] = value;
   }
-  if (source[EMPTY_DOMAINS_NAME] === "true") {
+  if (emptyDomainsOf(source) === true) {
     env[SETTING_KEYS.allowedEmailDomains.env] = "";
   }
   return env;

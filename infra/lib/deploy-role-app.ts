@@ -33,10 +33,22 @@ export const buildDeployRoleApp = ({
     protectedAccountIds: settings.protectedAccountIds,
     requireAccount,
   });
+  // IAM は別のアカウントの OIDC プロバイダーを信頼に使えない（出してから、引き受けられないと気づく前に止める）
+  const targetAccount = settings.account ?? account;
+  const providerAccount = settings.oidcProviderArn.split(":")[4];
+  if (
+    targetAccount !== undefined &&
+    targetAccount !== "" &&
+    providerAccount !== targetAccount
+  ) {
+    throw new Error(
+      `githubOidcProvider のアカウント（${providerAccount ?? ""}）が、出し先のアカウント（${targetAccount}）と違います。出し先のアカウントのプロバイダーの ARN を指定してください`,
+    );
+  }
   return new ReviewCanvasDeployRoleStack(app, settings.stackName, {
     settings,
     env: {
-      account: settings.account ?? account,
+      account: targetAccount,
       ...(region === undefined || region === "" ? {} : { region }),
     },
     description:

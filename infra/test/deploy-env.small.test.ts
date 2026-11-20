@@ -28,6 +28,18 @@ describe("checkDeployInputs（資格情報を取る前の確かめ）", () => {
     expect(checkDeployInputs(REQUIRED)).toStrictEqual([]);
   });
 
+  test.each(Object.keys(REQUIRED))(
+    "[異常系]必須の %s が無い・空なら、その名前を挙げて止める",
+    (name) => {
+      for (const value of [undefined, ""]) {
+        const problems = checkDeployInputs({ ...REQUIRED, [name]: value });
+
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain(`出す Environment に ${name} を置いて`);
+      }
+    },
+  );
+
   test("[異常系]必須の値が無い・空なら、無い名前だけを挙げる（値は出さない）", () => {
     const problems = checkDeployInputs({
       ...REQUIRED,
@@ -55,6 +67,66 @@ describe("checkDeployInputs（資格情報を取る前の確かめ）", () => {
       ),
     ]);
   });
+});
+
+describe("空のドメインの変数（REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY）", () => {
+  test.each(["true", "TRUE", "True"])(
+    "[正常系]%s は有効（大文字小文字を区別しない。GitHub の式の == と同じ）",
+    (value) => {
+      expect(
+        checkDeployInputs({
+          ...REQUIRED,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).toStrictEqual([]);
+      expect(
+        stackEnv({
+          ...STACK_SOURCE,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).toHaveProperty("REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS", "");
+    },
+  );
+
+  test.each(["", "false", "FALSE"])(
+    "[正常系]%j は無効（ドメインを渡さない）",
+    (value) => {
+      expect(
+        checkDeployInputs({
+          ...REQUIRED,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).toStrictEqual([]);
+      expect(
+        stackEnv({
+          ...STACK_SOURCE,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).not.toHaveProperty("REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS");
+    },
+  );
+
+  test.each(["yes", "1", "on"])(
+    "[異常系]%s は、黙って既定の * に戻さず、名前を挙げて止める",
+    (value) => {
+      expect(
+        checkDeployInputs({
+          ...REQUIRED,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).toStrictEqual([
+        expect.stringContaining(
+          "REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY は true か false",
+        ),
+      ]);
+      expect(() =>
+        stackEnv({
+          ...STACK_SOURCE,
+          REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY: value,
+        }),
+      ).toThrow("REVIEW_CANVAS_ALLOWED_EMAIL_DOMAINS_EMPTY は true か false");
+    },
+  );
 });
 
 describe("stackEnv（スタックに渡す環境変数）", () => {

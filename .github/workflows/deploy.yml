@@ -2,13 +2,13 @@ name: deploy
 
 # このリポジトリのスタック（infra/ の CDK アプリ。bin/review-canvas.ts）を、既定のブランチから AWS へ出す（docs/deploy.md「ワークフローから出す」）。
 # リポジトリの変数 REVIEW_CANVAS_DEPLOY_ENABLED が true で、既定のブランチで動いたときだけ出す。
-# 有効にしていないリポジトリ（フォーク・使う側の写し）では、Environment に入らず AWS にもつながずに飛ばす。
+# 有効にしていないリポジトリ（フォーク・このリポジトリを写したもの）では、Environment に入らず AWS にもつながずに飛ばす。
 # 出す前に、出す Environment の承認（Required reviewers）を待つ。出せるブランチを既定のブランチに絞るのも Environment の設定で行う。
 #
 # 値は出す Environment の変数・Secret に置く（コードには書かない）。表示しない: 設定ファイル・IP の範囲・使ってよいメール・M2M の client。
 # そのため cdk diff・synth は動かさない（差は、初めて出す前に手元で同じ値を使って確かめる）。
 #
-# Action はコミットの SHA で固定する（ci.yml・publish.yml と同じ）。認証情報を扱うので、ほかのジョブが書いたキャッシュ（pnpm のキャッシュ等）を読まない。
+# Action はコミットの SHA で固定する（ci.yml・publish.yml と同じ）。資格情報を扱うので、ほかのジョブが書いたキャッシュ（pnpm のキャッシュ等）を読まない。
 # push の branches は main にしてある。既定のブランチが main でないリポジトリに写すときは、ここを既定のブランチに変える（ジョブの if も既定のブランチを確かめる）
 
 on:
@@ -76,7 +76,7 @@ jobs:
         run: pnpm --silent --dir infra run deploy-env check
 
       # 設定ファイル（並べる Storybook）は、base64 にした Secret から書き出す。空・base64 として読めなければ、
-      # リポジトリのサンプルの設定で出さずに止める
+      # リポジトリにあるサンプルの設定のまま出さないよう止める
       - name: Write config
         env:
           CONFIG_BASE64: ${{ secrets.REVIEW_CANVAS_CONFIG_BASE64 }}
@@ -105,10 +105,9 @@ jobs:
           role-duration-seconds: 7200
           mask-aws-account-id: true
 
-      # 置いていない任意の値は環境変数にしない（空の文字列で渡すと、使ってよいメールのドメインなどが「空を指定した」になる）。
-      # 振り分けは infra/scripts/deploy-env.ts。pnpm --dir infra run deploy:no-build --require-approval never を動かす
-      # （deploy-env は infra に移ってから動くので、その中では pnpm run deploy:no-build）。
-      # ワークフローでは確認に答えられないので --require-approval never にする（IAM などの権限を変える変更は、PR のレビューで人が見る）
+      # 置いていない変数・Secret も空の文字列で届き、そのまま渡すと、使ってよいメールのドメインなどが「空を指定した」になるため、
+      # infra/scripts/deploy-env.ts で振り分けてから動かす（deploy-env は infra に移ってから動くので、中のコマンドは pnpm run deploy:no-build）。
+      # --require-approval never は、ワークフローでは確認に答えられないため（IAM などの権限を変える変更は、PR のレビューで人が見る）
       - name: Deploy
         env:
           REVIEW_CANVAS_AUTH0_DOMAIN: ${{ vars.REVIEW_CANVAS_AUTH0_DOMAIN }}

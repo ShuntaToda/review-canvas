@@ -267,6 +267,28 @@ describe("出す用のロールのアプリは、足りない・食い違う設�
     ).toThrow("出し先の AWS アカウントが分かりません");
   });
 
+  test("[異常系]OIDC プロバイダーの ARN のアカウントが、出し先のアカウントと違えば止める（出し先が分かるとき）", () => {
+    const otherProvider = {
+      ...BASE_ENV,
+      REVIEW_CANVAS_GITHUB_OIDC_PROVIDER:
+        "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com",
+    };
+
+    expect(() => build({ env: otherProvider })).toThrow(
+      "出し先のアカウント（123456789012）と違います",
+    );
+    expect(() =>
+      build({
+        env: { ...otherProvider, REVIEW_CANVAS_ACCOUNT: "222222222222" },
+        account: { id: undefined },
+      }),
+    ).toThrow("出し先のアカウント（222222222222）と違います");
+    // 出し先が分からない（資格情報なしの確かめ）ときは比べない
+    expect(() =>
+      build({ env: otherProvider, account: { id: undefined } }),
+    ).not.toThrow();
+  });
+
   test("[正常系]本体の値（Auth0 など）は要らない", () => {
     expect(() => build()).not.toThrow();
   });
