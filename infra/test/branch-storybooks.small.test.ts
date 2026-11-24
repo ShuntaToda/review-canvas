@@ -203,7 +203,7 @@ describe("planPublish", () => {
         "--distribution-id",
         "E123",
         "--paths",
-        "/sb/claude~2Fx-y/*",
+        "/sb/claude%7E2Fx-y/*",
       ],
     ]);
   });
@@ -386,7 +386,7 @@ describe("planUnpublish", () => {
         "--distribution-id",
         "E123",
         "--paths",
-        "/sb/feature~2Fa/*",
+        "/sb/feature%7E2Fa/*",
       ],
     ]);
   });
@@ -766,5 +766,12 @@ describe("reportTransitionProblems", () => {
         summaryFile: path.join(root, "no-such-dir", "summary.md"),
       }),
     ).not.toThrow();
+  });
+});
+
+describe("planUnpublish のキャッシュを消すパス", () => {
+  test("ブランチのキーの ~ を %7E にする（CloudFront が ~ を断るため）", () => {
+    const calls = planUnpublish({ target, branch: "fix~1/a" });
+    expect(calls.at(-1)?.at(-1)).toBe("/sb/fix%7E7E1%7E2Fa/*");
   });
 });
