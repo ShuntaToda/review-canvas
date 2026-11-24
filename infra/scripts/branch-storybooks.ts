@@ -433,13 +433,19 @@ export const planUnpublish = ({
   ];
 };
 
+/**
+ * キャッシュを消すパス。ブランチのキーの `~`（`/` などを表す）は CloudFront が無効なパスとして断るため、`%7E` にして渡す
+ * （CloudFront は RFC 1738 で安全でない文字を URL エンコードして渡すよう求める。ほかの文字はキーにも `*` にもエンコードしない）
+ */
+const invalidationPath = (path: string): string => path.replaceAll("~", "%7E");
+
 const invalidation = (target: Target, paths: string[]): AwsCall => [
   "cloudfront",
   "create-invalidation",
   "--distribution-id",
   target.distributionId,
   "--paths",
-  ...paths,
+  ...paths.map(invalidationPath),
 ];
 
 /** 置いてあるブランチの一覧（sb/ の直下の区切り）から、キーの形のものをブランチ名に戻す */

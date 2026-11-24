@@ -49,7 +49,7 @@ review-canvas/
 ├── eslint-rules/             # このリポジトリだけの ESLint ルール（層ごとのファイルの形など）
 ├── scripts/                  # 開発用のスクリプト（new-api.mjs: API の雛形）・リポジトリの決まりのテスト
 ├── .claude/                  # Claude Code の hook・スキル（dev-*: このリポジトリの開発用）・レビュー用のサブエージェント（agents/）
-├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）・deploy.yml（既定のブランチからスタックを出す。変数で有効にしたときだけ）
+├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）・deploy.yml（既定のブランチからスタックを出す。変数で有効にしたときだけ）・storybook.yml（push でブランチの Storybook を置く。変数で有効にしたときだけ）
 ├── .github/ISSUE_TEMPLATE/   # 親 Issue・PR 単位の Issue・不具合のテンプレート（pull_request_template.md は PR の本文）
 ├── review-canvas.config.json # サンプルの設定（並べる Storybook）。review-canvas.config.schema.json は生成物
 └── openapi.json              # API の契約（生成物）
@@ -257,6 +257,12 @@ npm には出しません。使う側は、このリポジトリのコミット�
 - `/app-config.json` に、ログイン連動のときだけ `storybookAccess: "signed-cookie"` が入ります（無ければ、だれでも読める配信として読む）
 - `pnpm run deploy`・`destroy`（`infra`）は `--all` を付けて動かします（スタックは、IP 制限を us-east-1 以外で使うときだけ 2 つ。ふだんは 1 つのまま）
 - ワークフロー（`publish.yml`）の `build` のジョブの上限は 60 分です（step ごとの上限: 依存を入れる 10 分・ビルド 20 分・Chromium 8 分・撮影 12 分）。入力・出力は変えていません
+
+### push で置いていないブランチも置けるようにした版で変わること
+
+- `publish.yml` に入力 `publish_unpublished_on_push`・`roles_from_secrets` と、Secret `aws_role_arn`・`aws_main_role_arn` が増えました。どれも任意で、渡さなければ前の振る舞いのままです
+- `publish.yml` の資格情報を取る step はどれも `mask-aws-account-id: true` になり、前からの呼び方でも、Actions の記録のアカウント ID が伏せ字になります
+- ブランチの名前に `/` などがあると、キャッシュを消すところで失敗していたのを直しました（キーの `~` を `%7E` にして渡す）
 
 ### 移し方: 画面の幅・高さの既定をなくした版へ
 

@@ -57,6 +57,10 @@ describe("ワークフロー（.github/workflows）", () => {
 /** id-token: write の指定（コメントの中の言及は数えない） */
 const ID_TOKEN_WRITE = /^\s*id-token:\s*write\b/m;
 
+/** このリポジトリの再利用ワークフロー（.github/workflows/ の中）を呼ぶジョブの uses（呼ぶ先のファイル） */
+const LOCAL_WORKFLOW_CALL =
+  /^ {4}uses:\s*\.\/(\.github\/workflows\/[\w.-]+\.ya?ml)\s*$/m;
+
 /** ワークフローを、jobs の前（ワークフロー全体の設定）とジョブごとの本文に分ける */
 const jobsOf = (file) => {
   const [head = "", body = ""] = read(file).split(/\njobs:\n/);
@@ -68,9 +72,18 @@ const jobsOf = (file) => {
   return { head, jobs };
 };
 
+/** 呼ぶ先のワークフローに id-token: write を持つジョブがある（そのジョブは、呼ぶ先のファイルとしてこのテストが確かめる） */
+const callsWorkflowUsingIdToken = (text) => {
+  const target = LOCAL_WORKFLOW_CALL.exec(text)?.[1];
+  return (
+    target !== undefined &&
+    jobsOf(target).jobs.some((job) => ID_TOKEN_WRITE.test(job.text))
+  );
+};
+
 describe("ワークフローの OIDC のトークン（id-token: write）", () => {
   test.each(workflowFiles)(
-    "[正常系]%s は、ワークフロー全体には id-token: write を付けず、付けたジョブはどれも AWS の資格情報を取る（AWS を使うジョブにだけ付ける）",
+    "[正常系]%s は、ワークフロー全体には id-token: write を付けず、付けたジョブはどれも AWS の資格情報を取る（AWS を使うジョブにだけ付ける。このリポジトリの再利用ワークフローを呼ぶジョブは、呼ぶ先で確かめる）",
     (file) => {
       const { head, jobs } = jobsOf(file);
 
@@ -80,10 +93,29 @@ describe("ワークフローの OIDC のトークン（id-token: write）", () =
         .filter(({ text }) => ID_TOKEN_WRITE.test(text))
         .filter(
           ({ text }) =>
-            !text.includes("aws-actions/configure-aws-credentials@"),
+            !text.includes("aws-actions/configure-aws-credentials@") &&
+            // このリポジトリの再利用ワークフローを呼ぶジョブは、呼ぶ先に AWS を使うジョブがあるときだけ付けてよい
+            !callsWorkflowUsingIdToken(text),
         )
         .map(({ name }) => name);
       expect(unused).toStrictEqual([]);
+    },
+  );
+
+  // 公開リポジトリの Actions の記録は誰でも読めるので、資格情報を取った後はアカウント ID を伏せ字にする
+  test.each(workflowFiles)(
+    "[正常系]%s の AWS の資格情報を取る step は、どれも mask-aws-account-id: true を付けている",
+    (file) => {
+      const steps = read(file)
+        .split(/\n\s*- (?=name:|uses:|run:|id:|if:)/)
+        .filter((step) =>
+          step.includes("aws-actions/configure-aws-credentials@"),
+        );
+      expect(
+        steps.filter(
+          (step) => !/^\s*mask-aws-account-id:\s*true\s*$/m.test(step),
+        ),
+      ).toStrictEqual([]);
     },
   );
 
@@ -95,6 +127,34 @@ describe("ワークフローの OIDC のトークン（id-token: write）", () =
         .filter(({ text }) => ID_TOKEN_WRITE.test(text))
         .map(({ name }) => name),
     ).toStrictEqual(["deploy"]);
+  });
+});
+
+// このリポジトリ自身のブランチの Storybook を置くワークフロー（docs/deploy.md「ブランチの Storybook をワークフローから置く」。#41）
+describe("storybook.yml（このリポジトリのブランチの Storybook を置く）", () => {
+  const workflow = read(".github/workflows/storybook.yml");
+
+  test("[正常系]置く手順は、push したコミットの publish.yml から取る（#41 の b1）", () => {
+    expect(workflow).toMatch(
+      /^ {4}uses: \.\/\.github\/workflows\/publish\.yml$/m,
+    );
+    expect(workflow).toMatch(
+      /^ {6}review_canvas_ref: \$\{\{ github\.sha \}\}$/m,
+    );
+  });
+
+  // 公開リポジトリの Actions の記録にアカウント ID を出さない（入力で渡すと step の見出しに出る）
+  test("[正常系]ロールの ARN は入力ではなく Secret で渡す", () => {
+    expect(workflow).not.toMatch(/^ {6}(main_)?role_arn:/m);
+    expect(workflow).toMatch(
+      /^ {6}roles_from_secrets: \$\{\{ vars\.REVIEW_CANVAS_PUBLISH_ENABLED == 'true' \}\}$/m,
+    );
+    expect(workflow).toMatch(
+      /^ {6}aws_role_arn: \$\{\{ secrets\.[A-Z_]+ \}\}$/m,
+    );
+    expect(workflow).toMatch(
+      /^ {6}aws_main_role_arn: \$\{\{ secrets\.[A-Z_]+ \}\}$/m,
+    );
   });
 });
 

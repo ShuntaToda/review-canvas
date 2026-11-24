@@ -176,6 +176,30 @@ pnpm --dir infra run diff --profile <プロファイル>
 - 値が誤っていて組み立てが止まったときは、エラーに値の一部（IP の範囲・メールアドレス・設定ファイルの中身など）が出ることがあります。Secret の伏せ字は、値全体と一致したときだけ効くためです。Actions の記録を誰が読めるかを踏まえて、値は手元の diff で確かめてから置きます
 - `.claude/` だけの PR の自動マージ（`auto-merge-claude.yml`）では、GitHub の仕組み上、このワークフローは動きません（出す必要の無い変更なので、そのままにしてあります）
 
+## ブランチの Storybook をワークフローから置く
+
+`.github/workflows/storybook.yml` は、このリポジトリのブランチの Storybook（`review-canvas.config.json` のもの）を、このリポジトリのスタックへ置きます。使う側に出している `publish.yml` を、同じコミットのまま呼びます（[publishing.md](publishing.md#github-actions-から置く)）。リポジトリの変数 `REVIEW_CANVAS_PUBLISH_ENABLED` が `true` のときだけ動き、ほか（フォーク・写したリポジトリ）は AWS につながずに飛ばします。
+
+| きっかけ                   | すること                                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| どのブランチへの push でも | `watchPaths` が変わったとき、そのブランチを置く・置き直す（置いていないブランチも置く。新しいブランチは変わったとみなす）。画像だけのブランチ `issue-images` の push では動かさない |
+| ブランチを消した           | そのブランチを消す                                                                                                                                                                  |
+| 手で動かす（Run workflow） | `branch` のブランチを置く。`all` で、置いてあるブランチ（既定のブランチを除く）を全部置き直す                                                                                       |
+
+- スクリーンショットは、既定のブランチもほかのブランチも CI（`build` のジョブ）で撮ります。撮る場所をそろえるので、文字の形の違いで、どの画面も「変更」になることがありません
+- 置く手順（スクリプト・橋渡し・撮影）は、push したコミットの版を使います。ブランチで変えた橋渡し・撮影を、そのまま置いて試せます。そのため、既定のブランチ以外を置く AWS のジョブでは、そのブランチの置くスクリプトが動きます。このリポジトリにブランチを push できるのは write 権限のある人だけで（フォークからの PR では push のワークフローは動かない）、そのジョブのロールが書けるのは、既定のブランチ以外の置き場だけです（[github-aws-permissions.md](github-aws-permissions.md#aws-発行用ロールgithub-actions-が引き受ける)）。動くのは置くスクリプトと、`pnpm install` で入る依存（lifecycle のスクリプトを含む）です。これで増える力はありません。Environment `review-canvas` にはブランチの制限が無いので、write 権限のある人は、もともと自分のブランチのワークフローからこのロールを引き受けられます。そのロールでできるのは、ほかの人のものを含む既定のブランチ以外の Storybook を書き換える・消すことと、Storybook の配信のキャッシュを消すことです
+- ロールの ARN はリポジトリの Secret から渡し、資格情報を取った後はアカウント ID を伏せ字にします（公開リポジトリの Actions の記録は誰でも読めるため）
+- `review-canvas.config.json` の `watchPaths` に `infra/scripts/` を入れてあり、置くスクリプトだけを変えた push でも置き直します。ほかの置く手順の変更（設定の形・infra の依存の版など）だけのときは、Run workflow で置き直します
+- マージしたブランチを消すと Storybook も消えます。Settings → General → Pull Requests の「Automatically delete head branches」を有効にしておくと、置いたままになりません。push の直後にブランチを消すと、消す処理が先に終わり、後から置く処理が終わって Storybook が残ることがあります。残ったら手で消します（Run workflow ではなく、手元の `review-canvas unpublish <ブランチ>`）
+
+### 有効にする
+
+1. **スタックに発行用のロールを作らせる**: 出す Environment（`review-canvas-deploy`）の Secret に、`REVIEW_CANVAS_GITHUB_OIDC_PROVIDER`（アカウントにある GitHub の OIDC プロバイダーの ARN。無ければ `create`）と `REVIEW_CANVAS_GITHUB_OIDC_SUB_PREFIX`（`repo:<owner>/<repo>`。immutable subject のリポジトリは ID 付き。出す用のロールと同じ接頭辞）を置き、deploy を動かします。出力に `PublishRoleArn`・`PublishMainRoleArn` が出ます
+2. **Environment を 2 つ作る**: `review-canvas`（ブランチの制限・承認なし）と `review-canvas-main`（既定のブランチだけ。承認は付けない）。[github-aws-permissions.md](github-aws-permissions.md#github-使う側のリポジトリ) の 1 と同じです
+3. **Secret を置く**（Settings → Secrets and variables → Actions → Repository secrets）: `REVIEW_CANVAS_PUBLISH_ROLE_ARN`（出力 `PublishRoleArn`）・`REVIEW_CANVAS_PUBLISH_MAIN_ROLE_ARN`（出力 `PublishMainRoleArn`）
+4. **有効にする**（3 の Secret を置いてから）: リポジトリの変数 `REVIEW_CANVAS_PUBLISH_ENABLED` を `true` にします。スタックを `ReviewCanvas` 以外の名前・`ap-northeast-1` 以外のリージョンに出したときは、リポジトリの変数 `REVIEW_CANVAS_STACK_NAME`・`REVIEW_CANVAS_AWS_REGION` も置きます。スタックの既定のブランチを `main` から変えたときは `REVIEW_CANVAS_DEFAULT_BRANCH`、発行用ロールの Environment の名前を変えたときは `REVIEW_CANVAS_GITHUB_ENVIRONMENT`・`REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT` も置きます。どれも、出す Environment に置いた同じ名前の変数と同じ値にします（`storybook.yml` のジョブは Environment を持たないので、出す Environment の変数は見えません）
+5. **既定のブランチを置き直す**: Actions → storybook → Run workflow を既定のブランチで動かします（手元で撮った画像を、CI で撮った画像に入れ替える）。続けて `all` に印を付けて動かすと、置いてあるほかのブランチも CI で撮り直します
+
 ## 片付ける
 
 ```bash

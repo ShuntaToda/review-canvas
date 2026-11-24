@@ -25,6 +25,7 @@
     "examples/sample-storybook/",
     "src/",
     ".storybook/",
-    "review-canvas.config.json"
+    "review-canvas.config.json",
+    "infra/scripts/"
   ]
 }
