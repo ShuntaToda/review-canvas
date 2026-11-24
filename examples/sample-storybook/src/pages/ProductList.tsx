@@ -1,32 +1,15 @@
-import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
-
-export type Product = { id: string; name: string; price: number };
+import { ProductImage } from "../components/ProductImage";
+import { ShopLayout } from "../components/ShopLayout";
+import { type Product, yen } from "../data/shop";
+import { useJson } from "../data/useJson";
 
 /** 商品一覧。/api/products から読む（Storybook では msw が返す） */
-export const ProductList = () => {
-  const [products, setProducts] = useState<Product[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/products")
-      .then(async (response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return (await response.json()) as Product[];
-      })
-      .then((items) => {
-        if (alive) setProducts(items);
-      })
-      .catch(() => {
-        if (alive) setFailed(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+export const ProductList = ({ cartCount }: { cartCount: number }) => {
+  const { data: products, failed } = useJson<Product[]>("/api/products");
 
   return (
-    <main className="page">
+    <ShopLayout cartCount={cartCount}>
       <h1>商品一覧</h1>
       {failed && <p className="error">商品を読み込めませんでした</p>}
       {!failed && products === null && <p>読み込み中…</p>}
@@ -35,13 +18,28 @@ export const ProductList = () => {
         <ul className="grid" aria-label="商品">
           {products.map((product) => (
             <li key={product.id} className="card" data-testid="product-card">
-              <h2>{product.name}</h2>
-              <p>{product.price.toLocaleString("ja-JP")} 円</p>
-              <Button>カートに入れる</Button>
+              <ProductImage art={product.art} color={product.color} />
+              <div className="card-body">
+                <div className="tags">
+                  {product.isNew === true && (
+                    <span className="tag">新入荷</span>
+                  )}
+                  {product.soldOut === true && (
+                    <span className="tag tag-muted">在庫切れ</span>
+                  )}
+                </div>
+                <h2>
+                  <a href={`#product-${product.id}`}>{product.name}</a>
+                </h2>
+                <p className="price">{yen(product.price)}</p>
+                <Button disabled={product.soldOut === true}>
+                  カートに入れる
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </main>
+    </ShopLayout>
   );
 };
