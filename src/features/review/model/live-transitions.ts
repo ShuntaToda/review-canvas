@@ -20,7 +20,7 @@ const isFiniteNumber = (value: number): boolean => Number.isFinite(value);
 
 /**
  * 橋渡しが探した結果を、信用しない値として確かめる。
- * 書いた行（rows。目録の行の index）にあり、1 行に 1 つだけ届き、形が正しく、画面の幅・高さの中にある矩形だけを残す。
+ * 書いた行（rowIndexes。目録の行の index）にあり、1 行に 1 つだけ届き、形が正しく、画面の幅・高さの中にある矩形だけを残す。
  * 外れたもの（範囲の外・大きさが無い・同じ行が 2 つ・知らない行）は、見つからないとして扱う（残さない）
  */
 export const acceptTransitionHits = (
@@ -29,12 +29,12 @@ export const acceptTransitionHits = (
     box: { x: number; y: number; width: number; height: number } | null;
   }>,
   {
-    rows,
+    rowIndexes,
     width,
     height,
-  }: { rows: ReadonlyArray<number>; width: number; height: number },
+  }: { rowIndexes: ReadonlyArray<number>; width: number; height: number },
 ): ShotTransition[] => {
-  const known = new Set(rows);
+  const known = new Set(rowIndexes);
   const counts = new Map<number, number>();
   for (const hit of hits) {
     counts.set(hit.index, (counts.get(hit.index) ?? 0) + 1);

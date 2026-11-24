@@ -98,7 +98,7 @@ export const INTERACTIVE_SELECTORS = [
 export const TRANSITION_CLIMB_SELECTOR = INTERACTIVE_SELECTORS.join(", ");
 
 /**
- * 遷移の role に書ける役割（Playwright の getByRole が受け付ける役割と同じ並び。そろっていることは撮影の側の型の検査が縛る）。
+ * 遷移の role に書ける役割（Playwright の getByRole が受け付ける役割と同じ役割。そろっていることは撮影の側の型の検査が縛る）。
  * ここに無い role の行は、撮るときも動く画面で探すときもボタンが見つからない
  */
 export const TRANSITION_ROLES = [

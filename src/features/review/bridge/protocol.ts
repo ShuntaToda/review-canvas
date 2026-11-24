@@ -65,8 +65,8 @@ export type ParentMessage =
       requestId: number;
       pins: { id: string; anchor: CommentAnchor }[];
     }
-  /** ストーリーに書いた遷移のボタンを探す（rows は探す行の index。答えない橋渡しは、探す前の版） */
-  | { type: "transitions"; requestId: number; rows: number[] };
+  /** ストーリーに書いた遷移のボタンを探す（rowIndexes は探す行の index。答えない橋渡しは、探す前の版） */
+  | { type: "transitions"; requestId: number; rowIndexes: number[] };
 
 /** 中に送られたキー入力（ショートカットとして親へ伝える分） */
 export type BridgeKey = {
@@ -221,12 +221,13 @@ export const parseParentMessage = (data: unknown): ParentMessage | null => {
       return { type: "locate", requestId: value["requestId"], pins: parsed };
     }
     case "transitions": {
-      const rows = value["rows"];
-      if (!isRequestId(value["requestId"]) || !Array.isArray(rows)) return null;
+      const rowIndexes = value["rowIndexes"];
+      if (!isRequestId(value["requestId"]) || !Array.isArray(rowIndexes))
+        return null;
       return {
         type: "transitions",
         requestId: value["requestId"],
-        rows: rows
+        rowIndexes: rowIndexes
           .filter(
             (row: unknown): row is number =>
               isRequestId(row) && row < MAX_STORY_TRANSITIONS,

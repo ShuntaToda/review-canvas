@@ -209,7 +209,7 @@ export const installBridge = ({
               MAX_STORY_TRANSITIONS,
               TRANSITION_SPEC_TEXT_LENGTH,
             ),
-            message.rows,
+            message.rowIndexes,
           );
         } catch {
           results = [];

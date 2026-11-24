@@ -185,9 +185,9 @@ describe("FrameBridge の遷移のボタン", () => {
     const request = sent.at(-1)?.data as {
       type: string;
       requestId: number;
-      rows: number[];
+      rowIndexes: number[];
     };
-    expect(request).toMatchObject({ type: "transitions", rows: [0, 2] });
+    expect(request).toMatchObject({ type: "transitions", rowIndexes: [0, 2] });
     const results = [
       { index: 0, box: { x: 1, y: 2, width: 3, height: 4 } },
       { index: 2, box: null },

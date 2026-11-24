@@ -23,13 +23,17 @@
     "codegen",
     "contenteditable",
     "contentinfo",
+    "describedby",
+    "dropeffect",
     "endgroup",
     "esac",
     "esbuild",
     "fieldfocusring",
+    "flowto",
     "focusin",
     "Hiragino",
     "inputmode",
+    "keyshortcuts",
     "keyup",
     "knip",
     "labelledby",
@@ -49,6 +53,7 @@
     "productlist",
     "pubout",
     "quasis",
+    "roledescription",
     "sato",
     "shellcheck",
     "spinbutton",
@@ -60,7 +65,8 @@
     "valuetext",
     "vite",
     "vitest",
-    "webacl"
+    "webacl",
+    "xlink"
   ],
   "ignoreRegExpList": ["[Ａ-Ｚａ-ｚ０-９]+", "ShuntaToda/review-canvas"]
 }

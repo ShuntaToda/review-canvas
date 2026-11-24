@@ -15,7 +15,12 @@ import {
 /** 探し直しを頼まれてから探すまでに待つ時間(ms)。押した後の描き直し・遅れて届くモックの応答を待つ */
 const RELOCATE_DELAYS_MS = [150, 800];
 
-type Support = { generation: number; value: "supported" | "unsupported" };
+type Support = {
+  generation: number;
+  value: "supported" | "unsupported";
+  /** 時間切れで答えないとみなした後に、返事が届いて替えた（そのときまで出していた右の端を、位置が決まるまで残す） */
+  late: boolean;
+};
 
 type Located = { generation: number; width: number; live: LiveTransitions };
 
@@ -34,7 +39,7 @@ type Current = {
   generation: number;
   width: number;
   height: number;
-  rows: ReadonlyArray<number>;
+  rowIndexes: ReadonlyArray<number>;
   unsupported: boolean;
 };
 
@@ -87,7 +92,7 @@ export const useLiveTransitions = ({
     generation,
     width,
     height,
-    rows: rowIndexes,
+    rowIndexes,
     unsupported,
   });
   useLayoutEffect(() => {
@@ -97,7 +102,7 @@ export const useLiveTransitions = ({
       generation,
       width,
       height,
-      rows: rowIndexes,
+      rowIndexes,
       unsupported,
     };
   });
@@ -111,7 +116,11 @@ export const useLiveTransitions = ({
     searchRef.current = () => {
       const current = currentRef.current;
       const { bridge } = current;
-      if (bridge === null || current.rows.length === 0 || current.unsupported) {
+      if (
+        bridge === null ||
+        current.rowIndexes.length === 0 ||
+        current.unsupported
+      ) {
         return;
       }
       sequenceRef.current += 1;
@@ -121,7 +130,7 @@ export const useLiveTransitions = ({
         revealed: current.revealed,
         sequence: sequenceRef.current,
       };
-      bridge.findTransitions(current.rows, {
+      bridge.findTransitions(current.rowIndexes, {
         onAnswer: (hits) => {
           const now = currentRef.current;
           if (!mountedRef.current || now.generation !== request.generation) {
@@ -131,7 +140,13 @@ export const useLiveTransitions = ({
             previous?.generation === request.generation &&
             previous.value === "supported"
               ? previous
-              : { generation: request.generation, value: "supported" },
+              : {
+                  generation: request.generation,
+                  value: "supported",
+                  late:
+                    previous?.generation === request.generation &&
+                    previous.value === "unsupported",
+                },
           );
           // 動く画面を出す前（描画・play 関数の途中）の結果・前の幅の結果・もっと新しい頼みの返事が届いた後の古い返事は使わない
           const applied = appliedRef.current;
@@ -153,7 +168,7 @@ export const useLiveTransitions = ({
             live: {
               kind: "located",
               boxes: acceptTransitionHits(hits, {
-                rows: now.rows,
+                rowIndexes: now.rowIndexes,
                 width: now.width,
                 height: now.height,
               }),
@@ -172,7 +187,11 @@ export const useLiveTransitions = ({
             previous?.generation === request.generation &&
             previous.value === "supported"
               ? previous
-              : { generation: request.generation, value: "unsupported" },
+              : {
+                  generation: request.generation,
+                  value: "unsupported",
+                  late: false,
+                },
           );
         },
       });
@@ -180,6 +199,7 @@ export const useLiveTransitions = ({
   });
 
   const rowsKey = rowIndexes.join(",");
+  const locatedNow = located?.generation === generation;
   // つながったとき・動く画面を出したとき・幅を替えたとき・中身の大きさが変わったときに探す
   useEffect(() => {
     if (!bridgeReady || rowsKey === "" || unsupported) return;
@@ -199,13 +219,15 @@ export const useLiveTransitions = ({
     };
   }, []);
 
+  // 時間切れの後に、動く画面を出す前の頼みの返事が届いて新しい橋渡しと分かったときは、出していた右の端を、
+  // 出した後の頼みの返事で位置が決まるまで残す（右の端 → 撮ったときの位置 → 見つかった位置と 2 度跳ねない）
+  const keepDrifted =
+    legacyDrifted && (unsupported || (support?.late === true && !locatedNow));
   const live: LiveTransitions | null = !revealed
     ? null
-    : supported
-      ? located?.generation === generation && located.width === width
-        ? located.live
-        : null
-      : unsupported && legacyDrifted
+    : supported && locatedNow && located.width === width
+      ? located.live
+      : keepDrifted
         ? DRIFTED_TRANSITIONS
         : null;
 

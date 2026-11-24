@@ -165,7 +165,7 @@ describe("locateTransitionButtons", () => {
     ]);
   });
 
-  test("[正常系]ロールは Playwright に寄せる: role 属性は知っている最初の語、タグから決まるロール（p は paragraph）", () => {
+  test("[正常系]ロールは Playwright と同じ: role 属性は知っている最初の語、タグから決まるロール。paragraph には名前を付けられない", () => {
     document.body.innerHTML = `
       <div role="foo button" data-rect="0,0,40,20">次へ</div>
       <p aria-label="送料のお知らせ" data-rect="0,30,200,20">送料無料</p>
@@ -179,9 +179,36 @@ describe("locateTransitionButtons", () => {
       ]),
     ).toStrictEqual([
       { index: 0, box: { x: 0, y: 0, width: 40, height: 20 } },
-      { index: 1, box: { x: 0, y: 30, width: 200, height: 20 } },
+      // Playwright は paragraph の aria-label を名前に数えない
+      { index: 1, box: null },
       // href の無い a はリンクではない
       { index: 2, box: null },
+    ]);
+  });
+
+  test("[正常系]名前は Playwright と同じく、子の alt・aria-label を読み、隠れた子を読まない", () => {
+    document.body.innerHTML = `
+      <style>.md-only { display: none }</style>
+      <a href="/" data-rect="0,0,100,30"><img alt="サンプルショップ" data-rect="0,0,100,30"></a>
+      <button data-rect="0,40,20,20"><svg aria-label="閉じる"></svg></button>
+      <button data-rect="30,40,20,20"><img alt="検索"></button>
+      <a href="/mug" data-rect="0,70,200,40"><img alt="木のマグカップ"> 木のマグカップ</a>
+      <button data-rect="0,120,120,30">カートに入れる<span class="md-only">（3 点）</span></button>`;
+
+    expect(
+      locate([
+        { from: { role: "link", name: "サンプルショップ" } },
+        { from: { role: "button", name: "閉じる" } },
+        { from: { role: "button", name: "検索" } },
+        { from: { role: "link", name: "木のマグカップ 木のマグカップ" } },
+        { from: { role: "button", name: "カートに入れる" } },
+      ]),
+    ).toStrictEqual([
+      { index: 0, box: { x: 0, y: 0, width: 100, height: 30 } },
+      { index: 1, box: { x: 0, y: 40, width: 20, height: 20 } },
+      { index: 2, box: { x: 30, y: 40, width: 20, height: 20 } },
+      { index: 3, box: { x: 0, y: 70, width: 200, height: 40 } },
+      { index: 4, box: { x: 0, y: 120, width: 120, height: 30 } },
     ]);
   });
 

@@ -5,7 +5,7 @@ import {
 } from "./live-transitions";
 
 describe("acceptTransitionHits", () => {
-  const frame = { rows: [0, 1, 2], width: 375, height: 800 };
+  const frame = { rowIndexes: [0, 1, 2], width: 375, height: 800 };
   const box = { x: 24, y: 361, width: 91, height: 35 };
 
   test("[正常系]書いた行の、画面の中の矩形を残す（端数 1px までは端からはみ出してよい）", () => {

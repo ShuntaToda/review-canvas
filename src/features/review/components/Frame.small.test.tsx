@@ -643,7 +643,7 @@ describe("Frame の遷移のボタンの枠", () => {
     onPendingPlace = () => undefined,
     onLiveTransitions = () => undefined,
     boxes: shotBoxes = [BOX],
-    rows = [0],
+    rowIndexes = [0],
   }: {
     id: string;
     tool: "comment" | "interact";
@@ -653,7 +653,7 @@ describe("Frame の遷移のボタンの枠", () => {
     ) => void;
     onLiveTransitions?: OnLive;
     boxes?: ShotTransition[];
-    rows?: number[];
+    rowIndexes?: number[];
   }) => {
     vi.useFakeTimers();
     const element = (width: number) => (
@@ -694,7 +694,7 @@ describe("Frame の遷移のボタンの枠", () => {
           onPendingPlace={onPendingPlace}
           onScreenChanged={() => undefined}
           transitionBoxes={shotBoxes}
-          transitionRowIndexes={rows}
+          transitionRowIndexes={rowIndexes}
           onLiveTransitions={onLiveTransitions}
         />
       </SourcesContext.Provider>
@@ -935,7 +935,7 @@ describe("Frame の遷移のボタンの枠", () => {
         id: "transition-live-partial",
         tool: "comment",
         boxes: [BOX, second],
-        rows: [0, 1],
+        rowIndexes: [0, 1],
         onLiveTransitions,
       });
 
@@ -962,7 +962,7 @@ describe("Frame の遷移のボタンの枠", () => {
         id: "transition-live-unplaced",
         tool: "comment",
         boxes: [],
-        rows: [0],
+        rowIndexes: [0],
       });
 
       await revealLive(SHOT.height, null);
@@ -978,7 +978,7 @@ describe("Frame の遷移のボタンの枠", () => {
         id: "transition-live-invalid",
         tool: "comment",
         boxes: [BOX, { ...BOX, index: 1 }, { ...BOX, index: 2 }],
-        rows: [0, 1, 2],
+        rowIndexes: [0, 1, 2],
         onLiveTransitions,
       });
 
@@ -1135,6 +1135,39 @@ describe("Frame の遷移のボタンの枠", () => {
         "transition-wait-slow",
         { kind: "located", boxes: [{ index: 0, ...MOVED }] },
       );
+    });
+
+    test("[正常系]時間切れで右の端から出した後に、出す前の頼みの返事が届いても、撮ったときの位置へ戻さず、位置が決まってから替える", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, wait, requests, answerRequest, answer, boxes } =
+        renderFrame({
+          id: "transition-wait-slow-drifted",
+          tool: "comment",
+          onLiveTransitions,
+        });
+
+      reveal(FONT_HEIGHT);
+      await wait(2_000);
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-wait-slow-drifted",
+        { kind: "drifted" },
+      );
+      const [beforeReveal] = requests();
+      if (beforeReveal === undefined) throw new Error("頼みがありません");
+
+      // 動く画面を出す前（つないだとき）の頼みの返事だけが届く（中身は使わない）
+      await answerRequest(beforeReveal, [{ index: 0, box: BOX }]);
+
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-wait-slow-drifted",
+        { kind: "drifted" },
+      );
+
+      await answer([{ index: 0, box: MOVED }]);
+
+      expect(boxes()[0]?.style.top).toBe("361px");
     });
 
     test("[正常系]一度答えた橋渡しは、探し直しの返事が遅れても探す前の版とみなさない", async () => {

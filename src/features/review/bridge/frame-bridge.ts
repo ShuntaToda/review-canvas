@@ -190,11 +190,11 @@ export class FrameBridge {
   }
 
   /**
-   * ストーリーに書いた遷移のボタンのうち、rows（目録の行の index）を探してもらう。つながっていなければ頼まずに false。
+   * ストーリーに書いた遷移のボタンのうち、rowIndexes（目録の行の index）を探してもらう。つながっていなければ頼まずに false。
    * 探す前の版の橋渡しは答えないので、時間切れ（onTimeout）で見分ける。時間切れの後に届いた返事も onAnswer に渡す
    */
   findTransitions(
-    rows: ReadonlyArray<number>,
+    rowIndexes: ReadonlyArray<number>,
     answer: TransitionsAnswer,
     timeoutMs = BRIDGE_REQUEST_TIMEOUT_MS,
   ): boolean {
@@ -204,7 +204,7 @@ export class FrameBridge {
       ...answer,
       timer: this.#window.setTimeout(answer.onTimeout, timeoutMs),
     });
-    this.#send({ type: "transitions", requestId, rows: [...rows] });
+    this.#send({ type: "transitions", requestId, rowIndexes: [...rowIndexes] });
     return true;
   }
 
