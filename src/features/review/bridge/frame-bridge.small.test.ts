@@ -6,7 +6,11 @@ import {
   type FrameBridgeHandlers,
   storybookOriginOf,
 } from "./frame-bridge";
-import { type BridgeMessage, toBridgeEnvelope } from "./protocol";
+import {
+  type BridgeMessage,
+  type BridgeTransition,
+  toBridgeEnvelope,
+} from "./protocol";
 
 const STORYBOOK = "https://sb.example.com";
 const render = {
@@ -166,17 +170,27 @@ describe("FrameBridge", () => {
 });
 
 describe("FrameBridge の遷移のボタン", () => {
-  test("[正常系]遷移のボタンを探す頼みを送り、同じ番号の返事で受け取る", async () => {
+  const answerSpy = () => ({
+    onAnswer: vi.fn<(results: BridgeTransition[]) => void>(),
+    onTimeout: vi.fn<() => void>(),
+  });
+
+  test("[正常系]探す行を付けて頼みを送り、同じ番号の返事を渡す", () => {
     const { bridge, sent, receive } = setUp();
     bridge.connect(false);
     receive({ type: "ready", render, focused: false, height: 1 });
+    const answer = answerSpy();
 
-    const pending = bridge.findTransitions();
-    const request = sent.at(-1)?.data as { type: string; requestId: number };
-    expect(request.type).toBe("transitions");
+    expect(bridge.findTransitions([0, 2], answer)).toBe(true);
+    const request = sent.at(-1)?.data as {
+      type: string;
+      requestId: number;
+      rows: number[];
+    };
+    expect(request).toMatchObject({ type: "transitions", rows: [0, 2] });
     const results = [
       { index: 0, box: { x: 1, y: 2, width: 3, height: 4 } },
-      { index: 1, box: null },
+      { index: 2, box: null },
     ];
     receive({
       type: "transitions",
@@ -185,23 +199,42 @@ describe("FrameBridge の遷移のボタン", () => {
     });
     receive({ type: "transitions", requestId: request.requestId, results });
 
-    await expect(pending).resolves.toStrictEqual(results);
+    expect(answer.onAnswer).toHaveBeenCalledExactlyOnceWith(results);
+    expect(answer.onTimeout).not.toHaveBeenCalled();
     bridge.dispose();
   });
 
-  test("[正常系]答えない橋渡し（探す前の版）は、時間切れで null。やめたときも null で終える", async () => {
-    const { bridge, receive } = setUp();
-    await expect(bridge.findTransitions()).resolves.toBeNull();
+  test("[正常系]時間切れを知らせた後に届いた返事も渡す（探すのに時間のかかる画面でも、新しい橋渡しと分かる）", () => {
+    const { bridge, sent, receive } = setUp();
     bridge.connect(false);
     receive({ type: "ready", render, focused: false, height: 1 });
+    const answer = answerSpy();
 
-    const timedOut = bridge.findTransitions(50);
+    bridge.findTransitions([0], answer, 50);
     vi.advanceTimersByTime(50);
-    await expect(timedOut).resolves.toBeNull();
+    expect(answer.onTimeout).toHaveBeenCalledTimes(1);
+    const request = sent.at(-1)?.data as { requestId: number };
+    receive({ type: "transitions", requestId: request.requestId, results: [] });
 
-    const disposed = bridge.findTransitions();
+    expect(answer.onAnswer).toHaveBeenCalledExactlyOnceWith([]);
     bridge.dispose();
-    await expect(disposed).resolves.toBeNull();
+  });
+
+  test("[正常系]つながる前は頼まない。やめたら、待っている頼みの時間切れも知らせない", () => {
+    const { bridge, sent, receive } = setUp();
+    const before = answerSpy();
+    expect(bridge.findTransitions([0], before)).toBe(false);
+    expect(sent).toHaveLength(0);
+
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+    const pending = answerSpy();
+    bridge.findTransitions([0], pending, 50);
+    bridge.dispose();
+    vi.advanceTimersByTime(50);
+
+    expect(pending.onTimeout).not.toHaveBeenCalled();
+    expect(pending.onAnswer).not.toHaveBeenCalled();
   });
 
   test("[正常系]操作のモードで中を押した知らせを渡す", () => {

@@ -41,6 +41,16 @@ export type FrameBridgeHandlers = {
   onInteracted?: () => void;
 };
 
+/** 遷移のボタンを探す頼みの返事の受け手 */
+export type TransitionsAnswer = {
+  /** 返事が届いた（時間切れの後に届いたものも渡す。探すのに時間のかかる画面でも、新しい橋渡しと分かるように） */
+  onAnswer: (results: BridgeTransition[]) => void;
+  /** 決まった時間のうちに返事が無かった（探す前の版の橋渡しかもしれない。この後も返事を待つ） */
+  onTimeout: () => void;
+};
+
+type PendingTransitions = TransitionsAnswer & { timer: number };
+
 type Pending<T> = {
   resolve: (value: T) => void;
   timer: number;
@@ -69,7 +79,7 @@ export class FrameBridge {
 
   #locates = new Map<number, Pending<BridgeLocated[] | null>>();
 
-  #transitions = new Map<number, Pending<BridgeTransition[] | null>>();
+  #transitions = new Map<number, PendingTransitions>();
 
   #timers: number[] = [];
 
@@ -180,24 +190,22 @@ export class FrameBridge {
   }
 
   /**
-   * ストーリーに書いた遷移のボタンを探してもらう（つながっていない・返事が無ければ null）。
-   * 探す前の版の橋渡しは答えないので、時間切れの null で見分ける
+   * ストーリーに書いた遷移のボタンのうち、rows（目録の行の index）を探してもらう。つながっていなければ頼まずに false。
+   * 探す前の版の橋渡しは答えないので、時間切れ（onTimeout）で見分ける。時間切れの後に届いた返事も onAnswer に渡す
    */
   findTransitions(
+    rows: ReadonlyArray<number>,
+    answer: TransitionsAnswer,
     timeoutMs = BRIDGE_REQUEST_TIMEOUT_MS,
-  ): Promise<BridgeTransition[] | null> {
-    if (this.#state !== "ready") return Promise.resolve(null);
+  ): boolean {
+    if (this.#state !== "ready") return false;
     const requestId = this.#nextId();
-    return new Promise((resolve) => {
-      this.#transitions.set(requestId, {
-        resolve,
-        timer: this.#window.setTimeout(() => {
-          this.#transitions.delete(requestId);
-          resolve(null);
-        }, timeoutMs),
-      });
-      this.#send({ type: "transitions", requestId });
+    this.#transitions.set(requestId, {
+      ...answer,
+      timer: this.#window.setTimeout(answer.onTimeout, timeoutMs),
     });
+    this.#send({ type: "transitions", requestId, rows: [...rows] });
+    return true;
   }
 
   /** やめる（待っている返事は null で終える） */
@@ -210,12 +218,12 @@ export class FrameBridge {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
     }
-    for (const pending of [
-      ...this.#locates.values(),
-      ...this.#transitions.values(),
-    ]) {
+    for (const pending of this.#locates.values()) {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
+    }
+    for (const pending of this.#transitions.values()) {
+      this.#window.clearTimeout(pending.timer);
     }
     this.#captures.clear();
     this.#locates.clear();
@@ -300,7 +308,7 @@ export class FrameBridge {
         if (pending === undefined) return;
         this.#transitions.delete(message.requestId);
         this.#window.clearTimeout(pending.timer);
-        pending.resolve(message.results);
+        pending.onAnswer(message.results);
         return;
       }
       case "interacted":

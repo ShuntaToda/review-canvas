@@ -5,7 +5,7 @@ import type { CameraState } from "../model/camera-state";
 import { findFrame, type RowPlacement } from "../model/layout";
 import {
   type LiveTransitions,
-  transitionRectsFor,
+  transitionBoxesFor,
 } from "../model/live-transitions";
 import { storyFocusPoint } from "../model/story-link";
 import type { ShotCatalog, ShotTransition } from "../model/story-shots";
@@ -90,7 +90,7 @@ export const useTransitions = ({
         {
           rowsOf: (storyId) => shots.transitionsOf(storyId),
           rectsOf: (storyId) =>
-            transitionRectsFor(
+            transitionBoxesFor(
               shots.find(storyId, width)?.transitions ?? [],
               liveStories.get(storyId),
             ),
@@ -143,7 +143,7 @@ export const useTransitions = ({
           shots.find(storyId, width)?.transitions ?? []
       : undefined,
     /** 目録にある遷移の行（index。出さないときは undefined。動く画面ではこの行のボタンを探す） */
-    rowsOf: shown
+    rowIndexesOf: shown
       ? (storyId: string): ReadonlyArray<number> =>
           shots.transitionsOf(storyId).map((row) => row.index)
       : undefined,

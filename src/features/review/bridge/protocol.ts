@@ -65,8 +65,8 @@ export type ParentMessage =
       requestId: number;
       pins: { id: string; anchor: CommentAnchor }[];
     }
-  /** ストーリーに書いた遷移のボタンを探す（答えない橋渡しは、探す前の版） */
-  | { type: "transitions"; requestId: number };
+  /** ストーリーに書いた遷移のボタンを探す（rows は探す行の index。答えない橋渡しは、探す前の版） */
+  | { type: "transitions"; requestId: number; rows: number[] };
 
 /** 中に送られたキー入力（ショートカットとして親へ伝える分） */
 export type BridgeKey = {
@@ -220,10 +220,20 @@ export const parseParentMessage = (data: unknown): ParentMessage | null => {
       });
       return { type: "locate", requestId: value["requestId"], pins: parsed };
     }
-    case "transitions":
-      return isRequestId(value["requestId"])
-        ? { type: "transitions", requestId: value["requestId"] }
-        : null;
+    case "transitions": {
+      const rows = value["rows"];
+      if (!isRequestId(value["requestId"]) || !Array.isArray(rows)) return null;
+      return {
+        type: "transitions",
+        requestId: value["requestId"],
+        rows: rows
+          .filter(
+            (row: unknown): row is number =>
+              isRequestId(row) && row < MAX_STORY_TRANSITIONS,
+          )
+          .slice(0, MAX_STORY_TRANSITIONS),
+      };
+    }
     default:
       return null;
   }
@@ -326,7 +336,6 @@ export const parseBridgeMessage = (data: unknown): BridgeMessage | null => {
         requestId: value["requestId"],
         // 形の違う行は捨てる（範囲は親の側が画面の幅・高さで確かめる）
         results: results
-          // ストーリーに書ける行の上限より多くは読まない
           .slice(0, MAX_STORY_TRANSITIONS)
           .flatMap((result: unknown): BridgeTransition[] => {
             if (!isObject(result) || !isRequestId(result["index"])) return [];

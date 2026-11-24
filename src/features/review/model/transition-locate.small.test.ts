@@ -26,8 +26,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** 書いた行をすべて探す */
 const locate = (rows: TransitionSpec[]) =>
-  locateTransitionButtons(document, { rows, overflow: false });
+  locateTransitionButtons(
+    document,
+    { rows, overflow: false },
+    rows.map((_, index) => index),
+  );
 
 describe("locateTransitionButtons", () => {
   test("[正常系]role と name（exact）で探し、見つかったボタンの位置を返す", () => {
@@ -130,6 +135,61 @@ describe("locateTransitionButtons", () => {
     ).toStrictEqual([
       { index: 0, box: null },
       { index: 4, box: { x: 0, y: 0, width: 10, height: 10 } },
+    ]);
+  });
+
+  test("[正常系]頼まれた行（目録にある行）だけを探す", () => {
+    document.body.innerHTML = `<button data-rect="0,0,10,10">OK</button>`;
+
+    expect(
+      locateTransitionButtons(
+        document,
+        {
+          rows: [
+            { from: { role: "button", name: "OK" } },
+            { from: { text: "OK" } },
+          ],
+          overflow: false,
+        },
+        [1],
+      ),
+    ).toStrictEqual([{ index: 1, box: { x: 0, y: 0, width: 10, height: 10 } }]);
+  });
+
+  test("[正常系]text は、その文字を持ついちばん内側の要素だけに当たる（包む要素とで 2 つにしない）", () => {
+    document.body.innerHTML = `
+      <div data-rect="0,0,300,40"><span data-rect="4,4,60,20">注文履歴</span></div>`;
+
+    expect(locate([{ from: { text: "注文履歴" } }])).toStrictEqual([
+      { index: 0, box: { x: 4, y: 4, width: 60, height: 20 } },
+    ]);
+  });
+
+  test("[正常系]ロールは Playwright に寄せる: role 属性は知っている最初の語、タグから決まるロール（p は paragraph）", () => {
+    document.body.innerHTML = `
+      <div role="foo button" data-rect="0,0,40,20">次へ</div>
+      <p aria-label="送料のお知らせ" data-rect="0,30,200,20">送料無料</p>
+      <a data-rect="0,60,40,20">戻る</a>`;
+
+    expect(
+      locate([
+        { from: { role: "button", name: "次へ" } },
+        { from: { role: "paragraph", name: "送料のお知らせ" } },
+        { from: { role: "link", name: "戻る" } },
+      ]),
+    ).toStrictEqual([
+      { index: 0, box: { x: 0, y: 0, width: 40, height: 20 } },
+      { index: 1, box: { x: 0, y: 30, width: 200, height: 20 } },
+      // href の無い a はリンクではない
+      { index: 2, box: null },
+    ]);
+  });
+
+  test("[異常系]Playwright の知らない role は、要素に書いてあっても見つからない（撮るときと同じ）", () => {
+    document.body.innerHTML = `<div role="foo" title="次へ" data-rect="0,0,40,20">次へ</div>`;
+
+    expect(locate([{ from: { role: "foo", name: "次へ" } }])).toStrictEqual([
+      { index: 0, box: null },
     ]);
   });
 

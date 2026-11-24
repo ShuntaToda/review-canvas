@@ -9,7 +9,7 @@ export type LiveTransitions =
   /** 答えない橋渡しで、撮ったときとずれた（中身の高さが違う・操作のモードで中を触った）。どの行も枠を出さず、画面の右の端から出す */
   | { kind: "drifted" }
   /** 探した結果。見つかった行だけを持つ（無い行は枠を出さず、画面の右の端から出す） */
-  | { kind: "located"; rects: ReadonlyArray<ShotTransition> };
+  | { kind: "located"; boxes: ReadonlyArray<ShotTransition> };
 
 export const DRIFTED_TRANSITIONS: LiveTransitions = { kind: "drifted" };
 
@@ -58,7 +58,7 @@ export const acceptTransitionHits = (
 };
 
 /** 矢印と枠を出す矩形（動く画面の位置が無ければ、撮ったときの位置） */
-export const transitionRectsFor = (
+export const transitionBoxesFor = (
   shotRects: ReadonlyArray<ShotTransition>,
   live: LiveTransitions | null | undefined,
 ): ReadonlyArray<ShotTransition> => {
@@ -67,6 +67,6 @@ export const transitionRectsFor = (
     case "drifted":
       return [];
     case "located":
-      return live.rects;
+      return live.boxes;
   }
 };

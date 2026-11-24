@@ -27,7 +27,7 @@ import {
 } from "../model/layout";
 import {
   type LiveTransitions,
-  transitionRectsFor,
+  transitionBoxesFor,
 } from "../model/live-transitions";
 import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
 import { sameScreenHeight } from "../model/pending-place";
@@ -128,7 +128,7 @@ type FrameProps = {
   /** 撮ったときの、遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
   transitionBoxes?: ReadonlyArray<ShotTransition>;
   /** 目録にある遷移の行（index。画面のつながりを出さないときは空。動く画面ではこの行のボタンを探す） */
-  transitionRows?: ReadonlyArray<number>;
+  transitionRowIndexes?: ReadonlyArray<number>;
   /**
    * 動く画面での遷移のボタンの位置が決まった・変わった（null は撮ったときの位置に戻った）。
    * 見つからない行・ずれた画面ではボタンの枠を出さず、出る矢印は画面の右の端から出す（model/live-transitions.ts）
@@ -200,7 +200,7 @@ export const Frame = ({
   onScreenChanged,
   onCompare,
   transitionBoxes = [],
-  transitionRows = [],
+  transitionRowIndexes = [],
   onLiveTransitions,
 }: FrameProps) => {
   const storybookBase = useStorybookBase();
@@ -607,6 +607,8 @@ export const Frame = ({
   );
   const highlightBox = draftPin?.box ?? highlightPin?.box ?? null;
 
+  // 橋渡しの知らせ（handleLoad の中で作る）・下の blur から、遷移のボタンを探し直してもらう（useLiveTransitions の relocate を入れる）
+  const relocateTransitionsRef = useRef<() => void>(() => undefined);
   // 操作のモードで画面の中を押した（フォーカスが iframe へ移った）ら、触ったとみなす（橋渡しの知らせが届かない中身の操作も拾う）
   useEffect(() => {
     if (tool !== "interact" || !mounted) return;
@@ -617,6 +619,7 @@ export const Frame = ({
           document.activeElement === iframeRef.current
         ) {
           setTouchedGeneration(generation);
+          relocateTransitionsRef.current();
         }
       }, 0);
     };
@@ -640,17 +643,14 @@ export const Frame = ({
     generation,
     width: w,
     height: h,
-    rows: transitionRows,
-    touched,
+    rowIndexes: transitionRowIndexes,
     legacyDrifted,
     onLiveTransitions,
   });
-  const transitionRects = transitionRectsFor(
+  const shownTransitionBoxes = transitionBoxesFor(
     transitionBoxes,
     liveTransitions.live,
   );
-  // 橋渡しの知らせ（handleLoad の中で作る）から、遷移のボタンを探し直してもらう
-  const relocateTransitionsRef = useRef(liveTransitions.relocate);
   useLayoutEffect(() => {
     relocateTransitionsRef.current = liveTransitions.relocate;
   });
@@ -981,7 +981,7 @@ export const Frame = ({
             }}
           />
         )}
-        {transitionRects.map((box) => (
+        {shownTransitionBoxes.map((box) => (
           // 遷移を持つボタンの枠。クリックは下へ通す（ピンを置ける・操作のモードで押せる）
           <div
             key={box.index}

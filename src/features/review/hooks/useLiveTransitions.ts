@@ -12,19 +12,38 @@ import {
   type LiveTransitions,
 } from "../model/live-transitions";
 
-/** 探し直しを頼まれてから探すまでの時刻(ms)。押した後の描き直し・遅れて届くモックの応答を待つ */
+/** 探し直しを頼まれてから探すまでに待つ時間(ms)。押した後の描き直し・遅れて届くモックの応答を待つ */
 const RELOCATE_DELAYS_MS = [150, 800];
 
 type Support = { generation: number; value: "supported" | "unsupported" };
 
 type Located = { generation: number; width: number; live: LiveTransitions };
 
+/** 頼んだときの様子（返事が届いたときに、いまの様子と比べる） */
+type Request = {
+  generation: number;
+  width: number;
+  revealed: boolean;
+  /** 頼んだ順の番号（もっと新しい頼みの返事が届いていれば、古い返事は使わない） */
+  sequence: number;
+};
+
+type Current = {
+  bridge: FrameBridge | null;
+  revealed: boolean;
+  generation: number;
+  width: number;
+  height: number;
+  rows: ReadonlyArray<number>;
+  unsupported: boolean;
+};
+
 /**
  * 動く画面で、遷移のボタンを橋渡しに探してもらい、矢印と枠を出す位置を決める（Issue #45）。
  * - 探すのは、つながったとき（答えるかで橋渡しの版を見分ける）・動く画面を出したとき・幅を替えたとき・中身の大きさが変わったとき・
  *   操作のモードで中を触った後（relocate を呼ぶ）。触らずに起きた、中身の大きさが変わらない入れ替わりは拾わない
- * - 探している間（動く画面を出した直後）は、撮ったときの位置から出しておく（null）
- * - 答えない橋渡しでは、いままでどおり撮ったときとずれたか（legacyDrifted）で決める
+ * - 探している間（動く画面を出した直後・橋渡しの版がまだ分からない間）は、撮ったときの位置から出しておく（null）
+ * - 答えない橋渡しと分かったら、いままでどおり撮ったときとずれたか（legacyDrifted）で決める。時間切れの後でも返事が届けば、新しい橋渡しとして使う
  */
 export const useLiveTransitions = ({
   storyId,
@@ -34,8 +53,7 @@ export const useLiveTransitions = ({
   generation,
   width,
   height,
-  rows,
-  touched,
+  rowIndexes,
   legacyDrifted,
   onLiveTransitions,
 }: {
@@ -48,10 +66,8 @@ export const useLiveTransitions = ({
   width: number;
   /** 画面の高さ（届いた矩形がこの中にあるかを確かめる） */
   height: number;
-  /** 目録にある遷移の行（index。画面のつながりを出さないときは空で、探さない） */
-  rows: ReadonlyArray<number>;
-  /** 操作のモードで中を触った */
-  touched: boolean;
+  /** 目録にある遷移の行の index（画面のつながりを出さないときは空で、探さない） */
+  rowIndexes: ReadonlyArray<number>;
   /** 撮ったときとずれた（中身の高さが違う・触った）。答えない橋渡しのときだけ使う */
   legacyDrifted: boolean;
   onLiveTransitions:
@@ -59,81 +75,129 @@ export const useLiveTransitions = ({
 }): { live: LiveTransitions | null; relocate: () => void } => {
   const [support, setSupport] = useState<Support | null>(null);
   const [located, setLocated] = useState<Located | null>(null);
-  const relocateRef = useRef<(() => void) | null>(null);
-  const rowsKey = rows.join(",");
   const supported =
     support?.generation === generation && support.value === "supported";
   const unsupported =
     support?.generation === generation && support.value === "unsupported";
 
-  useEffect(() => {
-    if (!bridgeReady || rowsKey === "" || unsupported) return;
-    const bridge = bridgeRef.current;
-    if (bridge === null) return;
-    const rowIndexes = rowsKey.split(",").map(Number);
-    let disposed = false;
-    let latest = 0;
-    let timers: number[] = [];
-    const search = async () => {
-      latest += 1;
-      const request = latest;
-      const hits = await bridge.findTransitions();
-      if (disposed) return;
-      if (hits === null) {
-        // 答えなかった。つながったままなら、探す前の版の橋渡し（一度答えた橋渡しは、遅れただけとみなす）
-        if (bridge.status === "ready") {
-          setSupport((previous) =>
-            previous?.generation === generation &&
-            previous.value === "supported"
-              ? previous
-              : { generation, value: "unsupported" },
-          );
-        }
-        return;
-      }
-      setSupport((previous) =>
-        previous?.generation === generation && previous.value === "supported"
-          ? previous
-          : { generation, value: "supported" },
-      );
-      // 動く画面を出す前（描画・play 関数の途中）の結果と、後から頼んだ探し直しに追い越された結果は使わない
-      if (!revealed || request !== latest) return;
-      setLocated({
-        generation,
-        width,
-        live: {
-          kind: "located",
-          rects: acceptTransitionHits(hits, {
-            rows: rowIndexes,
-            width,
-            height,
-          }),
-        },
-      });
-    };
-    void search();
-    relocateRef.current = () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-      timers = RELOCATE_DELAYS_MS.map((delay) =>
-        window.setTimeout(() => void search(), delay),
-      );
-    };
-    return () => {
-      disposed = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
-      relocateRef.current = null;
-    };
-  }, [
-    bridgeReady,
-    bridgeRef,
+  // 返事・探し直しのタイマーから、いまの様子を読む（effect を作り直しても、待っている返事・探し直しを捨てない）
+  const currentRef = useRef<Current>({
+    bridge: null,
     revealed,
     generation,
     width,
     height,
-    rowsKey,
-    touched,
+    rows: rowIndexes,
     unsupported,
-  ]);
+  });
+  useLayoutEffect(() => {
+    currentRef.current = {
+      bridge: bridgeReady ? bridgeRef.current : null,
+      revealed,
+      generation,
+      width,
+      height,
+      rows: rowIndexes,
+      unsupported,
+    };
+  });
+  const sequenceRef = useRef(0);
+  const appliedRef = useRef({ generation: -1, sequence: 0 });
+  const mountedRef = useRef(true);
+  const timersRef = useRef<number[]>([]);
+
+  const searchRef = useRef<() => void>(() => undefined);
+  useLayoutEffect(() => {
+    searchRef.current = () => {
+      const current = currentRef.current;
+      const { bridge } = current;
+      if (bridge === null || current.rows.length === 0 || current.unsupported) {
+        return;
+      }
+      sequenceRef.current += 1;
+      const request: Request = {
+        generation: current.generation,
+        width: current.width,
+        revealed: current.revealed,
+        sequence: sequenceRef.current,
+      };
+      bridge.findTransitions(current.rows, {
+        onAnswer: (hits) => {
+          const now = currentRef.current;
+          if (!mountedRef.current || now.generation !== request.generation) {
+            return;
+          }
+          setSupport((previous) =>
+            previous?.generation === request.generation &&
+            previous.value === "supported"
+              ? previous
+              : { generation: request.generation, value: "supported" },
+          );
+          // 動く画面を出す前（描画・play 関数の途中）の結果・前の幅の結果・もっと新しい頼みの返事が届いた後の古い返事は使わない
+          const applied = appliedRef.current;
+          if (
+            !request.revealed ||
+            now.width !== request.width ||
+            (applied.generation === request.generation &&
+              applied.sequence > request.sequence)
+          ) {
+            return;
+          }
+          appliedRef.current = {
+            generation: request.generation,
+            sequence: request.sequence,
+          };
+          setLocated({
+            generation: request.generation,
+            width: request.width,
+            live: {
+              kind: "located",
+              boxes: acceptTransitionHits(hits, {
+                rows: now.rows,
+                width: now.width,
+                height: now.height,
+              }),
+            },
+          });
+        },
+        onTimeout: () => {
+          if (
+            !mountedRef.current ||
+            currentRef.current.generation !== request.generation
+          ) {
+            return;
+          }
+          // 答えなかった。探す前の版の橋渡しとみなす（一度答えた橋渡しは、遅れただけとみなす。後から返事が届けば替える）
+          setSupport((previous) =>
+            previous?.generation === request.generation &&
+            previous.value === "supported"
+              ? previous
+              : { generation: request.generation, value: "unsupported" },
+          );
+        },
+      });
+    };
+  });
+
+  const rowsKey = rowIndexes.join(",");
+  // つながったとき・動く画面を出したとき・幅を替えたとき・中身の大きさが変わったときに探す
+  useEffect(() => {
+    if (!bridgeReady || rowsKey === "" || unsupported) return;
+    searchRef.current();
+  }, [bridgeReady, revealed, generation, width, height, rowsKey, unsupported]);
+
+  // iframe を付け直したら、前の回の探し直しは捨てる
+  useEffect(() => {
+    timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    timersRef.current = [];
+  }, [generation]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
 
   const live: LiveTransitions | null = !revealed
     ? null
@@ -141,7 +205,7 @@ export const useLiveTransitions = ({
       ? located?.generation === generation && located.width === width
         ? located.live
         : null
-      : legacyDrifted
+      : unsupported && legacyDrifted
         ? DRIFTED_TRANSITIONS
         : null;
 
@@ -155,5 +219,14 @@ export const useLiveTransitions = ({
     return () => onLiveTransitionsRef.current?.(storyId, null);
   }, [live, storyId]);
 
-  return { live, relocate: () => relocateRef.current?.() };
+  return {
+    live,
+    /** 探し直す（待っている探し直しはやり直す。effect の作り直しでは消えない） */
+    relocate: () => {
+      timersRef.current.forEach((timer) => window.clearTimeout(timer));
+      timersRef.current = RELOCATE_DELAYS_MS.map((delay) =>
+        window.setTimeout(() => searchRef.current(), delay),
+      );
+    },
+  };
 };

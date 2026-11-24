@@ -694,7 +694,7 @@ describe("Frame の遷移のボタンの枠", () => {
           onPendingPlace={onPendingPlace}
           onScreenChanged={() => undefined}
           transitionBoxes={shotBoxes}
-          transitionRows={rows}
+          transitionRowIndexes={rows}
           onLiveTransitions={onLiveTransitions}
         />
       </SourcesContext.Provider>
@@ -742,24 +742,31 @@ describe("Frame の遷移のボタンの枠", () => {
       });
     const answered = new Set<number>();
     /** まだ答えていない頼みに、新しい橋渡しとして答える */
+    /** 1 つの頼みに答える */
+    const answerRequest = async (
+      requestId: number,
+      results: BridgeTransition[],
+    ) => {
+      answered.add(requestId);
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: toBridgeEnvelope({
+              type: "transitions",
+              requestId,
+              results,
+            }),
+            origin: window.location.origin,
+            source: frameWindow,
+          }),
+        );
+        await Promise.resolve();
+      });
+    };
     const answer = async (results: BridgeTransition[]) => {
       for (const requestId of requests()) {
         if (answered.has(requestId)) continue;
-        answered.add(requestId);
-        await act(async () => {
-          window.dispatchEvent(
-            new MessageEvent("message", {
-              data: toBridgeEnvelope({
-                type: "transitions",
-                requestId,
-                results,
-              }),
-              origin: window.location.origin,
-              source: frameWindow,
-            }),
-          );
-          await Promise.resolve();
-        });
+        await answerRequest(requestId, results);
       }
     };
     /**
@@ -803,6 +810,7 @@ describe("Frame の遷移のボタンの枠", () => {
       receive,
       reveal,
       revealLive,
+      answerRequest,
       requests,
       answer,
       wait,
@@ -878,7 +886,7 @@ describe("Frame の遷移のボタンの枠", () => {
       expect(box?.style.width).toBe("91px");
       expect(onLiveTransitions).toHaveBeenLastCalledWith(
         "transition-live-font",
-        { kind: "located", rects: [{ index: 0, ...MOVED }] },
+        { kind: "located", boxes: [{ index: 0, ...MOVED }] },
       );
     });
 
@@ -944,7 +952,7 @@ describe("Frame の遷移のボタンの枠", () => {
         "transition-live-partial",
         {
           kind: "located",
-          rects: [{ index: 1, x: 24, y: 620, width: 120, height: 40 }],
+          boxes: [{ index: 1, x: 24, y: 620, width: 120, height: 40 }],
         },
       );
     });
@@ -989,7 +997,7 @@ describe("Frame の遷移のボタンの枠", () => {
       expect(boxes()).toHaveLength(0);
       expect(onLiveTransitions).toHaveBeenLastCalledWith(
         "transition-live-invalid",
-        { kind: "located", rects: [] },
+        { kind: "located", boxes: [] },
       );
     });
 
@@ -1044,6 +1052,129 @@ describe("Frame の遷移のボタンの枠", () => {
       await wait(5_000);
 
       expect(requests()).toHaveLength(count);
+    });
+  });
+
+  describe("探す頼みに答える橋渡し（返事の待ち方）", () => {
+    const FONT_HEIGHT = Math.round(SHOT.height * (403 / 388));
+    const MOVED = { x: 24, y: 361, width: 91, height: 35 };
+
+    test("[正常系]操作のモードで初めて触った後、遅れて起きる高さの変わらない入れ替わりも拾う（探し直しを捨てない）", async () => {
+      const { revealLive, receive, answer, wait, boxes } = renderFrame({
+        id: "transition-wait-first-touch",
+        tool: "interact",
+      });
+      await revealLive(SHOT.height, [{ index: 0, box: MOVED }]);
+
+      // 初めて触った（触った印が付く）
+      receive({ type: "interacted" });
+      await wait(150);
+      // 押した直後はまだ入れ替わっていない
+      await answer([{ index: 0, box: MOVED }]);
+      expect(boxes()[0]?.style.top).toBe("361px");
+      // 400ms ほど遅れて入れ替わった（高さは変わらない）。後の探し直しで拾う
+      await wait(650);
+      await answer([{ index: 0, box: { ...MOVED, y: 420 } }]);
+
+      expect(boxes()[0]?.style.top).toBe("420px");
+    });
+
+    test("[正常系]2 回目以降に触ったとき・操作のモードでキーを離したときも探し直す", async () => {
+      const { revealLive, receive, requests, answer, wait } = renderFrame({
+        id: "transition-wait-second-touch",
+        tool: "interact",
+      });
+      await revealLive(SHOT.height, [{ index: 0, box: MOVED }]);
+      receive({ type: "interacted" });
+      await wait(1_000);
+      await answer([{ index: 0, box: MOVED }]);
+
+      const afterFirst = requests().length;
+      receive({ type: "interacted" });
+      await wait(150);
+      expect(requests().length).toBeGreaterThan(afterFirst);
+      await answer([{ index: 0, box: MOVED }]);
+
+      const afterSecond = requests().length;
+      receive({ type: "keyup", key: "Tab" });
+      await wait(150);
+      expect(requests().length).toBeGreaterThan(afterSecond);
+    });
+
+    test("[正常系]版がまだ分からない間（最初の返事を待つ間）は、高さが違っても撮ったときの位置から出す", () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, boxes } = renderFrame({
+        id: "transition-wait-unknown",
+        tool: "comment",
+        onLiveTransitions,
+      });
+
+      reveal(FONT_HEIGHT);
+
+      expect(boxes()[0]?.style.top).toBe("346px");
+      expect(onLiveTransitions).not.toHaveBeenCalled();
+    });
+
+    test("[正常系]最初の返事が時間切れより遅れても、届けば新しい橋渡しとして実際の位置から出す", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, wait, answer, boxes } = renderFrame({
+        id: "transition-wait-slow",
+        tool: "comment",
+        onLiveTransitions,
+      });
+
+      reveal(FONT_HEIGHT);
+      await wait(2_000);
+      // 時間切れまでは、探す前の版とみなす
+      expect(boxes()).toHaveLength(0);
+
+      await answer([{ index: 0, box: MOVED }]);
+
+      expect(boxes()[0]?.style.top).toBe("361px");
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-wait-slow",
+        { kind: "located", boxes: [{ index: 0, ...MOVED }] },
+      );
+    });
+
+    test("[正常系]一度答えた橋渡しは、探し直しの返事が遅れても探す前の版とみなさない", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { revealLive, receive, wait, boxes } = renderFrame({
+        id: "transition-wait-late-relocate",
+        tool: "comment",
+        onLiveTransitions,
+      });
+      await revealLive(FONT_HEIGHT, [{ index: 0, box: MOVED }]);
+
+      receive({ type: "size", height: FONT_HEIGHT, width: WIDTH });
+      await wait(3_000);
+
+      expect(boxes()[0]?.style.top).toBe("361px");
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-wait-late-relocate",
+        { kind: "located", boxes: [{ index: 0, ...MOVED }] },
+      );
+    });
+
+    test("[正常系]新しい頼みの返事が先に届いたら、後から届いた古い頼みの返事は使わない", async () => {
+      const { revealLive, receive, requests, answerRequest, wait, boxes } =
+        renderFrame({ id: "transition-wait-order", tool: "comment" });
+      await revealLive(SHOT.height, [{ index: 0, box: MOVED }]);
+
+      receive({ type: "size", height: SHOT.height, width: WIDTH });
+      await wait(150);
+      const older = requests().at(-1);
+      receive({ type: "size", height: SHOT.height, width: WIDTH });
+      await wait(150);
+      const newer = requests().at(-1);
+      if (older === undefined || newer === undefined || older === newer) {
+        throw new Error("頼みが 2 つありません");
+      }
+
+      await answerRequest(newer, [{ index: 0, box: { ...MOVED, y: 400 } }]);
+      await answerRequest(older, [{ index: 0, box: { ...MOVED, y: 380 } }]);
+
+      expect(boxes()[0]?.style.top).toBe("400px");
     });
   });
 

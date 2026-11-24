@@ -181,18 +181,34 @@ describe("parseParentMessage", () => {
 });
 
 describe("parseParentMessage（遷移のボタン）", () => {
-  test("[正常系]遷移のボタンを探す頼みを読む（番号が正しくなければ null）", () => {
+  test("[正常系]遷移のボタンを探す頼みを読み、探す行は 0〜49 の整数だけを残す", () => {
     expect(
       parseParentMessage(
-        toParentEnvelope({ type: "transitions", requestId: 5 }),
+        toParentEnvelope({ type: "transitions", requestId: 5, rows: [0, 3] }),
       ),
-    ).toStrictEqual({ type: "transitions", requestId: 5 });
+    ).toStrictEqual({ type: "transitions", requestId: 5, rows: [0, 3] });
     expect(
       parseParentMessage({
         channel: PARENT_CHANNEL,
         version: BRIDGE_PROTOCOL_VERSION,
         type: "transitions",
-        requestId: -1,
+        requestId: 5,
+        rows: [1, -1, 1.5, "2", 50, 49],
+      }),
+    ).toStrictEqual({ type: "transitions", requestId: 5, rows: [1, 49] });
+  });
+
+  test.each([
+    ["番号が負", { requestId: -1, rows: [0] }],
+    ["行が並びでない", { requestId: 1, rows: 0 }],
+    ["行が無い", { requestId: 1 }],
+  ])("[異常系]%sの頼みは null", (_label, fields) => {
+    expect(
+      parseParentMessage({
+        channel: PARENT_CHANNEL,
+        version: BRIDGE_PROTOCOL_VERSION,
+        type: "transitions",
+        ...fields,
       }),
     ).toBeNull();
   });

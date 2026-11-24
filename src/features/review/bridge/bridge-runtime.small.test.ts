@@ -213,7 +213,7 @@ describe("installBridge", () => {
     });
     send({ type: "hello", interactive: false });
 
-    send({ type: "transitions", requestId: 9 });
+    send({ type: "transitions", requestId: 9, rows: [0, 1] });
 
     expect(posted.at(-1)?.data).toMatchObject({
       type: "transitions",
@@ -223,6 +223,14 @@ describe("installBridge", () => {
         { index: 1, box: null },
       ],
     });
+
+    // 親が頼んだ行（目録にある行）だけを探す
+    send({ type: "transitions", requestId: 10, rows: [1] });
+    expect(posted.at(-1)?.data).toMatchObject({
+      type: "transitions",
+      requestId: 10,
+      results: [{ index: 1, box: null }],
+    });
     uninstall();
   });
 
@@ -230,7 +238,7 @@ describe("installBridge", () => {
     const { posted, send, uninstall } = setUp();
     send({ type: "hello", interactive: false });
 
-    send({ type: "transitions", requestId: 3 });
+    send({ type: "transitions", requestId: 3, rows: [0] });
 
     expect(posted.at(-1)?.data).toMatchObject({
       type: "transitions",

@@ -117,7 +117,7 @@ type CanvasProps = {
   /** 画面ごとの、撮ったときの遷移を持つボタンの矩形（画面のつながりを出さないときは渡さない） */
   transitionBoxesOf?: (storyId: string) => ReadonlyArray<ShotTransition>;
   /** 画面ごとの、目録にある遷移の行（index。画面のつながりを出さないときは渡さない） */
-  transitionRowsOf?: (storyId: string) => ReadonlyArray<number>;
+  transitionRowIndexesOf?: (storyId: string) => ReadonlyArray<number>;
   /** 動く画面での遷移のボタンの位置が決まった・変わった（Frame の onLiveTransitions） */
   onLiveTransitions?: (storyId: string, live: LiveTransitions | null) => void;
 };
@@ -155,7 +155,7 @@ export const Canvas = ({
   focusStoryId = null,
   onCompare,
   transitionBoxesOf,
-  transitionRowsOf,
+  transitionRowIndexesOf,
   onLiveTransitions,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
@@ -546,7 +546,9 @@ export const Canvas = ({
                   transitionBoxes={
                     transitionBoxesOf?.(placement.story.id) ?? []
                   }
-                  transitionRows={transitionRowsOf?.(placement.story.id) ?? []}
+                  transitionRowIndexes={
+                    transitionRowIndexesOf?.(placement.story.id) ?? []
+                  }
                   onLiveTransitions={onLiveTransitions}
                 />
               ))}

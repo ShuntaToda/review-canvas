@@ -1,7 +1,7 @@
 import {
   acceptTransitionHits,
   DRIFTED_TRANSITIONS,
-  transitionRectsFor,
+  transitionBoxesFor,
 } from "./live-transitions";
 
 describe("acceptTransitionHits", () => {
@@ -51,15 +51,15 @@ describe("acceptTransitionHits", () => {
   });
 });
 
-describe("transitionRectsFor", () => {
+describe("transitionBoxesFor", () => {
   const shot = [{ index: 0, x: 24, y: 346, width: 89, height: 34 }];
   const live = [{ index: 1, x: 0, y: 0, width: 10, height: 10 }];
 
   test("[正常系]動く画面の位置が無ければ撮ったときの位置、ずれたなら無し、探したなら探した位置", () => {
-    expect(transitionRectsFor(shot, null)).toBe(shot);
-    expect(transitionRectsFor(shot, undefined)).toBe(shot);
-    expect(transitionRectsFor(shot, DRIFTED_TRANSITIONS)).toStrictEqual([]);
-    expect(transitionRectsFor(shot, { kind: "located", rects: live })).toBe(
+    expect(transitionBoxesFor(shot, null)).toBe(shot);
+    expect(transitionBoxesFor(shot, undefined)).toBe(shot);
+    expect(transitionBoxesFor(shot, DRIFTED_TRANSITIONS)).toStrictEqual([]);
+    expect(transitionBoxesFor(shot, { kind: "located", boxes: live })).toBe(
       live,
     );
   });
