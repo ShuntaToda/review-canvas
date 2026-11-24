@@ -2,7 +2,7 @@ name: storybook
 
 # このリポジトリのブランチの Storybook（設定ファイル review-canvas.config.json のもの）を、このリポジトリのスタックへ置く・消す（docs/deploy.md「ブランチの Storybook をワークフローから置く」）。
 # 使う側に出している再利用ワークフロー publish.yml を、同じコミットのまま呼ぶ（置く手順も push したコミットの版。#41 の b1）。
-# - push: 置いていないブランチも置く（Storybook に関わるパスが変わったとき。#41 の a1）。画像だけのブランチ issue-images は、設定ファイルが無いので外す
+# - push: 置いていないブランチも置く（Storybook に関わるパスが変わったとき。#41 の a1）。画像だけのブランチ issue-images の push では動かさない（設定ファイルが無い。消したときの delete はブランチで絞れないので動くが、置いていないので何も消さない）
 # - ブランチを消した（delete）: 消す
 # - workflow_dispatch: 1 つのブランチ・置いてあるブランチの全部を置き直す
 # リポジトリの変数 REVIEW_CANVAS_PUBLISH_ENABLED が true のときだけ動く（フォーク・写したリポジトリでは、AWS につながずに飛ばす）。
@@ -42,6 +42,8 @@ jobs:
       aws_region: ${{ vars.REVIEW_CANVAS_AWS_REGION || 'ap-northeast-1' }}
       stack_name: ${{ vars.REVIEW_CANVAS_STACK_NAME || 'ReviewCanvas' }}
       default_branch: ${{ vars.REVIEW_CANVAS_DEFAULT_BRANCH }}
+      environment: ${{ vars.REVIEW_CANVAS_GITHUB_ENVIRONMENT || 'review-canvas' }}
+      main_environment: ${{ vars.REVIEW_CANVAS_GITHUB_MAIN_ENVIRONMENT || 'review-canvas-main' }}
       branch: ${{ inputs.branch || '' }}
       all: ${{ inputs.all || false }}
     secrets:
