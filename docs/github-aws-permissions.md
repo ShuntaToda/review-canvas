@@ -53,6 +53,8 @@ GitHub Actions（`deploy.yml`）から出すときは、出す人の代わりに
 
 ロールの ARN・アカウント ID は秘密ではありませんが、公開リポジトリから呼ぶときは変数に入れ、ワークフローのファイルに直に書かないでおくと出し直したときに直しやすくなります。
 
+このリポジトリ自身のブランチの Storybook を置くワークフロー（`storybook.yml`）の用意は、[deploy.md](deploy.md#ブランチの-storybook-をワークフローから置く) にあります。
+
 ## GitHub: このリポジトリから出す（deploy.yml）
 
 1. **Environment を作る**: 出す Environment（既定 `review-canvas-deploy`。発行用の `review-canvas`・`review-canvas-main` と別の名前）に、Required reviewers と、デプロイできるブランチを既定のブランチだけにする制限（Deployment branches and tags → Selected branches）を付ける

@@ -57,6 +57,10 @@ describe("ワークフロー（.github/workflows）", () => {
 /** id-token: write の指定（コメントの中の言及は数えない） */
 const ID_TOKEN_WRITE = /^\s*id-token:\s*write\b/m;
 
+/** このリポジトリの再利用ワークフロー（.github/workflows/ の中）を呼ぶジョブの uses */
+const CALLS_LOCAL_WORKFLOW =
+  /^ {4}uses:\s*\.\/\.github\/workflows\/[\w.-]+\.ya?ml\s*$/m;
+
 /** ワークフローを、jobs の前（ワークフロー全体の設定）とジョブごとの本文に分ける */
 const jobsOf = (file) => {
   const [head = "", body = ""] = read(file).split(/\njobs:\n/);
@@ -70,7 +74,7 @@ const jobsOf = (file) => {
 
 describe("ワークフローの OIDC のトークン（id-token: write）", () => {
   test.each(workflowFiles)(
-    "[正常系]%s は、ワークフロー全体には id-token: write を付けず、付けたジョブはどれも AWS の資格情報を取る（AWS を使うジョブにだけ付ける）",
+    "[正常系]%s は、ワークフロー全体には id-token: write を付けず、付けたジョブはどれも AWS の資格情報を取る（AWS を使うジョブにだけ付ける。このリポジトリの再利用ワークフローを呼ぶジョブは、呼ぶ先で確かめる）",
     (file) => {
       const { head, jobs } = jobsOf(file);
 
@@ -80,7 +84,9 @@ describe("ワークフローの OIDC のトークン（id-token: write）", () =
         .filter(({ text }) => ID_TOKEN_WRITE.test(text))
         .filter(
           ({ text }) =>
-            !text.includes("aws-actions/configure-aws-credentials@"),
+            !text.includes("aws-actions/configure-aws-credentials@") &&
+            // このリポジトリの再利用ワークフローを呼ぶジョブは、呼ぶ先のジョブをこのテストが確かめる
+            !CALLS_LOCAL_WORKFLOW.test(text),
         )
         .map(({ name }) => name);
       expect(unused).toStrictEqual([]);

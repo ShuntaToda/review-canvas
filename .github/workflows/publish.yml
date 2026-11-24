@@ -5,8 +5,10 @@ name: review-canvas-publish
 # そのイベントのまま、このワークフローを呼ぶ（github.* は呼んだ側のもの）。
 # - workflow_dispatch: branch のブランチを置く。all を付けると、いま置いてあるブランチを全部置き直す
 # - push: そのブランチが置いてあり、Storybook に関わるパス（設定ファイルの watchPaths）が変わったときだけ置き直す
+# - push で publish_unpublished_on_push のとき: 置いていないブランチも置く（Storybook に関わるパスが変わったとき。新しいブランチは変わったとみなす）
 # - ブランチを消した（delete）: 消す（置いていなくても動かす。途中まで置いたものも残さない）
-# role_arn が空なら、どのジョブも動かさない（スキップで終わる）。
+# role_arn が空で roles_from_secrets でもなければ、どのジョブも動かさない（スキップで終わる）。
+# ロールの ARN は Secret（aws_role_arn・aws_main_role_arn）でも受けられる（roles_from_secrets。公開リポジトリの記録にアカウント ID を出さないため）。
 #
 # 既定のブランチとそれ以外で、GitHub Environment と AWS のロールを分ける（infra/lib/github-publish-role.ts）。
 # - 既定のブランチ（default_branch。無ければリポジトリの既定のブランチ。スタックの既定のブランチと同じにする）:
@@ -41,7 +43,7 @@ on:
         type: string
         default: review-canvas.config.json
       role_arn:
-        description: 既定のブランチ以外を置くロール（スタックの出力 PublishRoleArn）。空ならどのジョブも動かさない
+        description: 既定のブランチ以外を置くロール（スタックの出力 PublishRoleArn）。空なら（roles_from_secrets でなければ）どのジョブも動かさない
         required: false
         type: string
         default: ""
@@ -92,11 +94,28 @@ on:
         required: false
         type: string
         default: 10.24.0
+      publish_unpublished_on_push:
+        description: push のとき、置いていないブランチも置く（既定は、置いてあるブランチだけを置き直す）
+        required: false
+        type: boolean
+        default: false
+      roles_from_secrets:
+        description: ロールの ARN を入力（role_arn・main_role_arn）ではなく Secret（aws_role_arn・aws_main_role_arn）から受ける。公開リポジトリで記録にアカウント ID を出さないとき。role_arn が空でも動かす
+        required: false
+        type: boolean
+        default: false
       install_command:
         description: 使う側のリポジトリで依存を入れるコマンド（使う側の根で動かす）
         required: false
         type: string
         default: pnpm install --frozen-lockfile
+    secrets:
+      aws_role_arn:
+        description: roles_from_secrets のときの、既定のブランチ以外を置くロール（スタックの出力 PublishRoleArn）
+        required: false
+      aws_main_role_arn:
+        description: roles_from_secrets のときの、既定のブランチを置くロール（スタックの出力 PublishMainRoleArn）
+        required: false
 
 # OIDC のトークン（id-token: write）は、AWS を使うジョブにだけ付ける（呼ぶ側のジョブに id-token: write を許しておく）
 permissions:
@@ -120,7 +139,7 @@ jobs:
   # 置くブランチを決める（AWS にはつながない。使う側のコードは動かさない）。push は、Storybook に関わるパスが変わったときだけ候補にする
   plan:
     if: >-
-      inputs.role_arn != '' &&
+      (inputs.role_arn != '' || inputs.roles_from_secrets) &&
       ((github.event_name == 'push' && github.event.deleted != true) ||
        (github.event_name == 'workflow_dispatch' && !inputs.all))
     runs-on: ubuntu-latest
@@ -165,13 +184,19 @@ jobs:
           INPUT_BRANCH: ${{ inputs.branch }}
           REF_NAME: ${{ github.ref_name }}
           BEFORE: ${{ github.event.before }}
+          PUBLISH_UNPUBLISHED: ${{ inputs.publish_unpublished_on_push }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
             echo "branches=$(jq -cn --arg b "${INPUT_BRANCH:-$REF_NAME}" '[$b]')" >> "$GITHUB_OUTPUT"
             echo "check=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "check=true" >> "$GITHUB_OUTPUT"
+          # publish_unpublished_on_push のときは、置いていないブランチも置く（置いてあるかを確かめない）
+          if [ "$PUBLISH_UNPUBLISHED" = "true" ]; then
+            echo "check=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "check=true" >> "$GITHUB_OUTPUT"
+          fi
           if [ ! -f "$CONFIG" ]; then
             echo "::error::設定ファイル $CONFIG がありません"
             exit 1
@@ -194,7 +219,7 @@ jobs:
   # all のとき、いま置いてあるブランチを AWS から読む（動かすのは review-canvas のスクリプトだけ）
   list-published:
     if: >-
-      inputs.role_arn != '' &&
+      (inputs.role_arn != '' || inputs.roles_from_secrets) &&
       github.event_name == 'workflow_dispatch' && inputs.all
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -244,8 +269,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ inputs.role_arn }}
+          role-to-assume: ${{ inputs.role_arn || secrets.aws_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
 
       # 出力は文字列の JSON の配列のときだけ渡す（スクリプトが別のものを出したら止める）
       - name: List
@@ -268,7 +294,7 @@ jobs:
   check-published:
     needs: [plan]
     if: >-
-      inputs.role_arn != '' &&
+      (inputs.role_arn != '' || inputs.roles_from_secrets) &&
       needs.plan.outputs.check == 'true' && needs.plan.outputs.branches != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -308,8 +334,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ inputs.role_arn }}
+          role-to-assume: ${{ inputs.role_arn || secrets.aws_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
 
       - name: Check published
         id: published
@@ -511,8 +538,6 @@ jobs:
       # 既定のブランチは、スタックの既定のブランチ（出力 DefaultBranch）と同じ値を default_branch に入れる（無ければリポジトリの既定のブランチ）。
       # スクリプトが、スタックの既定のブランチと食い違えば止める
       IS_DEFAULT_BRANCH: ${{ matrix.branch == (inputs.default_branch || github.event.repository.default_branch) }}
-      MAIN_ROLE_ARN: ${{ inputs.main_role_arn }}
-      OTHER_ROLE_ARN: ${{ inputs.role_arn }}
     steps:
       - name: Check inputs
         run: |
@@ -591,18 +616,22 @@ jobs:
         run: bash -c "$INSTALL_COMMAND"
 
       # ロールを選ぶ。既定のブランチ用のロールが無いまま既定のブランチを置こうとしたら、ほかのロールに落とさずに止める
+      # ロールの ARN は、このステップの env にだけ置く（ジョブの env に置くと、どのステップの記録の見出しにも出る）
       - name: Check role
         id: role
+        env:
+          MAIN_ROLE_ARN: ${{ inputs.main_role_arn || secrets.aws_main_role_arn }}
+          OTHER_ROLE_ARN: ${{ inputs.role_arn || secrets.aws_role_arn }}
         run: |
           if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
             if [ -z "$MAIN_ROLE_ARN" ]; then
-              echo "::error::既定のブランチ（$BRANCH）を置くには、main_role_arn（スタックの出力 PublishMainRoleArn）を渡してください"
+              echo "::error::既定のブランチ（$BRANCH）を置くには、main_role_arn（スタックの出力 PublishMainRoleArn。roles_from_secrets のときは Secret の aws_main_role_arn）を渡してください"
               exit 1
             fi
             echo "arn=$MAIN_ROLE_ARN" >> "$GITHUB_OUTPUT"
           else
             if [ -z "$OTHER_ROLE_ARN" ]; then
-              echo "::error::role_arn（スタックの出力 PublishRoleArn）を渡してください"
+              echo "::error::role_arn（スタックの出力 PublishRoleArn。roles_from_secrets のときは Secret の aws_role_arn）を渡してください"
               exit 1
             fi
             echo "arn=$OTHER_ROLE_ARN" >> "$GITHUB_OUTPUT"
@@ -613,6 +642,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
 
       - name: Publish
         working-directory: tool
@@ -644,7 +674,7 @@ jobs:
 
   unpublish:
     if: >-
-      inputs.role_arn != '' &&
+      (inputs.role_arn != '' || inputs.roles_from_secrets) &&
       github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -695,8 +725,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ inputs.role_arn }}
+          role-to-assume: ${{ inputs.role_arn || secrets.aws_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
 
       # 置いてあるか（目録があるか）を見ずに消す（目録を書く前に止まった、途中まで置いたものも残さない）。
       # 置いていなければ、消すものが無いだけで失敗にはしない（受け付けない名前もスクリプトが何もせずに終える）

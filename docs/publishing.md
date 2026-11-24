@@ -62,9 +62,9 @@ review-canvas list --profile <プロファイル>
 | どこかのブランチへの push     | そのブランチが置いてあり、設定ファイルの `watchPaths` が前の push から変わったときだけ置き直す |
 | ブランチを消した              | 置いてあれば消す                                                                               |
 
-- 置いていないブランチは push しても置きません。置くかどうかは、はじめに手で決めます（手で動かすか、手元の `review-canvas publish`）
+- 置いていないブランチは push しても置きません。置くかどうかは、はじめに手で決めます（手で動かすか、手元の `review-canvas publish`）。`publish_unpublished_on_push` を付けたときは、置いていないブランチも push で置きます（`watchPaths` が変わったとき。新しいブランチは変わったとみなす）
 - 同じブランチの置く・消すは並べず、順に動かします（途中で止めると置き場が半端になるため、途中のものは止めない）
-- `role_arn` が空なら、どのジョブも動かさずに終わります。既定のブランチを置くときに `main_role_arn` が空なら、その置く処理は失敗します
+- `role_arn` が空で `roles_from_secrets` でもなければ、どのジョブも動かさずに終わります。既定のブランチを置くときに `main_role_arn` が空なら、その置く処理は失敗します
 - 置く手順（スクリプト・橋渡し）は、`review_canvas_ref`（40 桁のコミットの SHA。`uses:` の `@` と同じにする）の review-canvas から取り出します。SHA でなければ止めます
 - ビルドと置くことはジョブを分けます。置くブランチは `host/` へ取り出して、AWS の資格情報を持たないジョブ（`build`。`id-token` なし）で Storybook をビルドし、成果物にします。AWS の資格情報を持つジョブ（`publish`）は、橋渡しを review-canvas のコミットから自分でビルドし（成果物の中のものは使わない）、成果物を review-canvas のスクリプトで置くだけで、置くブランチのコードは動かしません
 - スクリーンショットも `build` のジョブで撮ります（置くブランチのストーリーをブラウザで動かすので、AWS の資格情報を持たない側で）。撮る手順は `review_canvas_ref` の review-canvas のもので、Chromium はそのジョブで入れます（`playwright install --with-deps --only-shell chromium`）。入らない・撮れない・時間切れ（Chromium を入れる step は 8 分、撮る step は 12 分）でもジョブは続き、画像なしで置きます。依存を入れる step は 10 分、Storybook をビルドする step は 20 分までで、ジョブの上限（60 分）は step の上限の合計より長くしてあります（撮影の時間切れで、ジョブごと落ちない）。`publish` のジョブは成果物の画像を確かめて置くだけで、どのブランチでもブラウザを動かしません（`--skip-screenshots`）

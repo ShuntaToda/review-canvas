@@ -49,7 +49,7 @@ review-canvas/
 ├── eslint-rules/             # このリポジトリだけの ESLint ルール（層ごとのファイルの形など）
 ├── scripts/                  # 開発用のスクリプト（new-api.mjs: API の雛形）・リポジトリの決まりのテスト
 ├── .claude/                  # Claude Code の hook・スキル（dev-*: このリポジトリの開発用）・レビュー用のサブエージェント（agents/）
-├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）・deploy.yml（既定のブランチからスタックを出す。変数で有効にしたときだけ）
+├── .github/workflows/        # ci.yml（このリポジトリの CI）・auto-merge-claude.yml（.claude/ だけの PR の自動マージ）・publish.yml（使う側から呼ぶ再利用ワークフロー）・deploy.yml（既定のブランチからスタックを出す。変数で有効にしたときだけ）・storybook.yml（push でブランチの Storybook を置く。変数で有効にしたときだけ）
 ├── .github/ISSUE_TEMPLATE/   # 親 Issue・PR 単位の Issue・不具合のテンプレート（pull_request_template.md は PR の本文）
 ├── review-canvas.config.json # サンプルの設定（並べる Storybook）。review-canvas.config.schema.json は生成物
 └── openapi.json              # API の契約（生成物）

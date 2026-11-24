@@ -197,20 +197,24 @@ jobs:
       all: ${{ inputs.all || false }}
 ```
 
-| 入力                              | 既定                                  | 内容                                                                                  |
-| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
-| `review_canvas_ref`               | （必須）                              | 置く手順を取り出す review-canvas のコミット（40 桁の SHA でなければ止める）           |
-| `review_canvas_repository`        | `ShuntaToda/review-canvas`            | 置く手順を取り出す review-canvas のリポジトリ（`uses:` の `@` の前と同じもの）        |
-| `config`                          | `review-canvas.config.json`           | 使う側のリポジトリの根からの設定ファイルの場所                                        |
-| `role_arn`                        | 空                                    | 既定のブランチ以外を置くロール（出力 `PublishRoleArn`）。空ならどのジョブも動かさない |
-| `main_role_arn`                   | 空                                    | 既定のブランチを置くロール（出力 `PublishMainRoleArn`）                               |
-| `aws_region`                      | `ap-northeast-1`                      | スタックのリージョン                                                                  |
-| `stack_name`                      | `ReviewCanvas`                        | スタックの名前（置き場はこのスタックの出力から読む）                                  |
-| `default_branch`                  | リポジトリの既定のブランチ            | スタックの `DefaultBranch` と同じ値                                                   |
-| `environment`・`main_environment` | `review-canvas`・`review-canvas-main` | ジョブの GitHub Environment（ロールの信頼ポリシーと同じ名前）                         |
-| `branch`・`all`                   | 空・false                             | workflow_dispatch の入力を渡す                                                        |
-| `node_version`・`pnpm_version`    | `24`・`10.24.0`                       | ビルドに使う Node.js・pnpm                                                            |
-| `install_command`                 | `pnpm install --frozen-lockfile`      | 使う側のリポジトリで依存を入れるコマンド                                              |
+| 入力                              | 既定                                  | 内容                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `review_canvas_ref`               | （必須）                              | 置く手順を取り出す review-canvas のコミット（40 桁の SHA でなければ止める）                                                                                                         |
+| `review_canvas_repository`        | `ShuntaToda/review-canvas`            | 置く手順を取り出す review-canvas のリポジトリ（`uses:` の `@` の前と同じもの）                                                                                                      |
+| `config`                          | `review-canvas.config.json`           | 使う側のリポジトリの根からの設定ファイルの場所                                                                                                                                      |
+| `role_arn`                        | 空                                    | 既定のブランチ以外を置くロール（出力 `PublishRoleArn`）。空なら（`roles_from_secrets` でなければ）どのジョブも動かさない                                                            |
+| `main_role_arn`                   | 空                                    | 既定のブランチを置くロール（出力 `PublishMainRoleArn`）                                                                                                                             |
+| `aws_region`                      | `ap-northeast-1`                      | スタックのリージョン                                                                                                                                                                |
+| `stack_name`                      | `ReviewCanvas`                        | スタックの名前（置き場はこのスタックの出力から読む）                                                                                                                                |
+| `default_branch`                  | リポジトリの既定のブランチ            | スタックの `DefaultBranch` と同じ値                                                                                                                                                 |
+| `environment`・`main_environment` | `review-canvas`・`review-canvas-main` | ジョブの GitHub Environment（ロールの信頼ポリシーと同じ名前）                                                                                                                       |
+| `branch`・`all`                   | 空・false                             | workflow_dispatch の入力を渡す                                                                                                                                                      |
+| `node_version`・`pnpm_version`    | `24`・`10.24.0`                       | ビルドに使う Node.js・pnpm                                                                                                                                                          |
+| `install_command`                 | `pnpm install --frozen-lockfile`      | 使う側のリポジトリで依存を入れるコマンド                                                                                                                                            |
+| `publish_unpublished_on_push`     | false                                 | push のとき、置いていないブランチも置く（`watchPaths` が変わったとき。新しいブランチは変わったとみなす）                                                                            |
+| `roles_from_secrets`              | false                                 | ロールの ARN を、入力ではなく Secret の `aws_role_arn`・`aws_main_role_arn` から受ける（`role_arn` が空でも動かす）。公開リポジトリで、Actions の記録にアカウント ID を出さないとき |
+
+`roles_from_secrets` のときは、呼ぶジョブに `secrets: { aws_role_arn: …, aws_main_role_arn: … }` を書き、`with` の `roles_from_secrets` に有効にするかを渡します（このリポジトリの `.github/workflows/storybook.yml` が例）。どちらの渡し方でも、資格情報を取った後はアカウント ID を伏せ字にします（`mask-aws-account-id`）。
 
 Environment・ロール・変数の用意は [github-aws-permissions.md](github-aws-permissions.md)、動き方は [publishing.md](publishing.md#github-actions-から置く) にあります。
 
