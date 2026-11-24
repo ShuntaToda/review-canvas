@@ -20,7 +20,7 @@ Storybook の画面をキャンバスに並べてコメントするレビュー�
 
 ## Issue から PR までの流れ
 
-このリポジトリ自身の開発は、Issue で仕様を決める（スキル `dev-write-issue`）→ 実装（`dev-implement-issue`）→ 多視点レビュー（`dev-multi-perspective-review`）→ PR（`.github/pull_request_template.md`）の順に回します。仕様は人が決め、AI は実装しながら決めません。push・PR の作成・Issue への投稿は人が頼んだときだけ、マージは人がします。ただし変更が `.claude/` の中だけの PR は、CI が通るとワークフローが自動でマージします（くわしくは [docs/development.md](docs/development.md#issue-から-pr-まで)・[main へのマージ](docs/development.md#main-へのマージ)）。
+このリポジトリ自身の開発は、Issue で仕様を決める（スキル `dev-write-issue`）→ 実装（`dev-implement-issue`）→ 多視点レビュー（`dev-multi-perspective-review`）→ PR（`.github/pull_request_template.md`）の順に回します。不具合の直し・1 行の直しも同じで、段を飛ばしません（不具合は Issue の不具合のテンプレートで書き、実装は実装役のサブエージェントに渡し、多視点レビューを通してから PR にする）。仕様は人が決め、AI は実装しながら決めません。push・PR の作成・Issue への投稿は人が頼んだときだけ、マージは人がします。ただし変更が `.claude/` の中だけの PR は、CI が通るとワークフローが自動でマージします（くわしくは [docs/development.md](docs/development.md#issue-から-pr-まで)・[main へのマージ](docs/development.md#main-へのマージ)）。
 
 ## 守ること
 
