@@ -107,7 +107,7 @@ describe("ワークフローの OIDC のトークン（id-token: write）", () =
     "[正常系]%s の AWS の資格情報を取る step は、どれも mask-aws-account-id: true を付けている",
     (file) => {
       const steps = read(file)
-        .split(/\n\s*- name:/)
+        .split(/\n\s*- (?=name:|uses:|run:|id:|if:)/)
         .filter((step) =>
           step.includes("aws-actions/configure-aws-credentials@"),
         );
@@ -146,7 +146,9 @@ describe("storybook.yml（このリポジトリのブランチの Storybook を�
   // 公開リポジトリの Actions の記録にアカウント ID を出さない（入力で渡すと step の見出しに出る）
   test("[正常系]ロールの ARN は入力ではなく Secret で渡す", () => {
     expect(workflow).not.toMatch(/^ {6}(main_)?role_arn:/m);
-    expect(workflow).toMatch(/^ {6}roles_from_secrets: /m);
+    expect(workflow).toMatch(
+      /^ {6}roles_from_secrets: \$\{\{ vars\.REVIEW_CANVAS_PUBLISH_ENABLED == 'true' \}\}$/m,
+    );
     expect(workflow).toMatch(
       /^ {6}aws_role_arn: \$\{\{ secrets\.[A-Z_]+ \}\}$/m,
     );

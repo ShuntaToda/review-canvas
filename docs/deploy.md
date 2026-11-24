@@ -189,7 +189,7 @@ pnpm --dir infra run diff --profile <プロファイル>
 - スクリーンショットは、既定のブランチもほかのブランチも CI（`build` のジョブ）で撮ります。撮る場所をそろえるので、文字の形の違いで、どの画面も「変更」になることがありません
 - 置く手順（スクリプト・橋渡し・撮影）は、push したコミットの版を使います。ブランチで変えた橋渡し・撮影を、そのまま置いて試せます。そのため、既定のブランチ以外を置く AWS のジョブでは、そのブランチの置くスクリプトが動きます。このリポジトリにブランチを push できるのは write 権限のある人だけで（フォークからの PR では push のワークフローは動かない）、そのジョブのロールが書けるのは、既定のブランチ以外の置き場だけです（[github-aws-permissions.md](github-aws-permissions.md#aws-発行用ロールgithub-actions-が引き受ける)）。動くのは置くスクリプトと、`pnpm install` で入る依存（lifecycle のスクリプトを含む）です。これで増える力はありません。Environment `review-canvas` にはブランチの制限が無いので、write 権限のある人は、もともと自分のブランチのワークフローからこのロールを引き受けられます。そのロールでできるのは、ほかの人のものを含む既定のブランチ以外の Storybook を書き換える・消すことと、Storybook の配信のキャッシュを消すことです
 - ロールの ARN はリポジトリの Secret から渡し、資格情報を取った後はアカウント ID を伏せ字にします（公開リポジトリの Actions の記録は誰でも読めるため）
-- 置く手順だけ（`infra/scripts/`）を変えた push でも置き直すよう、`review-canvas.config.json` の `watchPaths` に `infra/scripts/` を入れてあります
+- `review-canvas.config.json` の `watchPaths` に `infra/scripts/` を入れてあり、置くスクリプトだけを変えた push でも置き直します。ほかの置く手順の変更（設定の形・infra の依存の版など）だけのときは、Run workflow で置き直します
 - マージしたブランチを消すと Storybook も消えます。Settings → General → Pull Requests の「Automatically delete head branches」を有効にしておくと、置いたままになりません。push の直後にブランチを消すと、消す処理が先に終わり、後から置く処理が終わって Storybook が残ることがあります。残ったら手で消します（Run workflow ではなく、手元の `review-canvas unpublish <ブランチ>`）
 
 ### 有効にする
