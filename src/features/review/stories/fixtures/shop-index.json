@@ -22,6 +22,55 @@
       "name": "Loading",
       "importPath": "./src/pages/ProductList.stories.tsx"
     },
+    "shop-productlist--failed": {
+      "type": "story",
+      "id": "shop-productlist--failed",
+      "title": "Shop/ProductList",
+      "name": "Failed",
+      "importPath": "./src/pages/ProductList.stories.tsx"
+    },
+    "shop-product-detail--in-stock": {
+      "type": "story",
+      "id": "shop-product-detail--in-stock",
+      "title": "Shop/Product/Detail",
+      "name": "In Stock",
+      "importPath": "./src/pages/ProductDetail.stories.tsx"
+    },
+    "shop-product-detail--sold-out": {
+      "type": "story",
+      "id": "shop-product-detail--sold-out",
+      "title": "Shop/Product/Detail",
+      "name": "Sold Out",
+      "importPath": "./src/pages/ProductDetail.stories.tsx"
+    },
+    "shop-product-detail--loading": {
+      "type": "story",
+      "id": "shop-product-detail--loading",
+      "title": "Shop/Product/Detail",
+      "name": "Loading",
+      "importPath": "./src/pages/ProductDetail.stories.tsx"
+    },
+    "shop-checkout-cart--with-items": {
+      "type": "story",
+      "id": "shop-checkout-cart--with-items",
+      "title": "Shop/Checkout/Cart",
+      "name": "With Items",
+      "importPath": "./src/pages/Cart.stories.tsx"
+    },
+    "shop-checkout-cart--empty": {
+      "type": "story",
+      "id": "shop-checkout-cart--empty",
+      "title": "Shop/Checkout/Cart",
+      "name": "Empty",
+      "importPath": "./src/pages/Cart.stories.tsx"
+    },
+    "shop-checkout-cart--quantity-limit": {
+      "type": "story",
+      "id": "shop-checkout-cart--quantity-limit",
+      "title": "Shop/Checkout/Cart",
+      "name": "Quantity Limit",
+      "importPath": "./src/pages/Cart.stories.tsx"
+    },
     "shop-orderform--default": {
       "type": "story",
       "id": "shop-orderform--default",
@@ -43,6 +92,48 @@
       "name": "Validation Error",
       "importPath": "./src/pages/OrderForm.stories.tsx"
     },
+    "shop-checkout-confirm--default": {
+      "type": "story",
+      "id": "shop-checkout-confirm--default",
+      "title": "Shop/Checkout/Confirm",
+      "name": "Default",
+      "importPath": "./src/pages/Confirm.stories.tsx"
+    },
+    "shop-checkout-complete--default": {
+      "type": "story",
+      "id": "shop-checkout-complete--default",
+      "title": "Shop/Checkout/Complete",
+      "name": "Default",
+      "importPath": "./src/pages/Complete.stories.tsx"
+    },
+    "account-login--default": {
+      "type": "story",
+      "id": "account-login--default",
+      "title": "Account/Login",
+      "name": "Default",
+      "importPath": "./src/pages/Login.stories.tsx"
+    },
+    "account-login--failed": {
+      "type": "story",
+      "id": "account-login--failed",
+      "title": "Account/Login",
+      "name": "Failed",
+      "importPath": "./src/pages/Login.stories.tsx"
+    },
+    "account-mypage--with-orders": {
+      "type": "story",
+      "id": "account-mypage--with-orders",
+      "title": "Account/MyPage",
+      "name": "With Orders",
+      "importPath": "./src/pages/MyPage.stories.tsx"
+    },
+    "account-mypage--no-orders": {
+      "type": "story",
+      "id": "account-mypage--no-orders",
+      "title": "Account/MyPage",
+      "name": "No Orders",
+      "importPath": "./src/pages/MyPage.stories.tsx"
+    },
     "shop-adminorders--default": {
       "type": "story",
       "id": "shop-adminorders--default",
@@ -55,6 +146,13 @@
       "id": "components-button--default",
       "title": "Components/Button",
       "name": "Default",
+      "importPath": "./src/components/Button.stories.tsx"
+    },
+    "components-button--disabled": {
+      "type": "story",
+      "id": "components-button--disabled",
+      "title": "Components/Button",
+      "name": "Disabled",
       "importPath": "./src/components/Button.stories.tsx"
     }
   }

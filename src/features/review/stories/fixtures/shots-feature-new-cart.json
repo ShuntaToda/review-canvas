@@ -2,11 +2,49 @@
   "version": 1,
   "shots": [
     {
+      "storyId": "components-button--default",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/components-button--default-375-06279b651994f519.png",
+      "contentHeight": 34,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 0,
+          "y": 0,
+          "width": 132,
+          "height": 34,
+          "text": "カートに入れる",
+          "heading": ""
+        }
+      ],
+      "thumb": "review-canvas-shots/components-button--default-375-06279b651994f519-thumb.png"
+    },
+    {
+      "storyId": "components-button--disabled",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/components-button--disabled-375-ccadd034e6468a10.png",
+      "contentHeight": 34,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 0,
+          "y": 0,
+          "width": 132,
+          "height": 34,
+          "text": "カートに入れる",
+          "heading": ""
+        }
+      ],
+      "thumb": "review-canvas-shots/components-button--disabled-375-ccadd034e6468a10-thumb.png"
+    },
+    {
       "storyId": "shop-adminorders--default",
       "width": 375,
-      "height": 2691,
-      "path": "review-canvas-shots/shop-adminorders--default-375-8c9081bc803de643.png",
-      "contentHeight": 2691,
+      "height": 2460,
+      "path": "review-canvas-shots/shop-adminorders--default-375-3d1341f2af049cd7.png",
+      "contentHeight": 2460,
       "elements": [
         {
           "tag": "a",
@@ -37,644 +75,1777 @@
         },
         {
           "tag": "h1",
-          "x": 177,
-          "y": 45,
-          "width": 174,
-          "height": 44,
+          "x": 176,
+          "y": 24,
+          "width": 175,
+          "height": 32,
           "text": "注文の一覧",
           "heading": ""
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 128,
-          "width": 140,
+          "x": 193,
+          "y": 85,
+          "width": 141,
           "height": 20,
           "text": "A-1001",
           "heading": "注文の一覧"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 236,
-          "width": 140,
+          "x": 193,
+          "y": 185,
+          "width": 141,
           "height": 20,
           "text": "A-1002",
           "heading": "A-1001"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 344,
-          "width": 140,
+          "x": 193,
+          "y": 285,
+          "width": 141,
           "height": 20,
           "text": "A-1003",
           "heading": "A-1002"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 452,
-          "width": 140,
+          "x": 193,
+          "y": 385,
+          "width": 141,
           "height": 20,
           "text": "A-1004",
           "heading": "A-1003"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 560,
-          "width": 140,
+          "x": 193,
+          "y": 485,
+          "width": 141,
           "height": 20,
           "text": "A-1005",
           "heading": "A-1004"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 668,
-          "width": 140,
+          "x": 193,
+          "y": 585,
+          "width": 141,
           "height": 20,
           "text": "A-1006",
           "heading": "A-1005"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 776,
-          "width": 140,
+          "x": 193,
+          "y": 685,
+          "width": 141,
           "height": 20,
           "text": "A-1007",
           "heading": "A-1006"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 884,
-          "width": 140,
+          "x": 193,
+          "y": 785,
+          "width": 141,
           "height": 20,
           "text": "A-1008",
           "heading": "A-1007"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 992,
-          "width": 140,
+          "x": 193,
+          "y": 885,
+          "width": 141,
           "height": 20,
           "text": "A-1009",
           "heading": "A-1008"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1100,
-          "width": 140,
+          "x": 193,
+          "y": 985,
+          "width": 141,
           "height": 20,
           "text": "A-1010",
           "heading": "A-1009"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1208,
-          "width": 140,
+          "x": 193,
+          "y": 1085,
+          "width": 141,
           "height": 20,
           "text": "A-1011",
           "heading": "A-1010"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1316,
-          "width": 140,
+          "x": 193,
+          "y": 1185,
+          "width": 141,
           "height": 20,
           "text": "A-1012",
           "heading": "A-1011"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1424,
-          "width": 140,
+          "x": 193,
+          "y": 1285,
+          "width": 141,
           "height": 20,
           "text": "A-1013",
           "heading": "A-1012"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1532,
-          "width": 140,
+          "x": 193,
+          "y": 1385,
+          "width": 141,
           "height": 20,
           "text": "A-1014",
           "heading": "A-1013"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1640,
-          "width": 140,
+          "x": 193,
+          "y": 1485,
+          "width": 141,
           "height": 20,
           "text": "A-1015",
           "heading": "A-1014"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1748,
-          "width": 140,
+          "x": 193,
+          "y": 1585,
+          "width": 141,
           "height": 20,
           "text": "A-1016",
           "heading": "A-1015"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1856,
-          "width": 140,
+          "x": 193,
+          "y": 1685,
+          "width": 141,
           "height": 20,
           "text": "A-1017",
           "heading": "A-1016"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 1964,
-          "width": 140,
+          "x": 193,
+          "y": 1785,
+          "width": 141,
           "height": 20,
           "text": "A-1018",
           "heading": "A-1017"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2072,
-          "width": 140,
+          "x": 193,
+          "y": 1885,
+          "width": 141,
           "height": 20,
           "text": "A-1019",
           "heading": "A-1018"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2180,
-          "width": 140,
+          "x": 193,
+          "y": 1985,
+          "width": 141,
           "height": 20,
           "text": "A-1020",
           "heading": "A-1019"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2288,
-          "width": 140,
+          "x": 193,
+          "y": 2085,
+          "width": 141,
           "height": 20,
           "text": "A-1021",
           "heading": "A-1020"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2396,
-          "width": 140,
+          "x": 193,
+          "y": 2185,
+          "width": 141,
           "height": 20,
           "text": "A-1022",
           "heading": "A-1021"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2504,
-          "width": 140,
+          "x": 193,
+          "y": 2285,
+          "width": 141,
           "height": 20,
           "text": "A-1023",
           "heading": "A-1022"
         },
         {
           "tag": "h2",
-          "x": 194,
-          "y": 2612,
-          "width": 140,
+          "x": 193,
+          "y": 2385,
+          "width": 141,
           "height": 20,
           "text": "A-1024",
           "heading": "A-1023"
         }
       ],
-      "thumb": "review-canvas-shots/shop-adminorders--default-375-8c9081bc803de643-thumb.png"
+      "thumb": "review-canvas-shots/shop-adminorders--default-375-3d1341f2af049cd7-thumb.png"
     },
     {
-      "storyId": "shop-orderform--default",
+      "storyId": "shop-checkout-cart--with-items",
       "width": 375,
-      "height": 1281,
-      "path": "review-canvas-shots/shop-orderform--default-375-bfd5ffb6462f45c9.png",
-      "contentHeight": 1281,
+      "height": 812,
+      "path": "review-canvas-shots/shop-checkout-cart--with-items-375-a1bd32ebe4d36d56.png",
+      "contentHeight": 445,
       "elements": [
         {
-          "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
-          "text": "注文フォーム",
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
           "heading": ""
         },
         {
-          "tag": "label",
-          "x": 24,
-          "y": 111,
-          "width": 327,
-          "height": 22,
-          "text": "お名前",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 137,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 189,
-          "width": 327,
-          "height": 22,
-          "text": "メールアドレス",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 215,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 267,
-          "width": 327,
-          "height": 22,
-          "text": "数量",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "select",
-          "x": 24,
-          "y": 293,
-          "width": 327,
-          "height": 37,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
           "tag": "button",
-          "x": 24,
-          "y": 346,
-          "width": 89,
-          "height": 34,
-          "text": "注文する",
-          "heading": "注文フォーム"
-        }
-      ],
-      "thumb": "review-canvas-shots/shop-orderform--default-375-bfd5ffb6462f45c9-thumb.png"
-    },
-    {
-      "storyId": "shop-orderform--filled",
-      "width": 375,
-      "height": 1319,
-      "path": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46.png",
-      "contentHeight": 1319,
-      "elements": [
-        {
-          "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
-          "text": "注文フォーム",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
           "heading": ""
         },
         {
-          "tag": "label",
-          "x": 24,
-          "y": 111,
-          "width": 327,
-          "height": 22,
-          "text": "お名前",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 137,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 189,
-          "width": 327,
-          "height": 22,
-          "text": "メールアドレス",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 215,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 267,
-          "width": 327,
-          "height": 22,
-          "text": "数量",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "select",
-          "x": 24,
-          "y": 293,
-          "width": 327,
-          "height": 37,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
           "tag": "button",
-          "x": 24,
-          "y": 384,
-          "width": 89,
-          "height": 34,
-          "text": "注文する",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "button",
-          "x": 113,
-          "y": 384,
-          "width": 131,
-          "height": 34,
-          "text": "買い物を続ける",
-          "heading": "注文フォーム"
-        }
-      ],
-      "thumb": "review-canvas-shots/shop-orderform--filled-375-ba5b01654d03af46-thumb.png"
-    },
-    {
-      "storyId": "shop-orderform--validation-error",
-      "width": 375,
-      "height": 1343,
-      "path": "review-canvas-shots/shop-orderform--validation-error-375-e7ca3659beedb9ca.png",
-      "contentHeight": 1343,
-      "elements": [
-        {
-          "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
-          "text": "注文フォーム",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
           "heading": ""
         },
         {
-          "tag": "label",
-          "x": 24,
-          "y": 111,
-          "width": 327,
-          "height": 22,
-          "text": "お名前",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 137,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 189,
-          "width": 327,
-          "height": 22,
-          "text": "メールアドレス",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "input",
-          "x": 24,
-          "y": 215,
-          "width": 327,
-          "height": 36,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "label",
-          "x": 24,
-          "y": 267,
-          "width": 327,
-          "height": 22,
-          "text": "数量",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "select",
-          "x": 24,
-          "y": 293,
-          "width": 327,
-          "height": 37,
-          "text": "",
-          "heading": "注文フォーム"
-        },
-        {
-          "tag": "button",
-          "x": 24,
-          "y": 408,
-          "width": 89,
-          "height": 34,
-          "text": "注文する",
-          "heading": "注文フォーム"
-        }
-      ],
-      "thumb": "review-canvas-shots/shop-orderform--validation-error-375-e7ca3659beedb9ca-thumb.png"
-    },
-    {
-      "storyId": "shop-productlist--default",
-      "width": 375,
-      "height": 954,
-      "path": "review-canvas-shots/shop-productlist--default-375-5c45927d129e787b.png",
-      "contentHeight": 955,
-      "elements": [
-        {
           "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
-          "text": "商品一覧",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "カート",
           "heading": ""
         },
         {
           "tag": "h2",
-          "x": 81,
-          "y": 148,
-          "width": 253,
-          "height": 32,
+          "x": 109,
+          "y": 156,
+          "width": 131,
+          "height": 19,
           "text": "木のマグカップ",
-          "heading": "商品一覧"
+          "heading": "カート"
         },
         {
           "tag": "button",
-          "x": 145,
-          "y": 243,
-          "width": 117,
-          "height": 34,
-          "text": "カートに追加",
+          "x": 252,
+          "y": 159,
+          "width": 32,
+          "height": 32,
+          "text": "−",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "button",
+          "x": 310,
+          "y": 159,
+          "width": 32,
+          "height": 32,
+          "text": "＋",
           "heading": "木のマグカップ"
         },
         {
           "tag": "h2",
-          "x": 81,
-          "y": 353,
-          "width": 253,
-          "height": 32,
+          "x": 109,
+          "y": 225,
+          "width": 134,
+          "height": 19,
           "text": "麻のトートバッグ",
           "heading": "木のマグカップ"
         },
         {
           "tag": "button",
-          "x": 145,
-          "y": 448,
-          "width": 117,
+          "x": 255,
+          "y": 228,
+          "width": 32,
+          "height": 32,
+          "text": "−",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 310,
+          "y": 228,
+          "width": 32,
+          "height": 32,
+          "text": "＋",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 368,
+          "width": 103,
+          "height": 36,
+          "text": "レジに進む",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 148,
+          "y": 368,
+          "width": 133,
+          "height": 36,
+          "text": "買い物を続ける",
+          "heading": "麻のトートバッグ"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-checkout-cart--with-items-375-a1bd32ebe4d36d56-thumb.png"
+    },
+    {
+      "storyId": "shop-checkout-cart--empty",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-checkout-cart--empty-375-610657e87593641a.png",
+      "contentHeight": 270,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 195,
+          "width": 103,
+          "height": 34,
+          "text": "商品を探す",
+          "heading": "カート"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-checkout-cart--empty-375-610657e87593641a-thumb.png"
+    },
+    {
+      "storyId": "shop-checkout-cart--quantity-limit",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-9fc7e3f71a2f60f7.png",
+      "contentHeight": 499,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート6",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "h2",
+          "x": 109,
+          "y": 156,
+          "width": 131,
+          "height": 19,
+          "text": "木のマグカップ",
+          "heading": "カート"
+        },
+        {
+          "tag": "button",
+          "x": 252,
+          "y": 159,
+          "width": 32,
+          "height": 32,
+          "text": "−",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "button",
+          "x": 310,
+          "y": 159,
+          "width": 32,
+          "height": 32,
+          "text": "＋",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "h2",
+          "x": 109,
+          "y": 225,
+          "width": 134,
+          "height": 19,
+          "text": "麻のトートバッグ",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "button",
+          "x": 255,
+          "y": 228,
+          "width": 32,
+          "height": 32,
+          "text": "−",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 310,
+          "y": 228,
+          "width": 32,
+          "height": 32,
+          "text": "＋",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 422,
+          "width": 103,
+          "height": 36,
+          "text": "レジに進む",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 148,
+          "y": 422,
+          "width": 133,
+          "height": 36,
+          "text": "買い物を続ける",
+          "heading": "麻のトートバッグ"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-9fc7e3f71a2f60f7-thumb.png"
+    },
+    {
+      "storyId": "shop-checkout-complete--default",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-checkout-complete--default-375-2324b99c5466d927.png",
+      "contentHeight": 281,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 33,
+          "y": 93,
+          "width": 309,
+          "height": 27,
+          "text": "ご注文ありがとうございました",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 204,
+          "width": 131,
+          "height": 36,
+          "text": "買い物を続ける",
+          "heading": "ご注文ありがとうございました"
+        },
+        {
+          "tag": "button",
+          "x": 176,
+          "y": 204,
+          "width": 133,
+          "height": 36,
+          "text": "注文履歴を見る",
+          "heading": "ご注文ありがとうございました"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-checkout-complete--default-375-2324b99c5466d927-thumb.png"
+    },
+    {
+      "storyId": "shop-checkout-confirm--default",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-checkout-confirm--default-375-dd792ca3556c04e0.png",
+      "contentHeight": 718,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "注文の確認",
+          "heading": ""
+        },
+        {
+          "tag": "h2",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "注文の中身",
+          "heading": "注文の確認"
+        },
+        {
+          "tag": "h2",
+          "x": 33,
+          "y": 358,
+          "width": 309,
+          "height": 22,
+          "text": "お届け先",
+          "heading": "注文の中身"
+        },
+        {
+          "tag": "a",
+          "x": 33,
+          "y": 454,
+          "width": 114,
+          "height": 20,
+          "text": "お届け先を直す",
+          "heading": "お届け先"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 643,
+          "width": 131,
+          "height": 34,
+          "text": "注文を確定する",
+          "heading": "お届け先"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-checkout-confirm--default-375-dd792ca3556c04e0-thumb.png"
+    },
+    {
+      "storyId": "account-login--default",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/account-login--default-375-21bbbb35aaa1bc77.png",
+      "contentHeight": 372,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "メールアドレス",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 167,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 219,
+          "width": 309,
+          "height": 22,
+          "text": "パスワード",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 245,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 297,
+          "width": 118,
+          "height": 34,
+          "text": "ログインする",
+          "heading": "ログイン"
+        }
+      ],
+      "thumb": "review-canvas-shots/account-login--default-375-21bbbb35aaa1bc77-thumb.png"
+    },
+    {
+      "storyId": "account-login--failed",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/account-login--failed-375-f7cb80b5802d0c7c.png",
+      "contentHeight": 418,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "メールアドレス",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 167,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 219,
+          "width": 309,
+          "height": 22,
+          "text": "パスワード",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 245,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "ログイン"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 343,
+          "width": 118,
+          "height": 34,
+          "text": "ログインする",
+          "heading": "ログイン"
+        }
+      ],
+      "thumb": "review-canvas-shots/account-login--failed-375-f7cb80b5802d0c7c-thumb.png"
+    },
+    {
+      "storyId": "account-mypage--with-orders",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/account-mypage--with-orders-375-2f12238871e9fcc1.png",
+      "contentHeight": 399,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "マイページ",
+          "heading": ""
+        },
+        {
+          "tag": "h2",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "注文の履歴",
+          "heading": "マイページ"
+        }
+      ],
+      "thumb": "review-canvas-shots/account-mypage--with-orders-375-2f12238871e9fcc1-thumb.png"
+    },
+    {
+      "storyId": "account-mypage--no-orders",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/account-mypage--no-orders-375-928f1c2c83b056a1.png",
+      "contentHeight": 292,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "マイページ",
+          "heading": ""
+        },
+        {
+          "tag": "h2",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "注文の履歴",
+          "heading": "マイページ"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 217,
+          "width": 103,
+          "height": 34,
+          "text": "商品を探す",
+          "heading": "注文の履歴"
+        }
+      ],
+      "thumb": "review-canvas-shots/account-mypage--no-orders-375-928f1c2c83b056a1-thumb.png"
+    },
+    {
+      "storyId": "shop-orderform--default",
+      "width": 375,
+      "height": 1249,
+      "path": "review-canvas-shots/shop-orderform--default-375-98fd9009f793aece.png",
+      "contentHeight": 1249,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "お届け先の入力",
+          "heading": ""
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "お名前",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 167,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 219,
+          "width": 309,
+          "height": 22,
+          "text": "メールアドレス",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 245,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 297,
+          "width": 103,
+          "height": 34,
+          "text": "確認へ進む",
+          "heading": "お届け先の入力"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-orderform--default-375-98fd9009f793aece-thumb.png"
+    },
+    {
+      "storyId": "shop-orderform--filled",
+      "width": 375,
+      "height": 1249,
+      "path": "review-canvas-shots/shop-orderform--filled-375-174ce9e029bc8b6e.png",
+      "contentHeight": 1249,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "お届け先の入力",
+          "heading": ""
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "お名前",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 167,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 219,
+          "width": 309,
+          "height": 22,
+          "text": "メールアドレス",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 245,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 297,
+          "width": 103,
+          "height": 34,
+          "text": "確認へ進む",
+          "heading": "お届け先の入力"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-orderform--filled-375-174ce9e029bc8b6e-thumb.png"
+    },
+    {
+      "storyId": "shop-orderform--validation-error",
+      "width": 375,
+      "height": 1341,
+      "path": "review-canvas-shots/shop-orderform--validation-error-375-4797391ad48d0def.png",
+      "contentHeight": 1341,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "お届け先の入力",
+          "heading": ""
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 141,
+          "width": 309,
+          "height": 22,
+          "text": "お名前",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 167,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "label",
+          "x": 33,
+          "y": 219,
+          "width": 309,
+          "height": 22,
+          "text": "メールアドレス",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "input",
+          "x": 33,
+          "y": 245,
+          "width": 309,
+          "height": 36,
+          "text": "",
+          "heading": "お届け先の入力"
+        },
+        {
+          "tag": "button",
+          "x": 33,
+          "y": 389,
+          "width": 103,
+          "height": 34,
+          "text": "確認へ進む",
+          "heading": "お届け先の入力"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-orderform--validation-error-375-4797391ad48d0def-thumb.png"
+    },
+    {
+      "storyId": "shop-product-detail--in-stock",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-product-detail--in-stock-375-9e88a93feb08e86d.png",
+      "contentHeight": 625,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 336,
+          "width": 343,
+          "height": 32,
+          "text": "木のマグカップ",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 16,
+          "y": 512,
+          "width": 132,
+          "height": 34,
+          "text": "カートに入れる",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "a",
+          "x": 16,
+          "y": 562,
+          "width": 113,
+          "height": 20,
+          "text": "商品一覧へ戻る",
+          "heading": "木のマグカップ"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-product-detail--in-stock-375-9e88a93feb08e86d-thumb.png"
+    },
+    {
+      "storyId": "shop-product-detail--sold-out",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-product-detail--sold-out-375-18cd0ed52757583e.png",
+      "contentHeight": 627,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 360,
+          "width": 343,
+          "height": 32,
+          "text": "手ぬぐい",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 16,
+          "y": 514,
+          "width": 132,
+          "height": 34,
+          "text": "カートに入れる",
+          "heading": "手ぬぐい"
+        },
+        {
+          "tag": "a",
+          "x": 16,
+          "y": 564,
+          "width": 113,
+          "height": 20,
+          "text": "商品一覧へ戻る",
+          "heading": "手ぬぐい"
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-product-detail--sold-out-375-18cd0ed52757583e-thumb.png"
+    },
+    {
+      "storyId": "shop-product-detail--loading",
+      "width": 375,
+      "height": 812,
+      "path": "review-canvas-shots/shop-product-detail--loading-375-04f8b63fd3e1c545.png",
+      "contentHeight": 154,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        }
+      ],
+      "thumb": "review-canvas-shots/shop-product-detail--loading-375-04f8b63fd3e1c545-thumb.png"
+    },
+    {
+      "storyId": "shop-productlist--default",
+      "width": 375,
+      "height": 963,
+      "path": "review-canvas-shots/shop-productlist--default-375-549a3a0bdb1d8ada.png",
+      "contentHeight": 964,
+      "elements": [
+        {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "商品一覧",
+          "heading": ""
+        },
+        {
+          "tag": "h2",
+          "x": 29,
+          "y": 273,
+          "width": 140,
+          "height": 20,
+          "text": "木のマグカップ",
+          "heading": "商品一覧"
+        },
+        {
+          "tag": "a",
+          "x": 29,
+          "y": 273,
+          "width": 107,
+          "height": 19,
+          "text": "木のマグカップ",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "button",
+          "x": 29,
+          "y": 327,
+          "width": 140,
+          "height": 34,
+          "text": "カートに追加",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "h2",
+          "x": 207,
+          "y": 273,
+          "width": 140,
+          "height": 20,
+          "text": "麻のトートバッグ",
+          "heading": "木のマグカップ"
+        },
+        {
+          "tag": "a",
+          "x": 207,
+          "y": 273,
+          "width": 122,
+          "height": 19,
+          "text": "麻のトートバッグ",
+          "heading": "麻のトートバッグ"
+        },
+        {
+          "tag": "button",
+          "x": 207,
+          "y": 327,
+          "width": 140,
           "height": 34,
           "text": "カートに追加",
           "heading": "麻のトートバッグ"
         },
         {
           "tag": "h2",
-          "x": 81,
-          "y": 557,
-          "width": 253,
-          "height": 32,
+          "x": 29,
+          "y": 536,
+          "width": 140,
+          "height": 40,
           "text": "陶器の小皿（2枚組）",
           "heading": "麻のトートバッグ"
         },
         {
+          "tag": "a",
+          "x": 29,
+          "y": 536,
+          "width": 118,
+          "height": 39,
+          "text": "陶器の小皿（2枚組）",
+          "heading": "陶器の小皿（2枚組）"
+        },
+        {
           "tag": "button",
-          "x": 145,
-          "y": 652,
-          "width": 117,
+          "x": 29,
+          "y": 610,
+          "width": 140,
           "height": 34,
           "text": "カートに追加",
           "heading": "陶器の小皿（2枚組）"
         },
         {
           "tag": "h2",
-          "x": 81,
-          "y": 762,
-          "width": 253,
-          "height": 32,
+          "x": 207,
+          "y": 536,
+          "width": 140,
+          "height": 20,
           "text": "手ぬぐい",
           "heading": "陶器の小皿（2枚組）"
         },
         {
+          "tag": "a",
+          "x": 207,
+          "y": 536,
+          "width": 61,
+          "height": 19,
+          "text": "手ぬぐい",
+          "heading": "手ぬぐい"
+        },
+        {
           "tag": "button",
-          "x": 145,
-          "y": 857,
-          "width": 117,
+          "x": 207,
+          "y": 610,
+          "width": 140,
           "height": 34,
           "text": "カートに追加",
           "heading": "手ぬぐい"
+        },
+        {
+          "tag": "h2",
+          "x": 29,
+          "y": 818,
+          "width": 140,
+          "height": 40,
+          "text": "竹のカトラリー（3本組）",
+          "heading": "手ぬぐい"
+        },
+        {
+          "tag": "a",
+          "x": 29,
+          "y": 818,
+          "width": 131,
+          "height": 39,
+          "text": "竹のカトラリー（3本組）",
+          "heading": "竹のカトラリー（3本組）"
+        },
+        {
+          "tag": "button",
+          "x": 29,
+          "y": 892,
+          "width": 140,
+          "height": 34,
+          "text": "カートに追加",
+          "heading": "竹のカトラリー（3本組）"
+        },
+        {
+          "tag": "h2",
+          "x": 207,
+          "y": 818,
+          "width": 140,
+          "height": 20,
+          "text": "ガラスの一輪挿し",
+          "heading": "竹のカトラリー（3本組）"
+        },
+        {
+          "tag": "a",
+          "x": 207,
+          "y": 818,
+          "width": 122,
+          "height": 19,
+          "text": "ガラスの一輪挿し",
+          "heading": "ガラスの一輪挿し"
+        },
+        {
+          "tag": "button",
+          "x": 207,
+          "y": 892,
+          "width": 140,
+          "height": 34,
+          "text": "カートに追加",
+          "heading": "ガラスの一輪挿し"
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--default-375-5c45927d129e787b-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--default-375-549a3a0bdb1d8ada-thumb.png"
     },
     {
       "storyId": "shop-productlist--empty",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-productlist--empty-375-0682526087a80b4f.png",
-      "contentHeight": 173,
+      "path": "review-canvas-shots/shop-productlist--empty-375-9050867373ae4343.png",
+      "contentHeight": 186,
       "elements": [
         {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
           "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
           "text": "商品一覧",
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--empty-375-0682526087a80b4f-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--empty-375-9050867373ae4343-thumb.png"
     },
     {
       "storyId": "shop-productlist--loading",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-productlist--loading-375-c8b0e2ec71d816cd.png",
-      "contentHeight": 173,
+      "path": "review-canvas-shots/shop-productlist--loading-375-05a85b949ad19a03.png",
+      "contentHeight": 186,
       "elements": [
         {
+          "tag": "button",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
           "tag": "h1",
-          "x": 24,
-          "y": 45,
-          "width": 327,
-          "height": 44,
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
           "text": "商品一覧",
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--loading-375-c8b0e2ec71d816cd-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--loading-375-05a85b949ad19a03-thumb.png"
     },
     {
-      "storyId": "components-button--default",
+      "storyId": "shop-productlist--failed",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/components-button--default-375-972fe9cf9e1f5b72.png",
-      "contentHeight": 34,
+      "path": "review-canvas-shots/shop-productlist--failed-375-721a9f709eb7cd1d.png",
+      "contentHeight": 194,
       "elements": [
         {
           "tag": "button",
-          "x": 0,
-          "y": 0,
-          "width": 132,
-          "height": 34,
-          "text": "カートに入れる",
+          "x": 12,
+          "y": 15,
+          "width": 21,
+          "height": 22,
+          "text": "≡",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 218,
+          "y": 12,
+          "width": 62,
+          "height": 28,
+          "text": "カート3",
+          "heading": ""
+        },
+        {
+          "tag": "button",
+          "x": 288,
+          "y": 12,
+          "width": 75,
+          "height": 28,
+          "text": "ログイン",
+          "heading": ""
+        },
+        {
+          "tag": "h1",
+          "x": 16,
+          "y": 76,
+          "width": 343,
+          "height": 32,
+          "text": "商品一覧",
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/components-button--default-375-972fe9cf9e1f5b72-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--failed-375-721a9f709eb7cd1d-thumb.png"
     }
   ],
   "playFunctions": {
+    "shop-checkout-cart--with-items": false,
+    "components-button--default": false,
+    "components-button--disabled": false,
     "shop-adminorders--default": false,
+    "shop-checkout-cart--empty": false,
+    "shop-checkout-complete--default": false,
+    "shop-checkout-confirm--default": false,
+    "shop-checkout-cart--quantity-limit": true,
+    "account-login--default": false,
+    "account-mypage--no-orders": false,
+    "account-mypage--with-orders": false,
+    "account-login--failed": true,
     "shop-orderform--default": false,
-    "shop-productlist--default": false,
     "shop-orderform--validation-error": true,
-    "shop-productlist--empty": false,
     "shop-orderform--filled": true,
+    "shop-product-detail--in-stock": false,
+    "shop-product-detail--sold-out": false,
+    "shop-product-detail--loading": false,
+    "shop-productlist--default": false,
+    "shop-productlist--empty": false,
     "shop-productlist--loading": false,
-    "components-button--default": false
+    "shop-productlist--failed": false
   }
 }

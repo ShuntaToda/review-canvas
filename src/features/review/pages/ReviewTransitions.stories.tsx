@@ -14,22 +14,22 @@ import {
 } from "../stories/story-play";
 
 /** 札（「<label> → <行き先の画面名>」）。行き先は固定データ（main の目録）の遷移のもの */
-const FILLED_LABEL = "入力したとき → Shop/OrderForm／Filled";
+const CONFIRM_LABEL = "入力したとき → Shop/Checkout/Confirm／Default";
 const VALIDATION_LABEL =
   "入力が足りないとき → Shop/OrderForm／Validation Error";
-const AFTER_ORDER_LABEL = "注文を受け付けた後 → Shop/ProductList／Default";
+const PLACE_ORDER_LABEL = "→ Shop/Checkout/Complete／Default";
 
 /** 幅 768px で、選んだ画面（Shop/OrderForm／Default）のまわりの読み込む範囲に入る画面 */
 const SHOWN_AT_768: [string, ...string[]] = [
-  "shop-productlist--default",
-  "shop-productlist--empty",
+  "shop-checkout-cart--with-items",
+  "shop-checkout-cart--empty",
   "shop-orderform--default",
   "shop-orderform--filled",
 ];
 
-/** 下の段の画面と、読み込む範囲に入れるために動かす量(px) */
-const ADMIN_ORDERS = "shop-adminorders--default";
-const ADMIN_ORDERS_SCROLL = 400;
+/** 下の段の画面（読み込む範囲の端）と、読み込む範囲に入れるために動かす量(px) */
+const EDGE_AT_768 = "shop-checkout-confirm--default";
+const EDGE_SCROLL = 200;
 
 /** 上の帯の「画面のつながり」（名前は「画面のつながり: <いまの出し方>」） */
 const PICKER_NAME = /^画面のつながり/;
@@ -55,7 +55,7 @@ export const Selected: Story = {
     reviewCanvas: {
       transitions: [
         {
-          from: { role: "button", name: FILLED_LABEL },
+          from: { role: "button", name: CONFIRM_LABEL },
           to: "review-transitions--jumped",
           label: "札を押したとき",
         },
@@ -69,7 +69,7 @@ export const Selected: Story = {
   },
   play: async ({ canvas, canvasElement }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
-    await waitForButton(canvas, FILLED_LABEL);
+    await waitForButton(canvas, CONFIRM_LABEL);
     await waitForButton(canvas, VALIDATION_LABEL);
     // 選んだ画面は動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
     await waitForLiveFrame(canvasElement, "shop-orderform--default");
@@ -105,7 +105,7 @@ export const All: Story = {
   },
 };
 
-/** 札を押して行き先（Shop/OrderForm／Filled）へ寄り、「戻る」と、行き先の画面の札が出た */
+/** 札を押して行き先（Shop/Checkout/Confirm／Default）へ寄り、「戻る」と、行き先の画面の札が出た */
 export const Jumped: Story = {
   name: "札で飛んだ",
   parameters: {
@@ -121,14 +121,14 @@ export const Jumped: Story = {
   },
   play: async ({ canvas, canvasElement, userEvent }) => {
     await waitForShot(canvas, "Shop/OrderForm / Default");
-    await userEvent.click(await waitForButton(canvas, FILLED_LABEL));
+    await userEvent.click(await waitForButton(canvas, CONFIRM_LABEL));
     const back = await waitForButton(canvas, "Shop/OrderForm／Defaultへ戻る");
-    await waitForButton(canvas, AFTER_ORDER_LABEL);
+    await waitForButton(canvas, PLACE_ORDER_LABEL);
     // 飛ぶ前に選んでいた画面と行き先は、動く画面に切り替わる。描き終える前に撮ると「読み込み中…」が写る
     await waitForLiveFrame(
       canvasElement,
       "shop-orderform--default",
-      "shop-orderform--filled",
+      "shop-checkout-confirm--default",
     );
     // 動く画面が読み込みのあいだにフォーカスを取ることがあるので、飛んだ後のフォーカスの先（「戻る」）に置き直して撮る
     back.focus();
@@ -154,14 +154,23 @@ export const ReachableOnly: Story = {
     await expect(picker).toHaveAttribute("aria-expanded", "false");
     for (const name of [
       "Shop/ProductList / Default",
+      "Shop/Product/Detail / In Stock",
+      "Shop/Checkout/Cart / With Items",
       "Shop/OrderForm / Default",
       "Shop/OrderForm / Filled",
       "Shop/OrderForm / Validation Error",
+      "Shop/Checkout/Confirm / Default",
+      "Shop/Checkout/Complete / Default",
+      "Account/Login / Default",
+      "Account/Login / Failed",
+      "Account/MyPage / With Orders",
     ]) {
       await waitForShot(canvas, name);
     }
     for (const name of [
       "Shop/ProductList / Empty",
+      "Shop/Checkout/Cart / Empty",
+      "Account/MyPage / No Orders",
       "Shop/AdminOrders / Default",
     ]) {
       await expect(canvas.queryByRole("img", { name })).not.toBeInTheDocument();
@@ -187,20 +196,20 @@ export const Unavailable: Story = {
       canvasElement.querySelectorAll("[data-transition-label]"),
       "札が無い",
     ).toHaveLength(0);
-    // 読み込む範囲の端にある AdminOrders は、動く画面の高さを測る前の並びで読み込まれるかが回ごとに違う。
+    // 読み込む範囲の端にある下の段（Shop/Checkout/Confirm）は、動く画面の高さを測る前の並びで読み込まれるかが回ごとに違う。
     // いちど読み込む範囲に入れてから同じだけ戻し、撮るたびに同じ画面を読み込んだ形にする（戻した見え方は動かす前と同じ）
     await waitForFramesWithoutShots(canvasElement, ...SHOWN_AT_768);
-    await scrollCanvas(canvasElement, ADMIN_ORDERS_SCROLL);
+    await scrollCanvas(canvasElement, EDGE_SCROLL);
     await waitForFramesWithoutShots(
       canvasElement,
       ...SHOWN_AT_768,
-      ADMIN_ORDERS,
+      EDGE_AT_768,
     );
-    await scrollCanvas(canvasElement, -ADMIN_ORDERS_SCROLL);
+    await scrollCanvas(canvasElement, -EDGE_SCROLL);
     await waitForFramesWithoutShots(
       canvasElement,
       ...SHOWN_AT_768,
-      ADMIN_ORDERS,
+      EDGE_AT_768,
     );
     await settle();
   },
