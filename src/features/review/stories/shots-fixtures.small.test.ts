@@ -71,7 +71,7 @@ describe("両ブランチの固定データの形", () => {
     ).toStrictEqual([]);
   });
 
-  test("[正常系]feature/new-cart は Shop/ProductList／Default を除いて、main と同じ画像（path・thumb）を指す", () => {
+  test("[正常系]feature/new-cart は Shop/ProductList／Default を除いて、main と同じ画像を指し、遷移を除いた中身（大きさ・要素など）もまるごと同じ", () => {
     const differs = [...mainImages].filter(
       ([id, images]) =>
         JSON.stringify(featureImages.get(id)) !== JSON.stringify(images),
@@ -79,6 +79,25 @@ describe("両ブランチの固定データの形", () => {
     expect(differs.map(([id]) => id)).toStrictEqual([
       "shop-productlist--default",
     ]);
+    const withoutTransitions = (
+      shot:
+        (typeof mainShots.shots)[number] | (typeof featureShots.shots)[number],
+    ) =>
+      Object.fromEntries(
+        Object.entries(shot).filter(([key]) => key !== "transitions"),
+      );
+    const featureById = new Map(
+      featureShots.shots.map((shot) => [
+        shot.storyId,
+        withoutTransitions(shot),
+      ]),
+    );
+    for (const shot of mainShots.shots) {
+      if (shot.storyId === "shop-productlist--default") continue;
+      expect(featureById.get(shot.storyId), shot.storyId).toStrictEqual(
+        withoutTransitions(shot),
+      );
+    }
   });
 
   test("[正常系]ストーリーの一覧（shop-index.json）は、両ブランチの画面をすべて持ち、ほかの画面を持たない", () => {

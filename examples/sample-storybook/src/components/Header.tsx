@@ -22,7 +22,7 @@ export const Header = ({ cartCount }: { cartCount: number }) => (
             <span className="badge" aria-hidden="true">
               {cartCount}
             </span>
-            {/* 印の数字が何かを、読み上げで分かるようにする（ボタンの名前は「カート（3 点）」） */}
+            {/* 印の数字が何かを、読み上げで分かるようにする（印そのものは読み上げから外す） */}
             <span className="visually-hidden">（{cartCount} 点）</span>
           </>
         )}
