@@ -790,22 +790,6 @@ describe("Frame の遷移のボタンの枠", () => {
     );
   });
 
-  test("[正常系]中身の高さの違いがフォントの違いほど（数 %）なら、ずれたとみなさず枠を出す", () => {
-    const onTransitionDrift =
-      vi.fn<(storyId: string, drifted: boolean) => void>();
-    const { reveal, boxes } = renderFrame({
-      id: "transition-box-font",
-      tool: "comment",
-      onTransitionDrift,
-    });
-
-    // macOS で描いたログインの画面は、CI の Linux で撮ったときより 4% ほど高い（388px → 403px）
-    reveal(Math.round(1319 * 1.04));
-
-    expect(boxes()).toHaveLength(1);
-    expect(onTransitionDrift).not.toHaveBeenCalled();
-  });
-
   test("[正常系]操作のモードで中を触った後は、高さが同じでも枠を出さず、ずれたと知らせる", () => {
     const onTransitionDrift =
       vi.fn<(storyId: string, drifted: boolean) => void>();

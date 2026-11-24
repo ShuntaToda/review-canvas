@@ -614,16 +614,13 @@ export const Frame = ({
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [tool, mounted, generation]);
-  // 動く画面が撮ったときとずれた（中身の高さで比べる）・操作のモードで中を触った。
-  // 画像は CI の Linux で撮るので、手元（macOS など）のフォントで描いた動く画面は、同じ中身でも高さが数 % 変わる。
-  // strict の幅で比べると、見ている端末のフォントだけで「ずれた」になり、矢印がボタンを離れて画面の右の端に寄るので、
-  // フォントの違いは通す loose の幅で比べる（ずれても数 px で、矢印がボタンから大きく外れない）
+  // 動く画面が撮ったときとずれた（ピンを置くときと同じく、中身の高さで比べる）・操作のモードで中を触った
   const drifted =
     revealed &&
     shot !== null &&
     (touchedGeneration === generation ||
       (liveHeight?.generation === generation &&
-        !sameScreenHeight(shot, liveHeight.height, baseHeight, "loose")));
+        !sameScreenHeight(shot, liveHeight.height, baseHeight)));
   const onTransitionDriftRef = useRef(onTransitionDrift);
   useLayoutEffect(() => {
     onTransitionDriftRef.current = onTransitionDrift;
