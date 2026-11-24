@@ -165,6 +165,58 @@ describe("FrameBridge", () => {
   });
 });
 
+describe("FrameBridge の遷移のボタン", () => {
+  test("[正常系]遷移のボタンを探す頼みを送り、同じ番号の返事で受け取る", async () => {
+    const { bridge, sent, receive } = setUp();
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+
+    const pending = bridge.findTransitions();
+    const request = sent.at(-1)?.data as { type: string; requestId: number };
+    expect(request.type).toBe("transitions");
+    const results = [
+      { index: 0, box: { x: 1, y: 2, width: 3, height: 4 } },
+      { index: 1, box: null },
+    ];
+    receive({
+      type: "transitions",
+      requestId: request.requestId + 1,
+      results: [],
+    });
+    receive({ type: "transitions", requestId: request.requestId, results });
+
+    await expect(pending).resolves.toStrictEqual(results);
+    bridge.dispose();
+  });
+
+  test("[正常系]答えない橋渡し（探す前の版）は、時間切れで null。やめたときも null で終える", async () => {
+    const { bridge, receive } = setUp();
+    await expect(bridge.findTransitions()).resolves.toBeNull();
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+
+    const timedOut = bridge.findTransitions(50);
+    vi.advanceTimersByTime(50);
+    await expect(timedOut).resolves.toBeNull();
+
+    const disposed = bridge.findTransitions();
+    bridge.dispose();
+    await expect(disposed).resolves.toBeNull();
+  });
+
+  test("[正常系]操作のモードで中を押した知らせを渡す", () => {
+    const { bridge, handlers, receive } = setUp();
+    const onInteracted = vi.fn();
+    handlers.onInteracted = onInteracted;
+    bridge.connect(true);
+
+    receive({ type: "interacted" });
+
+    expect(onInteracted).toHaveBeenCalledTimes(1);
+    bridge.dispose();
+  });
+});
+
 describe("storybookOriginOf", () => {
   test("[正常系]測り直しは、つながってから頼む（つながる前は送らない）", () => {
     const { bridge, sent, receive } = setUp();

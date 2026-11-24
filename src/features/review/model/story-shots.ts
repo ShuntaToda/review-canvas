@@ -330,6 +330,51 @@ export type TransitionSpec = {
 /** ページの中で読んだ遷移（overflow は、上限より後の行があったか） */
 export type TransitionSpecs = { rows: TransitionSpec[]; overflow: boolean };
 
+/** 遷移の行を読むときの文字の長さ（上限の判定に要る分より長く取る。巨大な文字を持ち出さない） */
+export const TRANSITION_SPEC_TEXT_LENGTH = 1_000;
+
+/** ボタンの決め方（role と name・見えている文字・data-testid のどれか 1 つ。heading は見出しで絞るとき。空白を除いた先頭） */
+export type TransitionFrom = (
+  | { kind: "role"; role: string; name: string }
+  | { kind: "text"; text: string }
+  | { kind: "testId"; testId: string }
+) & { heading: string | null };
+
+/**
+ * 読んだ行の from を、ボタンの決め方にする（どれか 1 つでなければ null）。
+ * 撮るとき（infra/scripts/story-transitions.ts）と、動く画面で橋渡しが探すとき（model/transition-locate.ts）とで、同じ決め方にする
+ */
+export const transitionFromOf = (
+  from: TransitionSpec["from"],
+): TransitionFrom | null => {
+  if (from === null) return null;
+  const { role, name, text, testId, heading } = from;
+  const ways = [role, text, testId].filter((value) => value !== undefined);
+  if (ways.length !== 1) return null;
+  const headingKey =
+    heading === undefined
+      ? null
+      : heading.replace(/\s+/g, "").slice(0, SHOT_ELEMENT_TEXT_LENGTH);
+  if (role !== undefined) {
+    // role だけで name が無い行は、書き方が違う
+    return name === undefined
+      ? null
+      : {
+          kind: "role",
+          role: role.trim(),
+          name: name.trim(),
+          heading: headingKey,
+        };
+  }
+  if (name !== undefined) return null;
+  if (text !== undefined) {
+    return { kind: "text", text: text.trim(), heading: headingKey };
+  }
+  return testId === undefined
+    ? null
+    : { kind: "testId", testId, heading: headingKey };
+};
+
 /**
  * 描画したストーリーの parameters.reviewCanvas.transitions を、文字だけの行にして読む（撮影がブラウザの中で動かす。文字列で渡すので、外の値は引数で受ける）。
  * ほかの parameters には触れない。getter・Proxy・循環・巨大な値で止まらないよう、読むところを try で囲み、

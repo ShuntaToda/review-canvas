@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { FrameBridge, storybookOriginOf } from "../bridge/frame-bridge";
+import { useLiveTransitions } from "../hooks/useLiveTransitions";
 import { usePendingPlace } from "../hooks/usePendingPlace";
 import { useSources } from "../hooks/useSources";
 import { useStorybookBase } from "../hooks/useStorybookBase";
@@ -24,6 +25,10 @@ import {
   FRAME_LABEL_SCREEN_HEIGHT,
   type FramePlacement,
 } from "../model/layout";
+import {
+  type LiveTransitions,
+  transitionRectsFor,
+} from "../model/live-transitions";
 import { frameLoadQueue, type LoadTicket } from "../model/load-queue";
 import { sameScreenHeight } from "../model/pending-place";
 import { pinPointFromClick } from "../model/pin-point";
@@ -120,13 +125,16 @@ type FrameProps = {
   onCopyStoryLink: (storyId: string) => void;
   /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
   linkHighlight: LinkHighlight | null;
-  /** 遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
+  /** 撮ったときの、遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
   transitionBoxes?: ReadonlyArray<ShotTransition>;
+  /** 目録にある遷移の行（index。画面のつながりを出さないときは空。動く画面ではこの行のボタンを探す） */
+  transitionRows?: ReadonlyArray<number>;
   /**
-   * 動く画面が撮ったときとずれた（中身の高さが違う・操作のモードで中を触った）か、ずれが無くなった。
-   * ずれている画面ではボタンの枠を出さず、出る矢印は画面の右の端から出す
+   * 動く画面での遷移のボタンの位置が決まった・変わった（null は撮ったときの位置に戻った）。
+   * 見つからない行・ずれた画面ではボタンの枠を出さず、出る矢印は画面の右の端から出す（model/live-transitions.ts）
    */
-  onTransitionDrift?: ((storyId: string, drifted: boolean) => void) | undefined;
+  onLiveTransitions?:
+    ((storyId: string, live: LiveTransitions | null) => void) | undefined;
 };
 
 /** 外すと決めた画面を about:blank へ移してから、実際に外すまでの待ちの上限(ms) */
@@ -192,7 +200,8 @@ export const Frame = ({
   onScreenChanged,
   onCompare,
   transitionBoxes = [],
-  onTransitionDrift,
+  transitionRows = [],
+  onLiveTransitions,
 }: FrameProps) => {
   const storybookBase = useStorybookBase();
   const sources = useSources();
@@ -614,22 +623,37 @@ export const Frame = ({
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [tool, mounted, generation]);
-  // 動く画面が撮ったときとずれた（ピンを置くときと同じく、中身の高さで比べる）・操作のモードで中を触った
-  const drifted =
+  const touched = touchedGeneration === generation;
+  // 探す頼みに答えない橋渡しのときだけ使う: 動く画面が撮ったときとずれた（ピンを置くときと同じく、中身の高さで比べる）・操作のモードで中を触った
+  const legacyDrifted =
     revealed &&
     shot !== null &&
-    (touchedGeneration === generation ||
+    (touched ||
       (liveHeight?.generation === generation &&
         !sameScreenHeight(shot, liveHeight.height, baseHeight)));
-  const onTransitionDriftRef = useRef(onTransitionDrift);
+  // 動く画面では、遷移のボタンを橋渡しに探してもらい、見つかった位置から枠と矢印を出す（Issue #45）
+  const liveTransitions = useLiveTransitions({
+    storyId: story.id,
+    bridgeRef,
+    bridgeReady,
+    revealed,
+    generation,
+    width: w,
+    height: h,
+    rows: transitionRows,
+    touched,
+    legacyDrifted,
+    onLiveTransitions,
+  });
+  const transitionRects = transitionRectsFor(
+    transitionBoxes,
+    liveTransitions.live,
+  );
+  // 橋渡しの知らせ（handleLoad の中で作る）から、遷移のボタンを探し直してもらう
+  const relocateTransitionsRef = useRef(liveTransitions.relocate);
   useLayoutEffect(() => {
-    onTransitionDriftRef.current = onTransitionDrift;
-  }, [onTransitionDrift]);
-  useEffect(() => {
-    if (!drifted) return;
-    onTransitionDriftRef.current?.(story.id, true);
-    return () => onTransitionDriftRef.current?.(story.id, false);
-  }, [drifted, story.id]);
+    relocateTransitionsRef.current = liveTransitions.relocate;
+  });
 
   /** 順番待ちを通して読み直す（いまの iframe は外す手順を通して外す） */
   const reload = () => {
@@ -713,7 +737,10 @@ export const Frame = ({
         }
         // 利用者が自分で画面の中へ入った。抜けたときに、その前の入力欄へ戻さない
         forgetParentFocus();
-        if (byUser) setTouchedGeneration(loadedGeneration);
+        if (byUser) {
+          setTouchedGeneration(loadedGeneration);
+          relocateTransitionsRef.current();
+        }
         return;
       }
       if (busy()) {
@@ -752,6 +779,7 @@ export const Frame = ({
           if (!acceptSize(height, width)) return;
           if (revealWaiting) reveal();
           relocateRef.current?.();
+          relocateTransitionsRef.current();
         },
         onFocusIn: handleFocusIn,
         // play 関数の途中に、利用者が親の入力欄（絞り込み・返信など）を押してフォーカスを持っていったときも、
@@ -783,8 +811,16 @@ export const Frame = ({
             new KeyboardEvent("keydown", { ...key, cancelable: true }),
           );
         },
-        onKeyUp: (key) =>
-          window.dispatchEvent(new KeyboardEvent("keyup", { key })),
+        onKeyUp: (key) => {
+          window.dispatchEvent(new KeyboardEvent("keyup", { key }));
+          // 操作のモードで打ったキーで、中身が入れ替わったかもしれない
+          if (toolRef.current === "interact") relocateTransitionsRef.current();
+        },
+        onInteracted: () => {
+          if (toolRef.current !== "interact") return;
+          setTouchedGeneration(loadedGeneration);
+          relocateTransitionsRef.current();
+        },
       },
     });
     current = bridge;
@@ -945,24 +981,23 @@ export const Frame = ({
             }}
           />
         )}
-        {!drifted &&
-          transitionBoxes.map((box) => (
-            // 遷移を持つボタンの枠。クリックは下へ通す（ピンを置ける・操作のモードで押せる）
-            <div
-              key={box.index}
-              aria-hidden
-              data-transition-box={box.index}
-              className="pointer-events-none absolute rounded-sm bg-accent/10"
-              style={{
-                left: box.x,
-                top: box.y,
-                width: box.width,
-                height: box.height,
-                outline: `${1.5 / zoom}px solid color-mix(in srgb, var(--color-accent) 60%, transparent)`,
-                zIndex: 4,
-              }}
-            />
-          ))}
+        {transitionRects.map((box) => (
+          // 遷移を持つボタンの枠。クリックは下へ通す（ピンを置ける・操作のモードで押せる）
+          <div
+            key={box.index}
+            aria-hidden
+            data-transition-box={box.index}
+            className="pointer-events-none absolute rounded-sm bg-accent/10"
+            style={{
+              left: box.x,
+              top: box.y,
+              width: box.width,
+              height: box.height,
+              outline: `${1.5 / zoom}px solid color-mix(in srgb, var(--color-accent) 60%, transparent)`,
+              zIndex: 4,
+            }}
+          />
+        ))}
         {highlightBox !== null && (
           // 指している要素の枠。ストーリーの DOM には手を入れず、キャンバスの側に重ねる
           <div

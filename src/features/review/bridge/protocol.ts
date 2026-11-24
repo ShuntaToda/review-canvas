@@ -1,5 +1,6 @@
 import type { AnchorBox } from "../model/anchor-locate";
 import type { RenderState } from "../model/story-render";
+import { MAX_STORY_TRANSITIONS } from "../model/story-shots";
 import type { CommentAnchor } from "../model/threads";
 
 /**
@@ -10,7 +11,10 @@ import type { CommentAnchor } from "../model/threads";
  * どちらの側も、相手のオリジンと送り元（window）を確かめてから受け取り、送るときは相手のオリジンを指定する（"*" にしない）
  */
 
-/** やり取りの版。形を変えたら上げる（違う版の知らせは受け取らない） */
+/**
+ * やり取りの版。形を変えたら上げる（違う版の知らせは受け取らない）。
+ * 知らせの種類を足すだけなら上げない（知らない種類は、どちらの側も読まずに捨てる。上げると古い橋渡しとつなげなくなる）
+ */
 export const BRIDGE_PROTOCOL_VERSION = 1;
 
 /** 親の文書から送る知らせの印 */
@@ -36,6 +40,9 @@ export type BridgeLocated = {
   found: { x: number; y: number; box: AnchorBox } | null;
 };
 
+/** 遷移のボタンを探した結果 1 行（index はストーリーに書いた順の位置。見つからなければ box は null） */
+export type BridgeTransition = { index: number; box: AnchorBox | null };
+
 export type ParentMessage =
   /** つなぐ（読み込みのたびに送る）。interactive は操作モードか */
   | { type: "hello"; interactive: boolean }
@@ -57,7 +64,9 @@ export type ParentMessage =
       type: "locate";
       requestId: number;
       pins: { id: string; anchor: CommentAnchor }[];
-    };
+    }
+  /** ストーリーに書いた遷移のボタンを探す（答えない橋渡しは、探す前の版） */
+  | { type: "transitions"; requestId: number };
 
 /** 中に送られたキー入力（ショートカットとして親へ伝える分） */
 export type BridgeKey = {
@@ -95,7 +104,11 @@ export type BridgeMessage =
   /** 手がかりを集めた結果（集められなければ null） */
   | { type: "captured"; requestId: number; anchor: CommentAnchor | null }
   /** ピンの要素を探した結果 */
-  | { type: "located"; requestId: number; results: BridgeLocated[] };
+  | { type: "located"; requestId: number; results: BridgeLocated[] }
+  /** 遷移のボタンを探した結果 */
+  | { type: "transitions"; requestId: number; results: BridgeTransition[] }
+  /** 操作のモードで、利用者が中を押した（中身の高さが変わらない入れ替わりも、探し直すきっかけにする） */
+  | { type: "interacted" };
 
 type Envelope = { channel: string; version: number };
 
@@ -207,6 +220,10 @@ export const parseParentMessage = (data: unknown): ParentMessage | null => {
       });
       return { type: "locate", requestId: value["requestId"], pins: parsed };
     }
+    case "transitions":
+      return isRequestId(value["requestId"])
+        ? { type: "transitions", requestId: value["requestId"] }
+        : null;
     default:
       return null;
   }
@@ -299,6 +316,40 @@ export const parseBridgeMessage = (data: unknown): BridgeMessage | null => {
         }),
       };
     }
+    case "transitions": {
+      const results = value["results"];
+      if (!isRequestId(value["requestId"]) || !Array.isArray(results)) {
+        return null;
+      }
+      return {
+        type: "transitions",
+        requestId: value["requestId"],
+        // 形の違う行は捨てる（範囲は親の側が画面の幅・高さで確かめる）
+        results: results
+          // ストーリーに書ける行の上限より多くは読まない
+          .slice(0, MAX_STORY_TRANSITIONS)
+          .flatMap((result: unknown): BridgeTransition[] => {
+            if (!isObject(result) || !isRequestId(result["index"])) return [];
+            const box = result["box"];
+            if (box === null) return [{ index: result["index"], box: null }];
+            return isBox(box)
+              ? [
+                  {
+                    index: result["index"],
+                    box: {
+                      x: box.x,
+                      y: box.y,
+                      width: box.width,
+                      height: box.height,
+                    },
+                  },
+                ]
+              : [];
+          }),
+      };
+    }
+    case "interacted":
+      return { type: "interacted" };
     default:
       return null;
   }

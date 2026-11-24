@@ -180,6 +180,24 @@ describe("parseParentMessage", () => {
   });
 });
 
+describe("parseParentMessage（遷移のボタン）", () => {
+  test("[正常系]遷移のボタンを探す頼みを読む（番号が正しくなければ null）", () => {
+    expect(
+      parseParentMessage(
+        toParentEnvelope({ type: "transitions", requestId: 5 }),
+      ),
+    ).toStrictEqual({ type: "transitions", requestId: 5 });
+    expect(
+      parseParentMessage({
+        channel: PARENT_CHANNEL,
+        version: BRIDGE_PROTOCOL_VERSION,
+        type: "transitions",
+        requestId: -1,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("parseBridgeMessage", () => {
   const render = {
     preview: true,
@@ -255,6 +273,48 @@ describe("parseBridgeMessage", () => {
         { id: "t2", found: null },
       ],
     });
+  });
+
+  test("[正常系]遷移のボタンを探した結果は、形の合う行だけを残す（範囲は親の側で確かめる）", () => {
+    const box = { x: 1, y: 2, width: 3, height: 4 };
+    expect(
+      parseBridgeMessage({
+        channel: BRIDGE_CHANNEL,
+        version: BRIDGE_PROTOCOL_VERSION,
+        type: "transitions",
+        requestId: 4,
+        results: [
+          { index: 0, box: { ...box, extra: "x" } },
+          { index: 1, box: null },
+          { index: -1, box },
+          { index: 1.5, box },
+          { index: 2, box: { ...box, width: "3" } },
+          { index: 3 },
+          "x",
+        ],
+      }),
+    ).toStrictEqual({
+      type: "transitions",
+      requestId: 4,
+      results: [
+        { index: 0, box },
+        { index: 1, box: null },
+      ],
+    });
+    expect(
+      parseBridgeMessage(toBridgeEnvelope({ type: "interacted" })),
+    ).toStrictEqual({ type: "interacted" });
+  });
+
+  test("[異常系]遷移のボタンを探した結果は、ストーリーに書ける行の上限より多くは読まない", () => {
+    const results = Array.from({ length: 60 }, (_, index) => ({
+      index,
+      box: null,
+    }));
+    const parsed = parseBridgeMessage(
+      toBridgeEnvelope({ type: "transitions", requestId: 1, results }),
+    );
+    expect(parsed?.type === "transitions" && parsed.results).toHaveLength(50);
   });
 
   test.each([

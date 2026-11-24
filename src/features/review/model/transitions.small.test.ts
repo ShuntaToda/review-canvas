@@ -182,24 +182,21 @@ describe("transitionStart", () => {
   test("[正常系]ボタンの矩形があれば、ボタンの右の端の真ん中から出す", () => {
     expect(
       transitionStart(frame, edge(list, form.id), {
-        drifted: false,
         edgeOrder: 0,
       }),
     ).toStrictEqual({ x: frame.x + 140, y: frame.y + 120 });
   });
 
-  test("[正常系]動く画面がずれた・ボタンが見つからなかったときは、画面の右の端から出す（線ごとに少しずらす）", () => {
-    const drifted = transitionStart(frame, edge(list, form.id), {
-      drifted: true,
+  test("[正常系]ボタンが見つからなかった（矩形が無い）ときは、画面の右の端から出す（線ごとに少しずらす）", () => {
+    const first = transitionStart(frame, edge(list, form.id, { rect: null }), {
       edgeOrder: 0,
     });
-    const noRect = transitionStart(frame, edge(list, form.id, { rect: null }), {
-      drifted: false,
+    const second = transitionStart(frame, edge(list, form.id, { rect: null }), {
       edgeOrder: 1,
     });
-    expect(drifted.x).toBe(frame.x + frame.w);
-    expect(noRect.x).toBe(frame.x + frame.w);
-    expect(noRect.y).toBeGreaterThan(drifted.y);
+    expect(first.x).toBe(frame.x + frame.w);
+    expect(second.x).toBe(frame.x + frame.w);
+    expect(second.y).toBeGreaterThan(first.y);
   });
 });
 
@@ -216,7 +213,6 @@ describe("transitionShape", () => {
         from,
         target,
         edge: edge(list, form.id, { rect }),
-        drifted: false,
         edgeOrder: 0,
         camera: { x: 0, y: 0, zoom: 0.1 },
         viewport,
@@ -254,7 +250,6 @@ describe("transitionShape", () => {
       from,
       target,
       edge: edge(list, done.id),
-      drifted: false,
       edgeOrder: 0,
       camera: { x: 0, y: 0, zoom: 1 },
       viewport: { width: 1200, height: 600 },
@@ -276,7 +271,6 @@ describe("transitionShape", () => {
       from,
       target: undefined,
       edge: edge(list, "shop-gone--default"),
-      drifted: false,
       edgeOrder: 0,
       camera: { x: 0, y: 0, zoom: 1 },
       viewport,
@@ -308,7 +302,6 @@ describe("transitionLines", () => {
       rows: rowsAt(1000, shown),
       selectedStoryId: list.id,
       storyOf: (id) => stories.find((s) => s.id === id),
-      driftedStoryIds: new Set(),
       camera: { x: 0, y: 0, zoom: 0.05 },
       viewport: { width: 1600, height: 900 },
     }).map((line) => ({
@@ -360,7 +353,6 @@ describe("transitionLines（札の重なり）", () => {
       rows: rowsAt(1000),
       selectedStoryId: list.id,
       storyOf: (id) => stories.find((s) => s.id === id),
-      driftedStoryIds: new Set(),
       camera: { x: 0, y: 0, zoom: 0.5 },
       viewport: { width: 1600, height: 900 },
     });
@@ -382,7 +374,6 @@ describe("transitionLines（札の矩形の重なり）", () => {
       rows: rowsAt(1000, shown),
       selectedStoryId: list.id,
       storyOf: (id) => shown.find((s) => s.id === id),
-      driftedStoryIds: new Set(),
       camera: { x: 0, y: 0, zoom: 0.25 },
       viewport: { width: 1600, height: 900 },
     });
@@ -407,7 +398,6 @@ describe("transitionLines（札の矩形の重なり）", () => {
       rows: rowsAt(1000, shown),
       selectedStoryId: list.id,
       storyOf: (id) => shown.find((s) => s.id === id),
-      driftedStoryIds: new Set(),
       camera: { x: 0, y: 0, zoom: 1.5 },
       viewport: { width: 6000, height: 4000 },
     });
@@ -428,7 +418,6 @@ describe("transitionLines（札を見えている範囲に収める）", () => {
       rows: rowsAt(1280),
       selectedStoryId: list.id,
       storyOf: (id) => stories.find((s) => s.id === id),
-      driftedStoryIds: new Set([list.id]),
       camera: { x: 0, y: 0, zoom: 1 },
       viewport,
     });
@@ -448,7 +437,6 @@ describe("transitionLines（札を見えている範囲に収める）", () => {
         rows: rowsAt(1000),
         selectedStoryId: list.id,
         storyOf: (id) => stories.find((s) => s.id === id),
-        driftedStoryIds: new Set(),
         camera: { x: cameraX, y: 0, zoom: 1 },
         viewport: { width: 1000, height: 800 },
       });
@@ -471,7 +459,6 @@ describe("transitionLines（札を見えている範囲に収める）", () => {
       rows: rowsAt(1280),
       selectedStoryId: list.id,
       storyOf: (id) => stories.find((s) => s.id === id),
-      driftedStoryIds: new Set(),
       // 画面の右の端（線の出る点）が見えている範囲の右の外にある
       camera: { x: 0, y: -100, zoom: 1 },
       viewport: { width: 1000, height: 800 },

@@ -190,6 +190,111 @@ describe("installBridge", () => {
     uninstall();
   });
 
+  test("[正常系]遷移のボタンを探す頼みに、描画したストーリーに書いた遷移を読んで、行ごとの位置を返す", () => {
+    const { frameWindow, posted, send, uninstall } = setUp();
+    const button = frameWindow.document.querySelector("button");
+    if (button === null) throw new Error("ボタンがありません");
+    button.getBoundingClientRect = () => new DOMRect(10, 20, 100, 40);
+    Object.assign(frameWindow, {
+      __STORYBOOK_PREVIEW__: {
+        currentRender: {
+          story: {
+            parameters: {
+              reviewCanvas: {
+                transitions: [
+                  { from: { role: "button", name: "注文する" }, to: "a--b" },
+                  { from: { testId: "gone" }, to: "a--c" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    send({ type: "hello", interactive: false });
+
+    send({ type: "transitions", requestId: 9 });
+
+    expect(posted.at(-1)?.data).toMatchObject({
+      type: "transitions",
+      requestId: 9,
+      results: [
+        { index: 0, box: { x: 10, y: 20, width: 100, height: 40 } },
+        { index: 1, box: null },
+      ],
+    });
+    uninstall();
+  });
+
+  test("[正常系]遷移を書いていないストーリーでも、探す頼みには空で答える（答えるかで新しい橋渡しかを見分ける）", () => {
+    const { posted, send, uninstall } = setUp();
+    send({ type: "hello", interactive: false });
+
+    send({ type: "transitions", requestId: 3 });
+
+    expect(posted.at(-1)?.data).toMatchObject({
+      type: "transitions",
+      requestId: 3,
+      results: [],
+    });
+    uninstall();
+  });
+
+  test("[正常系]操作のモードで利用者が中を押したときだけ、押したと知らせる", () => {
+    // jsdom では利用者の操作（isTrusted が true）のイベントを作れないので、橋渡しが付けた受け手を直に呼ぶ
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const frameWindow = iframe.contentWindow;
+    if (frameWindow === null) throw new Error("iframe の window がありません");
+    const listeners = new Map<string, (event: unknown) => void>();
+    const addEventListener = frameWindow.addEventListener.bind(frameWindow);
+    vi.spyOn(frameWindow, "addEventListener").mockImplementation(
+      (type: string, listener: unknown, options?: unknown) => {
+        if (typeof listener === "function") {
+          listeners.set(type, listener as (event: unknown) => void);
+        }
+        addEventListener(
+          type,
+          listener as EventListener,
+          options as AddEventListenerOptions,
+        );
+      },
+    );
+    const posted: unknown[] = [];
+    vi.spyOn(frameWindow.parent, "postMessage").mockImplementation(
+      (data: unknown) => {
+        posted.push(data);
+      },
+    );
+    const uninstall = installBridge({
+      window: frameWindow,
+      allowedOrigins: [CANVAS],
+    });
+    const send = (message: ParentMessage) =>
+      frameWindow.dispatchEvent(
+        new MessageEvent("message", {
+          data: toParentEnvelope(message),
+          origin: CANVAS,
+          source: frameWindow.parent,
+        }),
+      );
+    const pointerUp = (isTrusted: boolean) =>
+      listeners.get("pointerup")?.({ isTrusted });
+    const interacted = () =>
+      posted.filter((data) => (data as { type: string }).type === "interacted");
+    send({ type: "hello", interactive: false });
+
+    pointerUp(true);
+    expect(interacted()).toHaveLength(0);
+
+    send({ type: "mode", interactive: true });
+    pointerUp(false);
+    expect(interacted()).toHaveLength(0);
+    pointerUp(true);
+    expect(interacted()).toHaveLength(1);
+    uninstall();
+  });
+
   test("[正常系]押した位置の要素の手がかりを集めて返す（8KB の上限の内で）", () => {
     const { frameWindow, posted, send, uninstall } = setUp();
     const button = frameWindow.document.querySelector("button");

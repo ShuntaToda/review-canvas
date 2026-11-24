@@ -6,12 +6,20 @@ import {
   resolveShortcut,
 } from "../model/shortcuts";
 import { readRenderState } from "../model/story-render";
-import { MAX_MEASURED_NODES, measureContentHeight } from "../model/story-shots";
+import {
+  MAX_MEASURED_NODES,
+  MAX_STORY_TRANSITIONS,
+  measureContentHeight,
+  readTransitionSpecs,
+  TRANSITION_SPEC_TEXT_LENGTH,
+} from "../model/story-shots";
+import { locateTransitionButtons } from "../model/transition-locate";
 import { decideSize, type MeasureState } from "./measure";
 import {
   acceptParentEvent,
   type BridgeLocated,
   type BridgeMessage,
+  type BridgeTransition,
   parseParentMessage,
   toBridgeEnvelope,
 } from "./protocol";
@@ -190,11 +198,33 @@ export const installBridge = ({
         post({ type: "located", requestId: message.requestId, results });
         return;
       }
+      case "transitions": {
+        let results: BridgeTransition[] = [];
+        try {
+          // 撮るときと同じく、描画したストーリーの parameters.reviewCanvas.transitions を読んで探す
+          results = locateTransitionButtons(
+            doc,
+            readTransitionSpecs(
+              win,
+              MAX_STORY_TRANSITIONS,
+              TRANSITION_SPEC_TEXT_LENGTH,
+            ),
+          );
+        } catch {
+          results = [];
+        }
+        post({ type: "transitions", requestId: message.requestId, results });
+        return;
+      }
     }
   };
 
   const handlePointerDown = (event: PointerEvent) => {
     if (event.isTrusted) lastUserPointerAt = Date.now();
+  };
+  // 操作のモードで利用者が中を押した。押した後の入れ替わり（タブの切り替えなど）は高さが変わらないこともあるので、親に探し直してもらう
+  const handlePointerUp = (event: PointerEvent) => {
+    if (event.isTrusted && interactive) post({ type: "interacted" });
   };
   const handleFocusIn = () =>
     post({
@@ -240,6 +270,7 @@ export const installBridge = ({
 
   win.addEventListener("message", handleMessage);
   win.addEventListener("pointerdown", handlePointerDown, true);
+  win.addEventListener("pointerup", handlePointerUp, true);
   win.addEventListener("focusin", handleFocusIn, true);
   win.addEventListener("blur", handleBlur);
   win.addEventListener("keydown", handleKeyDown);
@@ -266,6 +297,7 @@ export const installBridge = ({
   return () => {
     win.removeEventListener("message", handleMessage);
     win.removeEventListener("pointerdown", handlePointerDown, true);
+    win.removeEventListener("pointerup", handlePointerUp, true);
     win.removeEventListener("focusin", handleFocusIn, true);
     win.removeEventListener("blur", handleBlur);
     win.removeEventListener("keydown", handleKeyDown);

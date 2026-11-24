@@ -21,6 +21,7 @@ import {
   SIDE_TITLE_SCREEN_WIDTH,
 } from "../model/layout";
 import { nextLiveFrames, sameFrames } from "../model/live-frames";
+import type { LiveTransitions } from "../model/live-transitions";
 import {
   isWaitingStale,
   nextWaiting,
@@ -113,10 +114,12 @@ type CanvasProps = {
   focusStoryId?: string | null;
   /** 画面の見出しの「ほかのブランチと比べる」（比べる相手が無いとき・比べる相手の目録をはじめて読み終える前は渡さない（useBranchCompare の canOpen）） */
   onCompare?: ((story: Story) => void) | undefined;
-  /** 画面ごとの、遷移を持つボタンの矩形（画面のつながりを出さないときは渡さない） */
+  /** 画面ごとの、撮ったときの遷移を持つボタンの矩形（画面のつながりを出さないときは渡さない） */
   transitionBoxesOf?: (storyId: string) => ReadonlyArray<ShotTransition>;
-  /** 動く画面が撮ったときとずれた・ずれが無くなった（Frame の onTransitionDrift） */
-  onTransitionDrift?: (storyId: string, drifted: boolean) => void;
+  /** 画面ごとの、目録にある遷移の行（index。画面のつながりを出さないときは渡さない） */
+  transitionRowsOf?: (storyId: string) => ReadonlyArray<number>;
+  /** 動く画面での遷移のボタンの位置が決まった・変わった（Frame の onLiveTransitions） */
+  onLiveTransitions?: (storyId: string, live: LiveTransitions | null) => void;
 };
 
 type Point = { x: number; y: number };
@@ -152,7 +155,8 @@ export const Canvas = ({
   focusStoryId = null,
   onCompare,
   transitionBoxesOf,
-  onTransitionDrift,
+  transitionRowsOf,
+  onLiveTransitions,
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
   const panRef = useRef<{
@@ -542,7 +546,8 @@ export const Canvas = ({
                   transitionBoxes={
                     transitionBoxesOf?.(placement.story.id) ?? []
                   }
-                  onTransitionDrift={onTransitionDrift}
+                  transitionRows={transitionRowsOf?.(placement.story.id) ?? []}
+                  onLiveTransitions={onLiveTransitions}
                 />
               ))}
             </div>

@@ -7,12 +7,17 @@ import {
   screen,
 } from "@testing-library/react";
 import { createRef } from "react";
-import { type BridgeMessage, toBridgeEnvelope } from "../bridge/protocol";
+import {
+  type BridgeMessage,
+  type BridgeTransition,
+  toBridgeEnvelope,
+} from "../bridge/protocol";
 import { SourcesContext } from "../hooks/useSources";
+import type { LiveTransitions } from "../model/live-transitions";
 import { frameLoadQueue } from "../model/load-queue";
 import { buildSourceCatalog } from "../model/sources";
 import { LINK_HIGHLIGHT_MS, type LinkHighlight } from "../model/story-link";
-import type { ShotView } from "../model/story-shots";
+import type { ShotTransition, ShotView } from "../model/story-shots";
 import type { Story } from "../model/storybook";
 import { Frame, StoryIframe } from "./Frame";
 
@@ -630,12 +635,15 @@ describe("Frame の遷移のボタンの枠", () => {
     phase: "finished",
     hasPlayFunction: false,
   };
+  type OnLive = (storyId: string, live: LiveTransitions | null) => void;
 
   const renderFrame = ({
     id,
     tool,
     onPendingPlace = () => undefined,
-    onTransitionDrift = () => undefined,
+    onLiveTransitions = () => undefined,
+    boxes: shotBoxes = [BOX],
+    rows = [0],
   }: {
     id: string;
     tool: "comment" | "interact";
@@ -643,10 +651,12 @@ describe("Frame の遷移のボタンの枠", () => {
       storyId: string,
       point: { x: number; y: number } | null,
     ) => void;
-    onTransitionDrift?: (storyId: string, drifted: boolean) => void;
+    onLiveTransitions?: OnLive;
+    boxes?: ShotTransition[];
+    rows?: number[];
   }) => {
     vi.useFakeTimers();
-    const { container } = render(
+    const element = (width: number) => (
       <SourcesContext.Provider value={sources}>
         <Frame
           source="shop"
@@ -660,7 +670,7 @@ describe("Frame の遷移のボタンの枠", () => {
             },
             x: 0,
             y: 0,
-            w: WIDTH,
+            w: width,
             h: SHOT.height,
           }}
           zoom={1}
@@ -683,17 +693,21 @@ describe("Frame の遷移のボタンの枠", () => {
           pendingPlace={null}
           onPendingPlace={onPendingPlace}
           onScreenChanged={() => undefined}
-          transitionBoxes={[BOX]}
-          onTransitionDrift={onTransitionDrift}
+          transitionBoxes={shotBoxes}
+          transitionRows={rows}
+          onLiveTransitions={onLiveTransitions}
         />
-      </SourcesContext.Provider>,
+      </SourcesContext.Provider>
     );
+    const { container, rerender } = render(element(WIDTH));
     const iframe = container.querySelector("iframe");
     if (iframe === null) throw new Error("iframe がありません");
     fireEvent.load(iframe);
     const frameWindow = iframe.contentWindow;
     if (frameWindow === null) throw new Error("iframe の window がありません");
-    vi.spyOn(frameWindow, "postMessage").mockImplementation(() => undefined);
+    const posted = vi
+      .spyOn(frameWindow, "postMessage")
+      .mockImplementation(() => undefined);
     const receive = (message: BridgeMessage) =>
       act(() => {
         window.dispatchEvent(
@@ -717,6 +731,65 @@ describe("Frame の遷移のボタンの枠", () => {
         vi.advanceTimersByTime(300);
       });
     };
+    /** 橋渡しへ送った、遷移のボタンを探す頼みの requestId（送った順） */
+    const requests = (): number[] =>
+      posted.mock.calls.flatMap(([data]) => {
+        const message = data as { type?: unknown; requestId?: unknown };
+        return message.type === "transitions" &&
+          typeof message.requestId === "number"
+          ? [message.requestId]
+          : [];
+      });
+    const answered = new Set<number>();
+    /** まだ答えていない頼みに、新しい橋渡しとして答える */
+    const answer = async (results: BridgeTransition[]) => {
+      for (const requestId of requests()) {
+        if (answered.has(requestId)) continue;
+        answered.add(requestId);
+        await act(async () => {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              data: toBridgeEnvelope({
+                type: "transitions",
+                requestId,
+                results,
+              }),
+              origin: window.location.origin,
+              source: frameWindow,
+            }),
+          );
+          await Promise.resolve();
+        });
+      }
+    };
+    /**
+     * 新しい橋渡しとして動く画面を出す。つないだときの頼みに答え（ここで答える橋渡しと分かる。描画の途中の結果は使わない）、
+     * 画像の上に出してから、出したときの頼みに results で答える
+     */
+    const revealLive = async (
+      height: number,
+      results: BridgeTransition[] | null,
+    ) => {
+      receive({
+        type: "ready",
+        render: finished,
+        focused: false,
+        height,
+        width: WIDTH,
+      });
+      await answer([]);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      if (results !== null) await answer(results);
+    };
+    /** 時間を進める（答えない橋渡しの時間切れを待つ） */
+    const wait = async (ms: number) => {
+      await act(async () => {
+        vi.advanceTimersByTime(ms);
+        await Promise.resolve();
+      });
+    };
     const boxes = () => [
       ...container.querySelectorAll<HTMLElement>("[data-transition-box]"),
     ];
@@ -724,7 +797,19 @@ describe("Frame の遷移のボタンの枠", () => {
       container
         .querySelector("[data-frame-mode]")
         ?.getAttribute("data-frame-mode");
-    return { container, iframe, receive, reveal, boxes, mode };
+    return {
+      container,
+      iframe,
+      receive,
+      reveal,
+      revealLive,
+      requests,
+      answer,
+      wait,
+      boxes,
+      mode,
+      resize: (width: number) => rerender(element(width)),
+    };
   };
 
   test("[正常系]遷移を持つボタンに、クリックを下へ通す枠を重ね、枠の上でもピンを置ける", () => {
@@ -772,90 +857,300 @@ describe("Frame の遷移のボタンの枠", () => {
     expect(iframe.hasAttribute("inert")).toBe(false);
   });
 
-  test("[正常系]動く画面の中身の高さが撮ったときと違えば、枠を出さず、ずれたと知らせる", () => {
-    const onTransitionDrift =
-      vi.fn<(storyId: string, drifted: boolean) => void>();
-    const { reveal, boxes } = renderFrame({
-      id: "transition-box-height",
-      tool: "comment",
-      onTransitionDrift,
+  describe("探す頼みに答える橋渡し（Issue #45）", () => {
+    // macOS で描いたログインの画面は、CI の Linux で撮ったときより高い（388px → 403px）。ボタンも同じだけ下にある
+    const FONT_HEIGHT = Math.round(SHOT.height * (403 / 388));
+    const MOVED = { x: 24, y: 361, width: 91, height: 35 };
+
+    test("[正常系]再現: 中身の高さがフォントほど違っても、枠と矢印をボタンの実際の位置から出す", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { revealLive, boxes } = renderFrame({
+        id: "transition-live-font",
+        tool: "comment",
+        onLiveTransitions,
+      });
+
+      await revealLive(FONT_HEIGHT, [{ index: 0, box: MOVED }]);
+
+      const [box] = boxes();
+      expect(boxes()).toHaveLength(1);
+      expect(box?.style.top).toBe("361px");
+      expect(box?.style.width).toBe("91px");
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-live-font",
+        { kind: "located", rects: [{ index: 0, ...MOVED }] },
+      );
     });
 
-    reveal(1600);
+    test("[正常系]探している間（動く画面を出した直後）は撮ったときの位置から出し、見つかったら実際の位置へ移す", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { revealLive, answer, boxes } = renderFrame({
+        id: "transition-live-searching",
+        tool: "comment",
+        onLiveTransitions,
+      });
 
-    expect(boxes()).toHaveLength(0);
-    expect(onTransitionDrift).toHaveBeenLastCalledWith(
-      "transition-box-height",
-      true,
-    );
+      await revealLive(FONT_HEIGHT, null);
+      expect(boxes()[0]?.style.top).toBe("346px");
+      expect(onLiveTransitions).not.toHaveBeenCalled();
+
+      await answer([{ index: 0, box: MOVED }]);
+
+      expect(boxes()[0]?.style.top).toBe("361px");
+    });
+
+    test("[正常系]動く画面を出す前（描画・play 関数の途中）に探した結果は使わない", async () => {
+      const { receive, answer, requests, boxes, wait } = renderFrame({
+        id: "transition-live-before-reveal",
+        tool: "comment",
+      });
+
+      receive({
+        type: "ready",
+        render: { ...finished, phase: "playing", hasPlayFunction: true },
+        focused: false,
+        height: SHOT.height,
+        width: WIDTH,
+      });
+      expect(requests()).toHaveLength(1);
+      await answer([{ index: 0, box: MOVED }]);
+      await wait(0);
+
+      // まだ画像を出している（撮ったときの位置）
+      expect(boxes()[0]?.style.top).toBe("346px");
+    });
+
+    test("[正常系]bh1: 見つからない行だけ、枠を出さず右の端から出す（ほかの行は見つかった位置から）", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const second = { index: 1, x: 24, y: 600, width: 120, height: 40 };
+      const { revealLive, boxes } = renderFrame({
+        id: "transition-live-partial",
+        tool: "comment",
+        boxes: [BOX, second],
+        rows: [0, 1],
+        onLiveTransitions,
+      });
+
+      // 1 行目は 2 つ以上に当たった・はみ出した（橋渡しは位置を決めずに null で返す）
+      await revealLive(FONT_HEIGHT, [
+        { index: 0, box: null },
+        { index: 1, box: { x: 24, y: 620, width: 120, height: 40 } },
+      ]);
+
+      expect(boxes().map((box) => box.dataset["transitionBox"])).toStrictEqual([
+        "1",
+      ]);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-live-partial",
+        {
+          kind: "located",
+          rects: [{ index: 1, x: 24, y: 620, width: 120, height: 40 }],
+        },
+      );
+    });
+
+    test("[正常系]撮るときに位置を残せなかった行も、動く画面で見つかればボタンから出す", async () => {
+      const { revealLive, answer, boxes } = renderFrame({
+        id: "transition-live-unplaced",
+        tool: "comment",
+        boxes: [],
+        rows: [0],
+      });
+
+      await revealLive(SHOT.height, null);
+      expect(boxes()).toHaveLength(0);
+      await answer([{ index: 0, box: MOVED }]);
+
+      expect(boxes()[0]?.style.top).toBe("361px");
+    });
+
+    test("[異常系]届いた矩形が画面の外・大きさが無い・目録に無い行・同じ行が 2 つなら、見つからないとして扱う", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { revealLive, boxes } = renderFrame({
+        id: "transition-live-invalid",
+        tool: "comment",
+        boxes: [BOX, { ...BOX, index: 1 }, { ...BOX, index: 2 }],
+        rows: [0, 1, 2],
+        onLiveTransitions,
+      });
+
+      await revealLive(SHOT.height, [
+        // 画面の幅（375）からはみ出す
+        { index: 0, box: { x: 300, y: 10, width: 120, height: 30 } },
+        // 画面の高さ（1319）より下
+        { index: 1, box: { x: 0, y: 1300, width: 50, height: 40 } },
+        // 同じ行が 2 つ
+        { index: 2, box: MOVED },
+        { index: 2, box: MOVED },
+        // 目録に無い行
+        { index: 7, box: MOVED },
+      ]);
+
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-live-invalid",
+        { kind: "located", rects: [] },
+      );
+    });
+
+    test("[正常系]bi1: 幅を替えたとき・中身の大きさが変わったとき・操作のモードで中を触った後に探し直す", async () => {
+      const { revealLive, answer, requests, receive, wait, boxes, resize } =
+        renderFrame({ id: "transition-live-relocate", tool: "interact" });
+
+      await revealLive(SHOT.height, [{ index: 0, box: MOVED }]);
+      const afterReveal = requests().length;
+
+      // 中身の大きさが変わった
+      receive({ type: "size", height: SHOT.height, width: WIDTH });
+      await wait(150);
+      expect(requests().length).toBeGreaterThan(afterReveal);
+      await answer([{ index: 0, box: { ...MOVED, y: 380 } }]);
+      expect(boxes()[0]?.style.top).toBe("380px");
+
+      // 操作のモードで中を押した（高さの変わらない入れ替わり: タブの切り替えなど）
+      const afterSize = requests().length;
+      receive({ type: "interacted" });
+      await wait(150);
+      expect(requests().length).toBeGreaterThan(afterSize);
+      await answer([{ index: 0, box: { ...MOVED, y: 400 } }]);
+      expect(boxes()[0]?.style.top).toBe("400px");
+
+      // 中へフォーカスが入った（利用者が押した）
+      const afterInteracted = requests().length;
+      receive({ type: "focusin", byUser: true });
+      await wait(150);
+      expect(requests().length).toBeGreaterThan(afterInteracted);
+      await answer([{ index: 0, box: null }]);
+      // 触った後も、見つかったかだけで決める（見つからなければ右の端）
+      expect(boxes()).toHaveLength(0);
+
+      // 幅を替えた: 前の幅の結果は使わず、探し直す
+      const beforeResize = requests().length;
+      resize(360);
+      await wait(0);
+      expect(requests().length).toBeGreaterThan(beforeResize);
+      await answer([{ index: 0, box: { ...MOVED, y: 410 } }]);
+      expect(boxes()[0]?.style.top).toBe("410px");
+    });
+
+    test("[正常系]触らずに起きた、中身の大きさが変わらない入れ替わりは拾わない（探し直さない）", async () => {
+      const { revealLive, requests, wait } = renderFrame({
+        id: "transition-live-untouched",
+        tool: "comment",
+      });
+      await revealLive(SHOT.height, [{ index: 0, box: MOVED }]);
+      const count = requests().length;
+
+      await wait(5_000);
+
+      expect(requests()).toHaveLength(count);
+    });
   });
 
-  test("[正常系]操作のモードで中を触った後は、高さが同じでも枠を出さず、ずれたと知らせる", () => {
-    const onTransitionDrift =
-      vi.fn<(storyId: string, drifted: boolean) => void>();
-    const { reveal, receive, boxes } = renderFrame({
-      id: "transition-box-touched",
-      tool: "interact",
-      onTransitionDrift,
+  describe("探す頼みに答えない橋渡し（bj1: 直す前に置いた Storybook）", () => {
+    test("[正常系]再現: 中身の高さがフォントほど違うと、いままでどおり枠を出さず、右の端から出すと知らせる", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, boxes, wait } = renderFrame({
+        id: "transition-legacy-font",
+        tool: "comment",
+        onLiveTransitions,
+      });
+
+      reveal(Math.round(SHOT.height * (403 / 388)));
+      await wait(2_000);
+
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-legacy-font",
+        { kind: "drifted" },
+      );
     });
 
-    reveal(1319);
-    expect(boxes()).toHaveLength(1);
-    expect(onTransitionDrift).not.toHaveBeenCalled();
+    test("[正常系]中身の高さが撮ったときと同じなら、撮ったときの位置から出す", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, boxes, wait, requests } = renderFrame({
+        id: "transition-legacy-same",
+        tool: "comment",
+        onLiveTransitions,
+      });
 
-    receive({ type: "focusin", byUser: true });
+      reveal(SHOT.height);
+      await wait(2_000);
 
-    expect(boxes()).toHaveLength(0);
-    expect(onTransitionDrift).toHaveBeenLastCalledWith(
-      "transition-box-touched",
-      true,
-    );
-  });
-
-  test("[正常系]操作のモードで中を押して（橋渡しの知らせが無くても）フォーカスが iframe へ移ったら、触ったとみなして枠を消す", () => {
-    const onTransitionDrift =
-      vi.fn<(storyId: string, drifted: boolean) => void>();
-    const { reveal, boxes, iframe } = renderFrame({
-      id: "transition-box-blur",
-      tool: "interact",
-      onTransitionDrift,
-    });
-    reveal(1319);
-    expect(boxes()).toHaveLength(1);
-
-    // 親の文書から見ると、中を押すと window が blur し、activeElement が iframe になる
-    const activeElement = vi
-      .spyOn(document, "activeElement", "get")
-      .mockReturnValue(iframe);
-    act(() => {
-      window.dispatchEvent(new Event("blur"));
-      vi.advanceTimersByTime(0);
-    });
-    activeElement.mockRestore();
-
-    expect(boxes()).toHaveLength(0);
-    expect(onTransitionDrift).toHaveBeenLastCalledWith(
-      "transition-box-blur",
-      true,
-    );
-  });
-
-  test("[正常系]blur しても、フォーカスが iframe に無ければ（ほかのウィンドウへ移った）触ったとみなさない", () => {
-    const onTransitionDrift =
-      vi.fn<(storyId: string, drifted: boolean) => void>();
-    const { reveal, boxes } = renderFrame({
-      id: "transition-box-blur-away",
-      tool: "interact",
-      onTransitionDrift,
-    });
-    reveal(1319);
-
-    act(() => {
-      window.dispatchEvent(new Event("blur"));
-      vi.advanceTimersByTime(0);
+      expect(boxes()[0]?.style.top).toBe("346px");
+      expect(onLiveTransitions).not.toHaveBeenCalled();
+      // 答えないと分かったら、頼み直さない
+      const count = requests().length;
+      await wait(5_000);
+      expect(requests()).toHaveLength(count);
     });
 
-    expect(boxes()).toHaveLength(1);
-    expect(onTransitionDrift).not.toHaveBeenCalled();
+    test("[正常系]操作のモードで中を触った後は、高さが同じでも枠を出さず、ずれたと知らせる", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, receive, boxes, wait } = renderFrame({
+        id: "transition-legacy-touched",
+        tool: "interact",
+        onLiveTransitions,
+      });
+
+      reveal(SHOT.height);
+      await wait(2_000);
+      expect(boxes()).toHaveLength(1);
+
+      receive({ type: "focusin", byUser: true });
+
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-legacy-touched",
+        { kind: "drifted" },
+      );
+    });
+
+    test("[正常系]操作のモードで中を押して（橋渡しの知らせが無くても）フォーカスが iframe へ移ったら、触ったとみなして枠を消す", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, boxes, iframe, wait } = renderFrame({
+        id: "transition-legacy-blur",
+        tool: "interact",
+        onLiveTransitions,
+      });
+      reveal(SHOT.height);
+      await wait(2_000);
+      expect(boxes()).toHaveLength(1);
+
+      // 親の文書から見ると、中を押すと window が blur し、activeElement が iframe になる
+      const activeElement = vi
+        .spyOn(document, "activeElement", "get")
+        .mockReturnValue(iframe);
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+        vi.advanceTimersByTime(0);
+      });
+      activeElement.mockRestore();
+
+      expect(boxes()).toHaveLength(0);
+      expect(onLiveTransitions).toHaveBeenLastCalledWith(
+        "transition-legacy-blur",
+        { kind: "drifted" },
+      );
+    });
+
+    test("[正常系]blur しても、フォーカスが iframe に無ければ（ほかのウィンドウへ移った）触ったとみなさない", async () => {
+      const onLiveTransitions = vi.fn<OnLive>();
+      const { reveal, boxes, wait } = renderFrame({
+        id: "transition-legacy-blur-away",
+        tool: "interact",
+        onLiveTransitions,
+      });
+      reveal(SHOT.height);
+      await wait(2_000);
+
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+        vi.advanceTimersByTime(0);
+      });
+
+      expect(boxes()).toHaveLength(1);
+      expect(onLiveTransitions).not.toHaveBeenCalled();
+    });
   });
 });

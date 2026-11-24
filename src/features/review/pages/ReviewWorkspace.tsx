@@ -1253,7 +1253,10 @@ export const ReviewWorkspace = ({
                   {...(transitions.boxesOf === undefined
                     ? {}
                     : { transitionBoxesOf: transitions.boxesOf })}
-                  onTransitionDrift={transitions.onTransitionDrift}
+                  {...(transitions.rowsOf === undefined
+                    ? {}
+                    : { transitionRowsOf: transitions.rowsOf })}
+                  onLiveTransitions={transitions.onLiveTransitions}
                   onOpenThread={(threadId) => {
                     setActiveThreadId(threadId);
                     setDraft(null);

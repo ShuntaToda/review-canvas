@@ -5,6 +5,7 @@ import {
   type BridgeKey,
   type BridgeLocated,
   type BridgeStory,
+  type BridgeTransition,
   type ParentMessage,
   parseBridgeMessage,
   toParentEnvelope,
@@ -36,6 +37,8 @@ export type FrameBridgeHandlers = {
   onBlur: () => void;
   onKeyDown: (key: BridgeKey & { typing: boolean }) => void;
   onKeyUp: (key: string) => void;
+  /** 操作のモードで、利用者が中を押した（知らせない橋渡しもある） */
+  onInteracted?: () => void;
 };
 
 type Pending<T> = {
@@ -65,6 +68,8 @@ export class FrameBridge {
   #captures = new Map<number, Pending<CommentAnchor | null>>();
 
   #locates = new Map<number, Pending<BridgeLocated[] | null>>();
+
+  #transitions = new Map<number, Pending<BridgeTransition[] | null>>();
 
   #timers: number[] = [];
 
@@ -174,6 +179,27 @@ export class FrameBridge {
     });
   }
 
+  /**
+   * ストーリーに書いた遷移のボタンを探してもらう（つながっていない・返事が無ければ null）。
+   * 探す前の版の橋渡しは答えないので、時間切れの null で見分ける
+   */
+  findTransitions(
+    timeoutMs = BRIDGE_REQUEST_TIMEOUT_MS,
+  ): Promise<BridgeTransition[] | null> {
+    if (this.#state !== "ready") return Promise.resolve(null);
+    const requestId = this.#nextId();
+    return new Promise((resolve) => {
+      this.#transitions.set(requestId, {
+        resolve,
+        timer: this.#window.setTimeout(() => {
+          this.#transitions.delete(requestId);
+          resolve(null);
+        }, timeoutMs),
+      });
+      this.#send({ type: "transitions", requestId });
+    });
+  }
+
   /** やめる（待っている返事は null で終える） */
   dispose(): void {
     if (this.#state === "disposed") return;
@@ -184,12 +210,16 @@ export class FrameBridge {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
     }
-    for (const pending of [...this.#locates.values()]) {
+    for (const pending of [
+      ...this.#locates.values(),
+      ...this.#transitions.values(),
+    ]) {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
     }
     this.#captures.clear();
     this.#locates.clear();
+    this.#transitions.clear();
   }
 
   #nextId(): number {
@@ -265,6 +295,17 @@ export class FrameBridge {
         pending.resolve(message.results);
         return;
       }
+      case "transitions": {
+        const pending = this.#transitions.get(message.requestId);
+        if (pending === undefined) return;
+        this.#transitions.delete(message.requestId);
+        this.#window.clearTimeout(pending.timer);
+        pending.resolve(message.results);
+        return;
+      }
+      case "interacted":
+        this.#handlers.onInteracted?.();
+        return;
     }
   };
 }

@@ -33,7 +33,9 @@ import {
   type ShotTransition,
   type StoryShot,
   type StoryTransition,
+  TRANSITION_SPEC_TEXT_LENGTH,
   type TransitionCandidate,
+  type TransitionFrom,
 } from "../../src/features/review/model/story-shots";
 import {
   checkTransitionSpecs,
@@ -42,8 +44,6 @@ import {
   placeTransition,
   toTransitionCandidates,
   toTransitionSpecs,
-  TRANSITION_SPEC_TEXT_LENGTH,
-  type TransitionFrom,
   type TransitionProblem,
   type TransitionProblemGroup,
   type TransitionLookup,
