@@ -20,7 +20,7 @@ AI がこのリポジトリを扱うときの入口です。
 Issue で仕様を決める → 実装 → 多視点レビュー → PR の順に回す（[docs/development.md](docs/development.md#issue-から-pr-まで)）。仕様は人が決め、AI は選択肢と★推奨を出す。マージは人がする。
 
 - [.claude/skills/dev-write-issue/SKILL.md](.claude/skills/dev-write-issue/SKILL.md): 決まっていない点を、選択肢・★推奨・理由の表と注釈つきの画面にして人に選んでもらい、親 Issue → PR 単位の Issue に仕様を書き切る（テンプレートは `.github/ISSUE_TEMPLATE/`）
-- [.claude/skills/dev-implement-issue/SKILL.md](.claude/skills/dev-implement-issue/SKILL.md): 人が名指しした PR 単位の Issue を実装役に渡し、実際に動かして、PR の本文だけでマージを決められる形にまとめる（`.github/pull_request_template.md`）
+- [.claude/skills/dev-implement-issue/SKILL.md](.claude/skills/dev-implement-issue/SKILL.md): 人が名指しした PR 単位の Issue・不具合の Issue を実装役に渡し、実際に動かして、PR の本文だけでマージを決められる形にまとめる（`.github/pull_request_template.md`）
 - [.claude/skills/dev-multi-perspective-review/SKILL.md](.claude/skills/dev-multi-perspective-review/SKILL.md): 変更のあった領域のレビュー役を並列に立て、Medium 以上が 0 件になるまで回す
 - [.claude/skills/dev-add-api-endpoint/SKILL.md](.claude/skills/dev-add-api-endpoint/SKILL.md)・[.claude/skills/dev-add-ui-feature/SKILL.md](.claude/skills/dev-add-ui-feature/SKILL.md)・[.claude/skills/dev-add-comment-field/SKILL.md](.claude/skills/dev-add-comment-field/SKILL.md): API のルート・画面の機能・コメントの項目を足す手順
 - レビュー役（読むだけ。`.claude/agents/`）: [api-reviewer](.claude/agents/api-reviewer.md)（API・層・権限）・[ui-reviewer](.claude/agents/ui-reviewer.md)（画面・実ブラウザ・アクセシビリティ）・[infra-reviewer](.claude/agents/infra-reviewer.md)（CDK・テンプレートの互換・ワークフローの資格情報）・[cli-mcp-reviewer](.claude/agents/cli-mcp-reviewer.md)（CLI・MCP と openapi の契約）・[architecture-reviewer](.claude/agents/architecture-reviewer.md)（横断: 名前・コメント・黙らせ方・文書・公開リポジトリの決まり）
