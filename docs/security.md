@@ -54,12 +54,14 @@ flowchart LR
 
 Storybook は画面と別のオリジンで配るので、画面は iframe の中の DOM を直に読みません。配るとき（置くスクリプト・手元のサーバー）に、各 Storybook の `iframe.html` へ橋渡しの `<script>` を 1 つだけ差し込み（`inject.ts`。印のコメントで囲み、何度差し込んでも 1 つ）、画面とは `postMessage` だけでやり取りします（`protocol.ts`）。
 
-- 画面 → 橋渡し: `hello`（つなぐ）・`mode`（操作モードか）・`blur`（中のフォーカスを外す）・`capture`（押した位置の要素の手がかりを集める）・`locate`（ピンの要素を探す）
-- 橋渡し → 画面: `ready`・`render`（描画の段階・play 関数の有無）・`size`（高さ）・`focusin`・`blur`・`keydown`/`keyup`（利用者のキーだけ。play 関数の打つキーは伝えない）・`captured`・`located`
+- 画面 → 橋渡し: `hello`（つなぐ）・`mode`（操作モードか）・`blur`（中のフォーカスを外す）・`capture`（押した位置の要素の手がかりを集める）・`locate`（ピンの要素を探す）・`transitions`（ストーリーに書いた遷移のボタンを探す）
+- 橋渡し → 画面: `ready`・`render`（描画の段階・play 関数の有無）・`size`（高さ）・`focusin`・`blur`・`keydown`/`keyup`（利用者のキーだけ。play 関数の打つキーは伝えない）・`captured`・`located`・`transitions`（遷移のボタンの位置）・`interacted`（操作のモードで利用者が中を押した）
+- 知らせの種類を足すだけでは、やり取りの版（`BRIDGE_PROTOCOL_VERSION`）を上げません（知らない種類はどちらの側も捨てる。上げると、前に置いた Storybook の橋渡しとつなげなくなる）。新しい知らせに答えるかで、橋渡しの版を見分けます（遷移のボタンを探す頼みに答えない橋渡しは、探す前の版）
 - どちらも、相手のオリジン（画面は `app-config.json` の `storybookOrigin`、橋渡しは差し込むときに `data-canvas-origin` で渡した画面のオリジン）と相手の window（iframe の window・親の window）を確かめ、知らない形の知らせは捨てます。橋渡しは、最初に `hello` をくれた画面のオリジンとだけやり取りします
 - ストーリーの iframe には `sandbox`（`allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads`）を付け、`allow-top-navigation` は渡しません。ストーリーのコードが `top.location` で親のタブ（キャンバス）を別のページへ移せないようにするためです（`allow-same-origin` は Storybook の配信のオリジンのまま動かすため。`allow-downloads` はストーリーのダウンロードの操作を試せるようにするため）
   - ブラウザ（Chrome など）は `allow-scripts` と `allow-same-origin` を一緒に付けると「sandbox を抜けられる」と警告します。これは iframe の中身が親と同じオリジンのときの話で、Storybook は画面と別のオリジンで配るため、中のコードは親の DOM に触れず、sandbox の属性も外せません
 - 集めた手がかりは、画面・サーバーの両方で形と 8KB の上限を確かめます。入力欄の値は持ちません
+- 遷移のボタンの位置は、画面の側で形と範囲（目録にある行で 1 行に 1 つ、大きさがあり、画面の幅・高さの中）を確かめ、外れたものは見つからないとして扱います（`model/live-transitions.ts`）。橋渡しは描画したストーリーの `parameters.reviewCanvas.transitions` だけを読み（撮影と同じ `readTransitionSpecs`）、ボタンの位置だけを返します
 - 橋渡しの無い Storybook（橋渡しを差し込まずに置いたもの）は、つながらないまま 4 秒で読み込みの順番を譲り、画面の名前の横に「一部の機能が使えません」を出します（ピンは置いたときの位置に出す）。同じ置き場の 2 枚目からは、返事を待たずに順番を譲ります
 - 高さは橋渡しが測って知らせます。幅を切り替えたとき・iframe を付け直したときは、画面から測り直しを頼みます（見えている範囲の外の iframe には大きさの変化が届かないため）。画面の高さ（`100vh` など）に合わせて伸びるストーリーは、知らせた高さで iframe が伸びると中身もまた伸びるので、画面の高さに引きずられた伸びは知らせません（`bridge/measure.ts`）。知らせずにいるあいだは、iframe の中の縦のスクロールバーを隠します
 - 中身の高さは、body の子要素の下端（下の余白まで。画面に固定した要素は数えない）で測ります（`scrollHeight` は iframe の高さより小さくならず、play 関数で一度伸びた画面が縮んでも分からないため）。子要素から中身が下へはみ出している（高さを画面に合わせた入れ物（`height: 100vh`）の中の長い中身や文章など）ときは、中へ降りて、はみ出した要素と文字の下端も数えます（はみ出した中身の下には余白を足しません。Chromium のページの高さ（撮影の画像の高さ）も、はみ出した中身の下に先祖の余白を足さないためです）。どれも要素の矩形で測るので、画面の高さが変わっても、同じ中身なら同じ高さになります（画面の高さで測り方が変わると、知らせた高さを iframe に付けるたびに測った高さが行き来するため）。子要素の内の絶対配置の要素と、スクロール・切り取りをする入れ物（`overflow-y` が `visible` でない）の中身は数えません。中へ降りて数える要素と文字の数には上限（`MAX_MEASURED_NODES`。空白だけの文字は数えない）があり、橋渡しと撮影で同じ上限を使います。body に余白のある画面（Storybook の layout `padded`）の 100vh の入れ物は、iframe を伸ばすと余白の分だけ伸びるので、画像から動く画面に切り替えた後に枠が余白の分だけ高くなることがあります
