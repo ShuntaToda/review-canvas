@@ -305,7 +305,7 @@
       "storyId": "shop-checkout-cart--with-items",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-checkout-cart--with-items-375-a1bd32ebe4d36d56.png",
+      "path": "review-canvas-shots/shop-checkout-cart--with-items-375-780a58ff5e23dfdf.png",
       "contentHeight": 445,
       "elements": [
         {
@@ -323,7 +323,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -348,14 +348,14 @@
           "tag": "h2",
           "x": 109,
           "y": 156,
-          "width": 131,
+          "width": 117,
           "height": 19,
           "text": "木のマグカップ",
           "heading": "カート"
         },
         {
           "tag": "button",
-          "x": 252,
+          "x": 238,
           "y": 159,
           "width": 32,
           "height": 32,
@@ -375,14 +375,14 @@
           "tag": "h2",
           "x": 109,
           "y": 225,
-          "width": 134,
+          "width": 117,
           "height": 19,
           "text": "麻のトートバッグ",
           "heading": "木のマグカップ"
         },
         {
           "tag": "button",
-          "x": 255,
+          "x": 238,
           "y": 228,
           "width": 32,
           "height": 32,
@@ -417,7 +417,7 @@
           "heading": "麻のトートバッグ"
         }
       ],
-      "thumb": "review-canvas-shots/shop-checkout-cart--with-items-375-a1bd32ebe4d36d56-thumb.png",
+      "thumb": "review-canvas-shots/shop-checkout-cart--with-items-375-780a58ff5e23dfdf-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -496,8 +496,8 @@
       "storyId": "shop-checkout-cart--quantity-limit",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-9fc7e3f71a2f60f7.png",
-      "contentHeight": 499,
+      "path": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-868835815d350438.png",
+      "contentHeight": 495,
       "elements": [
         {
           "tag": "button",
@@ -514,7 +514,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート6",
+          "text": "カート（6点）",
           "heading": ""
         },
         {
@@ -539,14 +539,14 @@
           "tag": "h2",
           "x": 109,
           "y": 156,
-          "width": 131,
+          "width": 117,
           "height": 19,
           "text": "木のマグカップ",
           "heading": "カート"
         },
         {
           "tag": "button",
-          "x": 252,
+          "x": 238,
           "y": 159,
           "width": 32,
           "height": 32,
@@ -566,14 +566,14 @@
           "tag": "h2",
           "x": 109,
           "y": 225,
-          "width": 134,
+          "width": 117,
           "height": 19,
           "text": "麻のトートバッグ",
           "heading": "木のマグカップ"
         },
         {
           "tag": "button",
-          "x": 255,
+          "x": 238,
           "y": 228,
           "width": 32,
           "height": 32,
@@ -592,7 +592,7 @@
         {
           "tag": "button",
           "x": 33,
-          "y": 422,
+          "y": 418,
           "width": 103,
           "height": 36,
           "text": "レジに進む",
@@ -601,14 +601,14 @@
         {
           "tag": "button",
           "x": 148,
-          "y": 422,
+          "y": 418,
           "width": 133,
           "height": 36,
           "text": "買い物を続ける",
           "heading": "麻のトートバッグ"
         }
       ],
-      "thumb": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-9fc7e3f71a2f60f7-thumb.png"
+      "thumb": "review-canvas-shots/shop-checkout-cart--quantity-limit-375-868835815d350438-thumb.png"
     },
     {
       "storyId": "shop-checkout-complete--default",
@@ -694,7 +694,7 @@
       "storyId": "shop-checkout-confirm--default",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-checkout-confirm--default-375-dd792ca3556c04e0.png",
+      "path": "review-canvas-shots/shop-checkout-confirm--default-375-3aac9c87431740fb.png",
       "contentHeight": 718,
       "elements": [
         {
@@ -712,7 +712,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -770,7 +770,7 @@
           "heading": "お届け先"
         }
       ],
-      "thumb": "review-canvas-shots/shop-checkout-confirm--default-375-dd792ca3556c04e0-thumb.png",
+      "thumb": "review-canvas-shots/shop-checkout-confirm--default-375-3aac9c87431740fb-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -1118,7 +1118,7 @@
       "storyId": "shop-orderform--default",
       "width": 375,
       "height": 1249,
-      "path": "review-canvas-shots/shop-orderform--default-375-98fd9009f793aece.png",
+      "path": "review-canvas-shots/shop-orderform--default-375-e33e255be10ce58b.png",
       "contentHeight": 1249,
       "elements": [
         {
@@ -1136,7 +1136,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1203,7 +1203,7 @@
           "heading": "お届け先の入力"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--default-375-98fd9009f793aece-thumb.png",
+      "thumb": "review-canvas-shots/shop-orderform--default-375-e33e255be10ce58b-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -1225,7 +1225,7 @@
       "storyId": "shop-orderform--filled",
       "width": 375,
       "height": 1249,
-      "path": "review-canvas-shots/shop-orderform--filled-375-174ce9e029bc8b6e.png",
+      "path": "review-canvas-shots/shop-orderform--filled-375-c53f2e92559135e7.png",
       "contentHeight": 1249,
       "elements": [
         {
@@ -1243,7 +1243,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1310,7 +1310,7 @@
           "heading": "お届け先の入力"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--filled-375-174ce9e029bc8b6e-thumb.png",
+      "thumb": "review-canvas-shots/shop-orderform--filled-375-c53f2e92559135e7-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -1325,7 +1325,7 @@
       "storyId": "shop-orderform--validation-error",
       "width": 375,
       "height": 1341,
-      "path": "review-canvas-shots/shop-orderform--validation-error-375-4797391ad48d0def.png",
+      "path": "review-canvas-shots/shop-orderform--validation-error-375-39366daa650052cb.png",
       "contentHeight": 1341,
       "elements": [
         {
@@ -1343,7 +1343,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1410,13 +1410,13 @@
           "heading": "お届け先の入力"
         }
       ],
-      "thumb": "review-canvas-shots/shop-orderform--validation-error-375-4797391ad48d0def-thumb.png"
+      "thumb": "review-canvas-shots/shop-orderform--validation-error-375-39366daa650052cb-thumb.png"
     },
     {
       "storyId": "shop-product-detail--in-stock",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-product-detail--in-stock-375-9e88a93feb08e86d.png",
+      "path": "review-canvas-shots/shop-product-detail--in-stock-375-bbf9ec9560da619d.png",
       "contentHeight": 625,
       "elements": [
         {
@@ -1434,7 +1434,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1474,7 +1474,7 @@
           "heading": "木のマグカップ"
         }
       ],
-      "thumb": "review-canvas-shots/shop-product-detail--in-stock-375-9e88a93feb08e86d-thumb.png",
+      "thumb": "review-canvas-shots/shop-product-detail--in-stock-375-bbf9ec9560da619d-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -1496,7 +1496,7 @@
       "storyId": "shop-product-detail--sold-out",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-product-detail--sold-out-375-18cd0ed52757583e.png",
+      "path": "review-canvas-shots/shop-product-detail--sold-out-375-477ec91a7b50f408.png",
       "contentHeight": 627,
       "elements": [
         {
@@ -1514,7 +1514,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1554,13 +1554,13 @@
           "heading": "手ぬぐい"
         }
       ],
-      "thumb": "review-canvas-shots/shop-product-detail--sold-out-375-18cd0ed52757583e-thumb.png"
+      "thumb": "review-canvas-shots/shop-product-detail--sold-out-375-477ec91a7b50f408-thumb.png"
     },
     {
       "storyId": "shop-product-detail--loading",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-product-detail--loading-375-04f8b63fd3e1c545.png",
+      "path": "review-canvas-shots/shop-product-detail--loading-375-33b324c30cecc85a.png",
       "contentHeight": 154,
       "elements": [
         {
@@ -1578,7 +1578,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1591,13 +1591,13 @@
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/shop-product-detail--loading-375-04f8b63fd3e1c545-thumb.png"
+      "thumb": "review-canvas-shots/shop-product-detail--loading-375-33b324c30cecc85a-thumb.png"
     },
     {
       "storyId": "shop-productlist--default",
       "width": 375,
       "height": 963,
-      "path": "review-canvas-shots/shop-productlist--default-375-b732ccde7c3d2d6e.png",
+      "path": "review-canvas-shots/shop-productlist--default-375-5127a11cadac486f.png",
       "contentHeight": 964,
       "elements": [
         {
@@ -1615,7 +1615,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1799,7 +1799,7 @@
           "heading": "ガラスの一輪挿し"
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--default-375-b732ccde7c3d2d6e-thumb.png",
+      "thumb": "review-canvas-shots/shop-productlist--default-375-5127a11cadac486f-thumb.png",
       "transitions": [
         {
           "index": 0,
@@ -1828,7 +1828,7 @@
       "storyId": "shop-productlist--empty",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-productlist--empty-375-9050867373ae4343.png",
+      "path": "review-canvas-shots/shop-productlist--empty-375-625bff431e768d6c.png",
       "contentHeight": 186,
       "elements": [
         {
@@ -1846,7 +1846,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1868,13 +1868,13 @@
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--empty-375-9050867373ae4343-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--empty-375-625bff431e768d6c-thumb.png"
     },
     {
       "storyId": "shop-productlist--failed",
       "width": 375,
       "height": 812,
-      "path": "review-canvas-shots/shop-productlist--failed-375-721a9f709eb7cd1d.png",
+      "path": "review-canvas-shots/shop-productlist--failed-375-3541fcae2fbbc458.png",
       "contentHeight": 194,
       "elements": [
         {
@@ -1892,7 +1892,7 @@
           "y": 12,
           "width": 62,
           "height": 28,
-          "text": "カート3",
+          "text": "カート（3点）",
           "heading": ""
         },
         {
@@ -1914,21 +1914,21 @@
           "heading": ""
         }
       ],
-      "thumb": "review-canvas-shots/shop-productlist--failed-375-721a9f709eb7cd1d-thumb.png"
+      "thumb": "review-canvas-shots/shop-productlist--failed-375-3541fcae2fbbc458-thumb.png"
     }
   ],
   "playFunctions": {
-    "shop-checkout-cart--with-items": false,
     "components-button--default": false,
     "components-button--disabled": false,
     "shop-adminorders--default": false,
+    "shop-checkout-cart--with-items": false,
     "shop-checkout-cart--empty": false,
     "shop-checkout-complete--default": false,
     "shop-checkout-confirm--default": false,
     "shop-checkout-cart--quantity-limit": true,
     "account-login--default": false,
-    "account-mypage--no-orders": false,
     "account-mypage--with-orders": false,
+    "account-mypage--no-orders": false,
     "account-login--failed": true,
     "shop-orderform--default": false,
     "shop-orderform--validation-error": true,

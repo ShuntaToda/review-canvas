@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { parseShotsManifest } from "../model/story-shots";
+import shopIndex from "./fixtures/shop-index.json";
 import featureShots from "./fixtures/shots-feature-new-cart.json";
 import mainShots from "./fixtures/shots-main.json";
 
@@ -45,5 +46,43 @@ describe("固定データの目録の遷移", () => {
     expect(
       manifest?.shots.filter((shot) => shot.transitions !== undefined),
     ).toStrictEqual([]);
+  });
+});
+
+/**
+ * 両ブランチの固定データの形（docs/development.md「review-canvas 自身の Storybook」）。見比べのストーリーは、
+ * feature/new-cart で変わった画面が Shop/ProductList／Default（画像が違う）と Shop/ProductList／Loading（feature/new-cart にだけある）だけであることに頼る
+ */
+describe("両ブランチの固定データの形", () => {
+  const imagesOf = (manifest: typeof mainShots | typeof featureShots) =>
+    new Map(
+      manifest.shots.map((shot) => [shot.storyId, [shot.path, shot.thumb]]),
+    );
+  const mainImages = imagesOf(mainShots);
+  const featureImages = imagesOf(featureShots);
+
+  test("[正常系]feature/new-cart だけにある画面は Shop/ProductList／Loading で、main には無い", () => {
+    expect(
+      [...featureImages.keys()].filter((id) => !mainImages.has(id)),
+    ).toStrictEqual(["shop-productlist--loading"]);
+    expect(mainImages.has("shop-productlist--loading")).toBe(false);
+    expect(
+      [...mainImages.keys()].filter((id) => !featureImages.has(id)),
+    ).toStrictEqual([]);
+  });
+
+  test("[正常系]feature/new-cart は Shop/ProductList／Default を除いて、main と同じ画像（path・thumb）を指す", () => {
+    const differs = [...mainImages].filter(
+      ([id, images]) =>
+        JSON.stringify(featureImages.get(id)) !== JSON.stringify(images),
+    );
+    expect(differs.map(([id]) => id)).toStrictEqual([
+      "shop-productlist--default",
+    ]);
+  });
+
+  test("[正常系]ストーリーの一覧（shop-index.json）は、両ブランチの画面をすべて持ち、ほかの画面を持たない", () => {
+    const all = new Set([...mainImages.keys(), ...featureImages.keys()]);
+    expect(new Set(Object.keys(shopIndex.entries))).toStrictEqual(all);
   });
 });
