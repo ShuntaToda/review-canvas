@@ -78,13 +78,11 @@ const shapes: Record<ProductArt, (color: string) => ReactNode> = {
 export const ProductImage = ({
   art,
   color,
-  className = "product-image",
 }: {
   art: ProductArt;
   color: string;
-  className?: string;
 }) => (
-  <svg className={className} viewBox="0 0 160 110" aria-hidden="true">
+  <svg className="product-image" viewBox="0 0 160 110" aria-hidden="true">
     <rect width="160" height="110" fill={color} opacity="0.2" />
     <ellipse cx="80" cy="90" rx="40" ry="6" fill={color} opacity="0.35" />
     {shapes[art](color)}

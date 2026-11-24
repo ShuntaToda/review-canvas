@@ -75,12 +75,15 @@ export const Cart = ({ items: initialItems }: { items: CartItem[] }) => {
               ))}
             </ul>
           </div>
-          {atLimit && (
-            <p className="notice" role="status">
-              一度に買えるのは 5 個までです
-            </p>
-          )}
           <div className="panel">
+            {/* 知らせの入れ物は常に置き、中身だけを出し入れする（読み上げが変わったことを伝えられるように） */}
+            <div role="status">
+              {atLimit && (
+                <p className="notice">
+                  一度に買えるのは {QUANTITY_LIMIT} 個までです
+                </p>
+              )}
+            </div>
             <dl className="summary summary-large">
               <dt>小計</dt>
               <dd>{yen(subtotalOf(items))}</dd>

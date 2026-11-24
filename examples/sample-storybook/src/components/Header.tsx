@@ -4,6 +4,7 @@
  */
 export const Header = ({ cartCount }: { cartCount: number }) => (
   <header className="site-header">
+    {/* たたんだメニューを開く画面はストーリーに無いので、押しても開かない（見た目の幅ごとの違いを見せるためのボタン） */}
     <button type="button" className="site-menu-button" aria-label="メニュー">
       ≡
     </button>
@@ -16,7 +17,15 @@ export const Header = ({ cartCount }: { cartCount: number }) => (
     <div className="site-header-actions">
       <button type="button" className="header-button">
         カート
-        {cartCount > 0 && <span className="badge">{cartCount}</span>}
+        {cartCount > 0 && (
+          <>
+            <span className="badge" aria-hidden="true">
+              {cartCount}
+            </span>
+            {/* 印の数字が何かを、読み上げで分かるようにする（ボタンの名前は「カート（3 点）」） */}
+            <span className="visually-hidden">（{cartCount} 点）</span>
+          </>
+        )}
       </button>
       <button type="button" className="header-button">
         ログイン

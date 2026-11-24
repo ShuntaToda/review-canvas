@@ -1,5 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { latestOrder, productOf } from "../data/shop";
+import {
+  type CartItem,
+  latestOrder,
+  productOf,
+  SHIPPING_FEE,
+  subtotalOf,
+} from "../data/shop";
 import { MyPage } from "./MyPage";
 
 const meta = {
@@ -11,6 +17,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const previousItems: CartItem[] = [{ product: productOf("p3"), quantity: 1 }];
+
 /** いま確定した注文（カート・注文の確認・完了と同じ品目・金額）と、前の注文 */
 export const WithOrders: Story = {
   args: {
@@ -19,8 +27,8 @@ export const WithOrders: Story = {
       {
         number: "SS-20261002-0017",
         orderedOn: "2026 年 10 月 2 日",
-        items: [{ product: productOf("p3"), quantity: 1 }],
-        total: 2400,
+        items: previousItems,
+        total: subtotalOf(previousItems) + SHIPPING_FEE,
       },
     ],
   },
