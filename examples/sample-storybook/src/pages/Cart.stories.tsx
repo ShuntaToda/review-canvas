@@ -20,6 +20,10 @@ export const WithItems: Story = {
           from: { role: "button", name: "レジに進む" },
           to: "shop-orderform--default",
         },
+        {
+          from: { role: "button", name: "クーポンを使う" },
+          to: "shop-checkout-coupon--default",
+        },
       ],
     },
   },

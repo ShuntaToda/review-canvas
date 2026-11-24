@@ -460,3 +460,36 @@ a {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* カートの品目（画像を大きく。幅 600 未満は数量を名前の下に置く） */
+.cart-line {
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-areas:
+    "image info"
+    "image quantity";
+  row-gap: var(--space-2);
+}
+.cart-line-image {
+  grid-area: image;
+}
+.cart-line-info {
+  grid-area: info;
+}
+.cart-line-quantity {
+  grid-area: quantity;
+}
+@media (min-width: 600px) {
+  .cart-line {
+    grid-template-columns: 160px minmax(0, 1fr) auto;
+    grid-template-areas: "image info quantity";
+  }
+}
+
+/* 空のカート（知らせとボタンを真ん中に寄せ、上下を広く） */
+.cart-empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+.cart-empty p {
+  margin: 0 0 var(--space-4);
+}

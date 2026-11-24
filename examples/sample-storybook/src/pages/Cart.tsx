@@ -30,31 +30,55 @@ export const Cart = ({ items: initialItems }: { items: CartItem[] }) => {
     <ShopLayout cartCount={countOf(items)}>
       <h1>カート</h1>
       {items.length === 0 ? (
-        <div className="panel">
+        <div className="panel cart-empty">
           <p>カートに商品がありません</p>
           <Button>商品を探す</Button>
         </div>
       ) : (
         <div className="stack">
+          {/* 合計の欄を品目より上に置く（長いカートでも、合計とレジに進むがすぐ見える） */}
+          <div className="panel">
+            {/* 知らせの入れ物は常に置き、中身だけを出し入れする（読み上げが変わったことを伝えられるように） */}
+            <div role="status">
+              {atLimit && (
+                <p className="notice">
+                  一度に買えるのは {QUANTITY_LIMIT} 個までです
+                </p>
+              )}
+            </div>
+            <dl className="summary summary-large">
+              <dt>小計</dt>
+              <dd>{yen(subtotalOf(items))}</dd>
+            </dl>
+            <div className="actions">
+              <Button>レジに進む</Button>
+              <Button className="button button-secondary">
+                クーポンを使う
+              </Button>
+              <Button className="button button-secondary">
+                買い物を続ける
+              </Button>
+            </div>
+          </div>
           <div className="panel">
             <ul className="lines">
               {items.map((item) => (
                 <li
                   key={item.product.id}
-                  className="line"
+                  className="line cart-line"
                   data-testid="cart-line"
                 >
-                  <div className="line-image">
+                  <div className="line-image cart-line-image">
                     <ProductImage
                       art={item.product.art}
                       color={item.product.color}
                     />
                   </div>
-                  <div>
+                  <div className="cart-line-info">
                     <h2>{item.product.name}</h2>
                     <p className="muted">{yen(item.product.price)}</p>
                   </div>
-                  <div className="quantity">
+                  <div className="quantity cart-line-quantity">
                     <button
                       type="button"
                       disabled={item.quantity <= 1}
@@ -74,26 +98,6 @@ export const Cart = ({ items: initialItems }: { items: CartItem[] }) => {
                 </li>
               ))}
             </ul>
-          </div>
-          <div className="panel">
-            {/* 知らせの入れ物は常に置き、中身だけを出し入れする（読み上げが変わったことを伝えられるように） */}
-            <div role="status">
-              {atLimit && (
-                <p className="notice">
-                  一度に買えるのは {QUANTITY_LIMIT} 個までです
-                </p>
-              )}
-            </div>
-            <dl className="summary summary-large">
-              <dt>小計</dt>
-              <dd>{yen(subtotalOf(items))}</dd>
-            </dl>
-            <div className="actions">
-              <Button>レジに進む</Button>
-              <Button className="button button-secondary">
-                買い物を続ける
-              </Button>
-            </div>
           </div>
         </div>
       )}
