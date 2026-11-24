@@ -54,7 +54,7 @@ flowchart LR
 
 Storybook は画面と別のオリジンで配るので、画面は iframe の中の DOM を直に読みません。配るとき（置くスクリプト・手元のサーバー）に、各 Storybook の `iframe.html` へ橋渡しの `<script>` を 1 つだけ差し込み（`inject.ts`。印のコメントで囲み、何度差し込んでも 1 つ）、画面とは `postMessage` だけでやり取りします（`protocol.ts`）。
 
-- 画面 → 橋渡し: `hello`（つなぐ）・`mode`（操作モードか）・`blur`（中のフォーカスを外す）・`capture`（押した位置の要素の手がかりを集める）・`locate`（ピンの要素を探す）・`transitions`（ストーリーに書いた遷移のボタンを探す）
+- 画面 → 橋渡し: `hello`（つなぐ）・`mode`（操作モードか）・`blur`（中のフォーカスを外す）・`capture`（押した位置の要素の手がかりを集める）・`locate`（ピンの要素を探す）・`transitions`（ストーリーに書いた遷移のボタンのうち、目録にある行を探す。答えが遅れても、届けば使う）
 - 橋渡し → 画面: `ready`・`render`（描画の段階・play 関数の有無）・`size`（高さ）・`focusin`・`blur`・`keydown`/`keyup`（利用者のキーだけ。play 関数の打つキーは伝えない）・`captured`・`located`・`transitions`（遷移のボタンの位置）・`interacted`（操作のモードで利用者が中を押した）
 - 知らせの種類を足すだけでは、やり取りの版（`BRIDGE_PROTOCOL_VERSION`）を上げません（知らない種類はどちらの側も捨てる。上げると、前に置いた Storybook の橋渡しとつなげなくなる）。新しい知らせに答えるかで、橋渡しの版を見分けます（遷移のボタンを探す頼みに答えない橋渡しは、探す前の版）
 - どちらも、相手のオリジン（画面は `app-config.json` の `storybookOrigin`、橋渡しは差し込むときに `data-canvas-origin` で渡した画面のオリジン）と相手の window（iframe の window・親の window）を確かめ、知らない形の知らせは捨てます。橋渡しは、最初に `hello` をくれた画面のオリジンとだけやり取りします

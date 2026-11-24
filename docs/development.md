@@ -252,6 +252,7 @@ npm には出しません。使う側は、このリポジトリのコミット�
 - 置き場の目録（`meta.json`）は `version: 1` です。形を変えるときは version を上げ、古い目録も読めるようにします
 - Storybook ごとの画像の目録（`review-canvas-shots.json`）も `version: 1` です。目録の無い置き場（撮る前の版で置いたブランチ）は、キャンバスが iframe で出します（置き直すと画像になる）
 - 目録に、無くてもよい項目を足すだけ（遷移の `transitions` など）なら、版は 1 のままにします（古いキャンバスは知らない項目を無視し、新しいキャンバスは無ければ無いものとして読む。版を上げると、古いキャンバスで全ブランチの画像が消える）
+- 橋渡しとのやり取りの版（`BRIDGE_PROTOCOL_VERSION`）は、知らせの種類を足すだけなら上げません（上げると、前に置いた Storybook の橋渡しとつなげなくなる）。新しい頼みに答えるかで、橋渡しの版を見分けます（[security.md](security.md#storybook-との橋渡しsrcfeaturesreviewbridge)）
 - 依存は `pnpm-workspace.yaml` の `minimumReleaseAge`（出てから 3 週間）を待ってから上げ、`save-exact` で固定します
 
 ### IP 制限・ログイン連動を足した版で変わること
