@@ -1,6 +1,7 @@
 /*!
  * @license
- * Copyright (c) Microsoft Corporation.
+ * Playwright
+ * Copyright (c) Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Modifications: このファイルは playwright-core 1.63.0 の packages/injected/src/roleUtils.ts（getAriaRole・isElementHiddenForAria・
+ * Modifications: このファイルは microsoft/playwright のタグ v1.63.0（playwright-core 1.63.0）の packages/injected/src/roleUtils.ts（getAriaRole・isElementHiddenForAria・
  * getTextAlternativeInternal・innerAccumulatedElementText ほか）と domUtils.ts（isElementVisible ほか）を元に、review-canvas が書き換えたもの。
  * TypeScript の形（型・名前・このリポジトリの lint の決まり）を直し、覚えておく先を 1 度の探し方ごとの読み手に移し（label の引き方も）、
- * Shadow DOM（影の木・スロット）と、名前の手がかりになった要素の記録を省いた。くわしくは THIRD_PARTY_NOTICES.md
+ * Shadow DOM（影の木・スロット）と、名前の手がかりになった要素の記録を省いた。
+ * CSS の content は、字句解析器を写さず、文字列・attr(…)・/ だけを読む簡単な読み方にした。
+ * くわしくは review-canvas のリポジトリの THIRD_PARTY_NOTICES.md
  */
 
 import { tagOf } from "./anchor-dom";
@@ -509,8 +512,9 @@ export const createAriaReader = (): AriaReader => {
   >();
 
   /**
-   * 要素に付いた label（文書の順。ラベルを付けられない要素は空）。element.labels と同じ結果になるが、Chrome は読むたびに文書全体を
-   * たどるので、1 度の探し方の中で文書の label を 1 度だけたどり、label.control（for= の先か、中の最初のラベルを付けられる要素）から引く
+   * 要素に付いた label（文書の順。ラベルを付けられない要素は空）。HTML の要素では element.labels と同じ結果になる
+   * （form-associated のカスタム要素は label.control が指さないので空になるが、ロールに名前を付ける決め方には響かない）。
+   * element.labels は、Chrome では読むたびに文書全体をたどるので、1 度の探し方の中で文書の label を 1 度だけたどり、label.control（for= の先か、中の最初のラベルを付けられる要素）から引く
    */
   const labelsOf = (element: Element): HTMLLabelElement[] => {
     const doc = element.ownerDocument;
@@ -691,7 +695,14 @@ export const createAriaReader = (): AriaReader => {
         let index = 0;
         for (; index < rest.length; index += 1) {
           const char = rest[index] ?? "";
-          if (char === "(") depth += 1;
+          if (char === '"' || char === "'") {
+            // 引用符の中（url("…/…") など）の ( ) / は数えない
+            for (index += 1; index < rest.length; index += 1) {
+              const inner = rest[index];
+              if (inner === "\\") index += 1;
+              else if (inner === char) break;
+            }
+          } else if (char === "(") depth += 1;
           else if (char === ")") depth -= 1;
           else if (depth <= 0 && (char === "/" || /\s/.test(char))) break;
         }

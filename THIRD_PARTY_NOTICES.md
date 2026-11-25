@@ -4,9 +4,9 @@ review-canvas の中に、ほかのソフトウェアから写して書き換え
 
 ## Playwright（playwright-core 1.63.0）
 
-- 元: [microsoft/playwright](https://github.com/microsoft/playwright) の `packages/injected/src/roleUtils.ts`・`packages/injected/src/domUtils.ts`（npm の playwright-core 1.63.0 に入っているもの）
+- 元: [microsoft/playwright](https://github.com/microsoft/playwright) のタグ v1.63.0（playwright-core 1.63.0）の `packages/injected/src/roleUtils.ts`・`packages/injected/src/domUtils.ts`（npm の playwright-core には、組み立てた `lib/coreBundle.js` の中にだけ入っている）
 - 写した先: `src/features/review/model/playwright-aria.ts`（要素のロール・アクセシブルな名前・隠れているか・見えているかの決め方）
-- 変えたこと: TypeScript の形（型・名前・このリポジトリの lint の決まり）を直し、覚えておく先を 1 度の探し方ごとの読み手に移し（label の引き方も）、Shadow DOM（影の木・スロット）と、名前の手がかりになった要素の記録を省いた
+- 変えたこと: TypeScript の形（型・名前・このリポジトリの lint の決まり）を直し、覚えておく先を 1 度の探し方ごとの読み手に移し（label の引き方も）、Shadow DOM（影の木・スロット）と、名前の手がかりになった要素の記録を省いた。CSS の content は、字句解析器を写さず、文字列・attr(…)・/ だけを読む簡単な読み方にした
 - ライセンス: Apache License 2.0（下に全文）
 
 ### NOTICE

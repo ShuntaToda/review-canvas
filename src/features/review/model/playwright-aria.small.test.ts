@@ -312,6 +312,11 @@ describe("createAriaReader().nameOf（Playwright の getByRole の name と比�
       "代わり",
     ],
     [
+      "content の url(…) の引用符の中の ) と / は区切りにしない",
+      `<button data-target style='content: url("http://example.com/a)/b.png") / "代わり"'>保存</button>`,
+      "代わり",
+    ],
+    [
       "content の / の後ろに文字列でないものがあれば読まない",
       `<button data-target style='content: "x" / counter(n)'>保存</button>`,
       "保存",
