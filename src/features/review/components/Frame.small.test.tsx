@@ -176,6 +176,9 @@ describe("Frame の高さの知らせ", () => {
         onOpenThread={() => undefined}
         onCopyStoryLink={() => undefined}
         linkHighlight={null}
+        selected={false}
+        pinned={false}
+        onTogglePin={() => undefined}
         onActivate={() => undefined}
         pendingPlace={null}
         onPendingPlace={() => undefined}
@@ -435,9 +438,17 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
   const renderHeader = ({
     linkHighlight = null,
     onCopyStoryLink = () => undefined,
+    selected = false,
+    pinned = false,
+    onTogglePin = () => undefined,
+    zoom = 0.5,
   }: {
     linkHighlight?: LinkHighlight | null;
     onCopyStoryLink?: (storyId: string) => void;
+    selected?: boolean;
+    pinned?: boolean;
+    onTogglePin?: (storyId: string) => void;
+    zoom?: number;
   }) =>
     render(
       <SourcesContext.Provider value={sources}>
@@ -456,7 +467,7 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
             w: 375,
             h: 812,
           }}
-          zoom={0.5}
+          zoom={zoom}
           tool="move"
           shouldLoad={false}
           keepLoaded={false}
@@ -472,6 +483,9 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
           onOpenThread={() => undefined}
           onCopyStoryLink={onCopyStoryLink}
           linkHighlight={linkHighlight}
+          selected={selected}
+          pinned={pinned}
+          onTogglePin={onTogglePin}
           onActivate={() => undefined}
           pendingPlace={null}
           onPendingPlace={() => undefined}
@@ -526,6 +540,54 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
     const { container } = renderHeader({});
 
     expect(container.querySelector("[data-link-highlight]")).toBeNull();
+    expect(container.querySelector("[data-selected-frame]")).toBeNull();
+  });
+
+  test("[正常系]選んだ画面には、ふちの外側にすき間なく、表示の上で 2px のアクセントの色の枠を出す（固定中も同じ）", () => {
+    for (const pinned of [false, true]) {
+      const { container, unmount } = renderHeader({
+        selected: true,
+        pinned,
+        zoom: 0.25,
+      });
+
+      const frame = container.querySelector<HTMLElement>(
+        "[data-selected-frame]",
+      );
+      expect(frame?.className).toContain("pointer-events-none");
+      expect(frame?.className).toContain("inset-0");
+      expect(frame?.style.outline).toBe("8px solid var(--color-accent)");
+      expect(frame?.style.outlineOffset).toBe("");
+      unmount();
+    }
+  });
+
+  test("[正常系]「固定」は状態の名前のすぐ後ろにあり、Tab で止まらず、押すとその画面を渡す。固定中は「固定中」・押した状態になり、読み上げの名前は変わらない", () => {
+    const onTogglePin = vi.fn<(storyId: string) => void>();
+    const { unmount } = renderHeader({ onTogglePin });
+
+    const button = screen.getByRole("button", {
+      name: "Pages/Cart / Empty を固定",
+    });
+    expect(button.textContent).toBe("固定");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.getAttribute("title")).toBe(
+      "選んだ画面をこの画面に固定します。キャンバスを動かしても、ほかの画面をクリックしても変わりません",
+    );
+    expect(button.tabIndex).toBe(-1);
+    expect(button.querySelector("svg")).toBeNull();
+    expect(button.previousElementSibling?.textContent).toBe("Empty");
+    fireEvent.click(button);
+    expect(onTogglePin).toHaveBeenCalledExactlyOnceWith("pages-cart--empty");
+    unmount();
+
+    renderHeader({ pinned: true });
+    const pinned = screen.getByRole("button", {
+      name: "Pages/Cart / Empty を固定",
+      pressed: true,
+    });
+    expect(pinned.textContent).toBe("固定中");
+    expect(pinned.getAttribute("title")).toBe("固定を外します");
   });
 });
 
@@ -574,6 +636,9 @@ describe("Frame の見出しの「ほかのブランチと比べる」", () => {
         onScreenChanged={() => undefined}
         onCopyStoryLink={() => undefined}
         linkHighlight={null}
+        selected={false}
+        pinned={false}
+        onTogglePin={() => undefined}
         onCompare={onCompare}
       />
     </SourcesContext.Provider>
@@ -689,6 +754,9 @@ describe("Frame の遷移のボタンの枠", () => {
           onOpenThread={() => undefined}
           onCopyStoryLink={() => undefined}
           linkHighlight={null}
+          selected={false}
+          pinned={false}
+          onTogglePin={() => undefined}
           onActivate={() => undefined}
           pendingPlace={null}
           onPendingPlace={onPendingPlace}

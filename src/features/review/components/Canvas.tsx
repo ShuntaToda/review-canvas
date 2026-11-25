@@ -103,8 +103,17 @@ type CanvasProps = {
   linkHighlight: LinkHighlight | null;
   /** 何も無いところをクリックした（開いているスレッドを閉じる） */
   onBackgroundClick: () => void;
-  /** 移動の道具のまま、画面を（動かさずに）クリックした（コメントの置き方を知らせる） */
-  onFrameClick: () => void;
+  /** 「画面のつながり」の選んだ画面（ふちに枠を出す。無ければ undefined） */
+  selectedStoryId: string | undefined;
+  /** 選んだ画面を固定している画面（固定していなければ undefined） */
+  pinnedStoryId: string | undefined;
+  /**
+   * 画面をクリックして選んだ（左ボタンで押して動かさずに離したとき。移動の道具で画面を押した・どの道具でも状態の名前の行を押した。
+   * Space を押しながら・中ボタン・行の中のボタンでは選ばない）
+   */
+  onSelectStory: (storyId: string) => void;
+  /** 見出しの「固定」「固定中」を押した */
+  onTogglePin: (storyId: string) => void;
   /** 画像の画面に置こうとしたコメントを、動く画面と中身がずれていたので置かなかった（クリックし直してもらう） */
   onScreenChanged: () => void;
   /**
@@ -123,6 +132,20 @@ type CanvasProps = {
 };
 
 type Point = { x: number; y: number };
+
+/** 押してから動いたとみなす量(px)。これより小さい揺れは、クリックとして扱う */
+const movedFar = (from: Point, to: Point): boolean =>
+  Math.abs(to.x - from.x) + Math.abs(to.y - from.y) > 2;
+
+/** 押した所が状態の名前の行（中のボタン・リンクを除く）なら、その画面の ID */
+const frameLabelOf = (target: EventTarget): string | null => {
+  if (!(target instanceof Element)) return null;
+  if (target.closest("a, button") !== null) return null;
+  return (
+    target.closest<HTMLElement>("[data-frame-label]")?.dataset["frameLabel"] ??
+    null
+  );
+};
 
 /**
  * Figma のような大きなキャンバス。ドラッグ・ホイール・ピンチで動かし、Ctrl/⌘+ホイールで拡大縮小する
@@ -150,7 +173,10 @@ export const Canvas = ({
   onCopyStoryLink,
   linkHighlight,
   onBackgroundClick,
-  onFrameClick,
+  selectedStoryId,
+  pinnedStoryId,
+  onSelectStory,
+  onTogglePin,
   onScreenChanged,
   focusStoryId = null,
   onCompare,
@@ -165,6 +191,13 @@ export const Canvas = ({
     onBackground: boolean;
   } | null>(null);
   const pinchRef = useRef<{ distance: number; center: Point } | null>(null);
+  // 状態の名前の行を押している（動かさずに離したら、その画面を選ぶ。移動の道具では、ドラッグはいままでどおり動かす）
+  const labelPressRef = useRef<{
+    pointerId: number;
+    storyId: string;
+    last: Point;
+    moved: boolean;
+  } | null>(null);
 
   // 指している画面（コメント・操作の道具で上に乗った・クリックした）。ページを切り替えたら持ち越さない
   const [pointed, setPointed] = useState<{
@@ -266,8 +299,20 @@ export const Canvas = ({
     if (pointersRef.current.size === 2) {
       pinchRef.current = pinchOf();
       panRef.current = null;
+      labelPressRef.current = null;
       return;
     }
+    const labelStoryId =
+      event.button === 0 && !spaceHeld ? frameLabelOf(event.target) : null;
+    labelPressRef.current =
+      labelStoryId === null
+        ? null
+        : {
+            pointerId: event.pointerId,
+            storyId: labelStoryId,
+            last: point,
+            moved: false,
+          };
     const onBackground =
       event.target instanceof HTMLElement &&
       event.target.dataset["canvasBackground"] !== undefined;
@@ -306,6 +351,15 @@ export const Canvas = ({
       return;
     }
 
+    const press = labelPressRef.current;
+    if (press !== null && press.pointerId === event.pointerId) {
+      labelPressRef.current = {
+        ...press,
+        last: point,
+        moved: press.moved || movedFar(press.last, point),
+      };
+    }
+
     const pan = panRef.current;
     if (pan === null) return;
     const dx = point.x - pan.last.x;
@@ -313,7 +367,7 @@ export const Canvas = ({
     panRef.current = {
       ...pan,
       last: point,
-      moved: pan.moved || Math.abs(dx) + Math.abs(dy) > 2,
+      moved: pan.moved || movedFar(pan.last, point),
     };
     onCameraChange((current) => ({
       ...current,
@@ -329,6 +383,18 @@ export const Canvas = ({
     }
     const pan = panRef.current;
     panRef.current = null;
+    const press = labelPressRef.current;
+    labelPressRef.current = null;
+    if (
+      press !== null &&
+      press.pointerId === event.pointerId &&
+      !press.moved &&
+      (pan === null || !pan.moved) &&
+      event.type === "pointerup"
+    ) {
+      onSelectStory(press.storyId);
+      return;
+    }
     if (pan === null || pan.moved) return;
     // 動かさずに何も無いところを押した → 開いているスレッドを閉じ、指していた画面を外す
     if (pan.onBackground) {
@@ -344,7 +410,9 @@ export const Canvas = ({
     if (hit !== undefined && intersects(hit, { ...world, w: 0, h: 0 })) {
       setPointed({ source, storyId: hit.story.id });
       // ドラッグ（左ボタン・移動の道具）ではなくクリックしたとき。Space・中ボタンで動かす途中は数えない
-      if (tool === "move" && !spaceHeld && event.button === 0) onFrameClick();
+      if (tool === "move" && !spaceHeld && event.button === 0) {
+        onSelectStory(hit.story.id);
+      }
     }
   };
 
@@ -543,6 +611,9 @@ export const Canvas = ({
                       ? linkHighlight
                       : null
                   }
+                  selected={placement.story.id === selectedStoryId}
+                  pinned={placement.story.id === pinnedStoryId}
+                  onTogglePin={onTogglePin}
                   transitionBoxes={
                     transitionBoxesOf?.(placement.story.id) ?? []
                   }

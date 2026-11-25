@@ -32,7 +32,7 @@ export const StorySidebar = ({
 }: {
   /** キャンバスに並べている行（絞り込んだあと。並びもキャンバスと同じ） */
   rows: ReadonlyArray<RowPlacement>;
-  /** いま真ん中に見えている状態 */
+  /** 印を付ける状態（「画面のつながり」の選んだ画面。無ければ undefined で、どれにも付けない） */
   currentStoryId: string | undefined;
   query: string;
   onQueryChange: (query: string) => void;

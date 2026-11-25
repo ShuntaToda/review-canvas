@@ -135,7 +135,7 @@ describe("StorySidebar", () => {
     expect(onSelectStory).toHaveBeenCalledExactlyOnceWith(filled);
   });
 
-  test("[正常系]真ん中に見えている状態に印を付ける", () => {
+  test("[正常系]選んだ画面の状態に印を付ける", () => {
     renderSidebar(rows, filled.id);
 
     expect(

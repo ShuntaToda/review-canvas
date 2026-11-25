@@ -57,6 +57,8 @@ export const ReviewPage = ({
   );
   // ブランチを切り替えて作り直したか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ）
   const [switchedBranch, setSwitchedBranch] = useState(false);
+  // ブランチを切り替える前に固定していた画面（切り替えた先でも固定する。URL には載せない）
+  const [carriedPin, setCarriedPin] = useState<string | undefined>();
   const meta = useReviewMeta();
   // はじめに決まった既定のブランチを覚える（あとで既定のブランチが変わっても、開いている作業の画面を作り直さない）
   if (urlState.branch === undefined && meta.data !== undefined) {
@@ -222,9 +224,10 @@ export const ReviewPage = ({
           defaultBranch={meta.data.defaultBranch}
           published={published}
           publishedBranches={meta.data.branches}
-          // 切り替える前に真ん中に見えていた画面・見せる範囲を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
-          onBranchChange={(next, page, story, storyScope) => {
+          // 切り替える前に真ん中に見えていた画面・見せる範囲・固定した画面を、切り替えた先でも開く（同じ画面をブランチで見比べられるように）
+          onBranchChange={(next, page, story, storyScope, pinnedStoryId) => {
             setSwitchedBranch(true);
+            setCarriedPin(pinnedStoryId);
             // 選んだ相手が新しいブランチでも選べれば保ち、選べなければ（同じブランチになった等）初めの状態に戻す
             setCompareChoice(
               keepCompareChoice(compareChoice, baseOptionsOf(next)),
@@ -269,6 +272,7 @@ export const ReviewPage = ({
                 )
           }
           initialUrl={urlState}
+          initialPinnedStoryId={carriedPin}
           openedBy={switchedBranch ? "branch-switch" : "url"}
           initialComments={comments.data?.comments ?? []}
           me={user}

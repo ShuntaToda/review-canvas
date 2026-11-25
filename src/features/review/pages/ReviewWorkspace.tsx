@@ -91,6 +91,12 @@ import { buildMarkdown } from "../model/markdown";
 import { framePointToWorld } from "../model/pin-point";
 import { popoverPosition } from "../model/popover";
 import {
+  clickStory,
+  type StoryOnPage,
+  storyOnCanvas,
+  togglePin,
+} from "../model/selected-story";
+import {
   isImeComposing,
   isTypingTarget,
   resolveShortcut,
@@ -162,12 +168,13 @@ type ReviewWorkspaceProps = {
   published: ReviewMetaBranch | null;
   /** Storybook を置いてあるブランチ（切り替える欄の行） */
   publishedBranches: ReadonlyArray<ReviewMetaBranch>;
-  /** ブランチを切り替える（いまのページと、真ん中に見えている画面・見せる範囲は保つ） */
+  /** ブランチを切り替える（いまのページと、真ん中に見えている画面・見せる範囲・固定した画面は保つ） */
   onBranchChange: (
     branch: string,
     page: StorySource,
     story: string | undefined,
     storyScope: string | undefined,
+    pinnedStoryId: string | undefined,
   ) => void;
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
@@ -185,6 +192,8 @@ type ReviewWorkspaceProps = {
   /** ページごとの、比べる相手の画像（見比べる。比べないとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
+  /** 開いたときに固定しておく画面（ブランチを替える前に固定していた画面。開いたページに並ばなければ外す） */
+  initialPinnedStoryId?: string | undefined;
   /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
   openedBy: WorkspaceOpening;
   initialComments: Comment[];
@@ -211,6 +220,7 @@ export const ReviewWorkspace = ({
   onCompareChoiceChange,
   baseShots,
   initialUrl,
+  initialPinnedStoryId,
   openedBy,
   initialComments,
   me,
@@ -336,11 +346,31 @@ export const ReviewWorkspace = ({
     setStoryListOpenState(open);
   };
 
-  const [cameraStates, setCameraStates] = useState(initial.cameras);
+  const [cameraStates, setCameraStatesState] = useState(initial.cameras);
+  // 選んだ画面を固定した画面・クリックで選んだ画面（model/selected-story.ts）
+  const [pinned, setPinned] = useState<StoryOnPage | null>(
+    initialPinnedStoryId === undefined
+      ? null
+      : { source: initial.page, storyId: initialPinnedStoryId },
+  );
+  const [clicked, setClicked] = useState<StoryOnPage | null>(null);
+  /**
+   * 見え方を決め直す。ここを通るのは人の操作で動かすときだけ（ドラッグ・ホイール・拡大縮小・一覧や札で移る・戻る・寄せ直しなど）なので、
+   * クリックで選んだ画面を外す。高さの測り直し・ピンを追って寄るときは、同じ見え方の決め方のまま描き直すので通らない
+   */
+  const setCameraStates: typeof setCameraStatesState = (update) => {
+    setClicked(null);
+    setCameraStatesState(update);
+  };
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
     initial.threadId,
   );
+  /** スレッドを開く。クリックで選んだ画面は外す（後にした方が勝つ。開いた後に画面をクリックすれば、その画面を選ぶ） */
+  const openThread = (threadId: string) => {
+    setActiveThreadId(threadId);
+    setClicked(null);
+  };
   const [draft, setDraft] = useState<Draft | null>(null);
   // 読み込んだ画面でピンの要素を探した結果（locatedKey ごと）。見つけたピンは要素に合わせて置く
   const [located, setLocated] = useState<Readonly<Record<string, LocatedPin>>>(
@@ -540,17 +570,37 @@ export const ReviewWorkspace = ({
       ? undefined
       : frameAt(rows, screenToWorld(camera, viewportCenter))?.story.id;
 
-  // 画面のつながりの選んだ画面（開いているスレッドの画面。無ければ真ん中に見えている画面で、すき間なら直前の画面のまま）
+  // 固定した画面・クリックで選んだ画面は、いまのページのキャンバスに並んでいるあいだだけ効き、並ばなくなったら外す（原因によらない）
+  const onCanvas = {
+    source: page,
+    shown: (storyId: string) => findFrame(rows, storyId) !== undefined,
+  };
+  const pinnedStoryId = storyOnCanvas(pinned, onCanvas);
+  if (pinned !== null && pinnedStoryId === undefined) setPinned(null);
+  const clickedStoryId = storyOnCanvas(clicked, onCanvas);
+  if (clicked !== null && clickedStoryId === undefined) setClicked(null);
+  // 画面のつながりの選んだ画面（固定 ＞ クリック ＞ 開いているスレッド ＞ 真ん中。model/selected-story.ts）
   const activeThreadOnPage = threads.find(
     (t) => t.root.id === activeThreadId && t.root.source === page,
   );
-  const selectedStoryId = useSelectedStory(
-    page,
-    activeThreadOnPage?.root.storyId ??
-      (viewport.width === 0
+  const selectedStoryId = useSelectedStory(page, {
+    pinned: pinnedStoryId,
+    clicked: clickedStoryId,
+    thread: activeThreadOnPage?.root.storyId,
+    center:
+      viewport.width === 0
         ? undefined
-        : storyAtPoint(rows, screenToWorld(camera, viewportCenter))),
-  );
+        : storyAtPoint(rows, screenToWorld(camera, viewportCenter)),
+  });
+  /** 画面をクリックして選ぶ（固定しているあいだは覚えない） */
+  const selectStory = (storyId: string) =>
+    setClicked((current) =>
+      clickStory(
+        current,
+        { source: page, storyId },
+        { pinned: pinnedStoryId !== undefined },
+      ),
+    );
   const transitionView = transitions.viewOf({
     rows,
     camera,
@@ -756,7 +806,7 @@ export const ReviewWorkspace = ({
       transitions.clearHistory();
     }
     setPage(root.source);
-    setActiveThreadId(root.id);
+    openThread(root.id);
     setDraft(null);
   };
 
@@ -782,7 +832,7 @@ export const ReviewWorkspace = ({
     await refresh();
     setDraft(null);
     setDraftBody(NEW_COMMENT_DRAFT, "");
-    setActiveThreadId(created.id);
+    openThread(created.id);
     showToast("コメントしました");
   };
 
@@ -1124,7 +1174,13 @@ export const ReviewWorkspace = ({
         onCompareChoiceChange={onCompareChoiceChange}
         onBranchChange={(next) => {
           if (next !== branch) {
-            onBranchChange(next, page, centerStoryId, storyScope);
+            onBranchChange(
+              next,
+              page,
+              centerStoryId,
+              storyScope,
+              pinnedStoryId,
+            );
           }
         }}
         userName={me.name}
@@ -1156,7 +1212,7 @@ export const ReviewWorkspace = ({
           >
             <StorySidebar
               rows={rows}
-              currentStoryId={centerStoryId}
+              currentStoryId={selectedStoryId}
               query={query}
               onQueryChange={setQuery}
               searchRef={searchRef}
@@ -1238,6 +1294,8 @@ export const ReviewWorkspace = ({
                   onPlace={(storyId, point, anchor) => {
                     setDraft({ source: page, storyId, ...point, anchor });
                     setActiveThreadId(null);
+                    // コメントを置いた画面を選ぶ
+                    selectStory(storyId);
                   }}
                   onLocate={(_storyId, results) =>
                     setLocated((previous) =>
@@ -1258,16 +1316,21 @@ export const ReviewWorkspace = ({
                     : { transitionRowIndexesOf: transitions.rowIndexesOf })}
                   onLiveTransitions={transitions.onLiveTransitions}
                   onOpenThread={(threadId) => {
-                    setActiveThreadId(threadId);
+                    openThread(threadId);
                     setDraft(null);
                   }}
                   onBackgroundClick={() => {
                     setActiveThreadId(null);
                     setDraft(null);
+                    // クリックで選んだ画面は外す（固定は外さない）
+                    setClicked(null);
                   }}
-                  onFrameClick={() =>
-                    showToast(
-                      "コメントするには上の「コメント」を選んで、画面をクリックします",
+                  selectedStoryId={selectedStoryId}
+                  pinnedStoryId={pinnedStoryId}
+                  onSelectStory={selectStory}
+                  onTogglePin={(storyId) =>
+                    setPinned((current) =>
+                      togglePin(current, { source: page, storyId }),
                     )
                   }
                   onScreenChanged={() =>

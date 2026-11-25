@@ -615,7 +615,7 @@ describe("ブランチの切り替え", () => {
       expect(
         await screen.findByRole("dialog", { name: compareButtonName }),
       ).toBeTruthy();
-      // 真ん中に見えている画面（一覧の aria-current）は、コメントの画面
+      // 選んだ画面（一覧の aria-current）は、開いたコメントの画面
       await waitFor(() =>
         expect(
           statusRow("Shop/Cart / Empty")?.getAttribute("aria-current"),
