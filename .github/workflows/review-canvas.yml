@@ -1,0 +1,46 @@
+name: review-canvas
+
+# このリポジトリ自身の Storybook（review-canvas.config.json のサンプルショップと review canvas）を、
+# 自分のスタック（ReviewCanvas）へ置く・消す。中身は publish.yml（呼び方は docs/host-setup.md「ワークフローから置く」）。
+# - push: そのブランチが置いてあり、watchPaths が変わったときだけ置き直す（置いていないブランチは置かない）
+# - ブランチを消した: 置いてあれば消す
+# - 手で動かす: branch のブランチを置く（空なら動かしたブランチ）。all で置いてあるブランチを全部置き直す
+# 置く手順は REVIEW_CANVAS_REF の review-canvas から取り出す（置くブランチのコードを、資格情報を持つジョブで動かさないため）。
+# uses の @ と review_canvas_ref は同じコミットの SHA にそろえる。置く手順を直したら、ここを main のコミットに上げる。
+# role_arn（変数 REVIEW_CANVAS_AWS_ROLE_ARN）が空なら、どのジョブも動かさずに終わる。
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 置くブランチ（空なら、このワークフローを動かしたブランチ）
+        required: false
+        type: string
+      all:
+        description: いま置いてあるブランチを全部置き直す
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: ["**"]
+  delete:
+
+permissions:
+  contents: read
+
+jobs:
+  review-canvas:
+    uses: ShuntaToda/review-canvas/.github/workflows/publish.yml@e4fcd923dae449dda4a0845ed0ee17a7f44cd8fe
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      review_canvas_ref: e4fcd923dae449dda4a0845ed0ee17a7f44cd8fe
+      config: review-canvas.config.json
+      role_arn: ${{ vars.REVIEW_CANVAS_AWS_ROLE_ARN }}
+      main_role_arn: ${{ vars.REVIEW_CANVAS_AWS_MAIN_ROLE_ARN }}
+      aws_region: ${{ vars.REVIEW_CANVAS_AWS_REGION || 'ap-northeast-1' }}
+      stack_name: ${{ vars.REVIEW_CANVAS_STACK_NAME || 'ReviewCanvas' }}
+      default_branch: ${{ vars.REVIEW_CANVAS_DEFAULT_BRANCH }}
+      branch: ${{ inputs.branch || '' }}
+      all: ${{ inputs.all || false }}
