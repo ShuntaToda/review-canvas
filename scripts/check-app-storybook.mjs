@@ -39,7 +39,7 @@ export const APP_STORY_IDS = [
   "review-transitions--jumped",
   "review-transitions--reachable-only",
   "review-transitions--unavailable",
-  "review-transitions--pinned",
+  "review-transitions--locked",
   "review-help--opened",
   "review-error--branch-missing",
   "review-error--not-allowed",

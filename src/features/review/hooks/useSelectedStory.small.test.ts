@@ -4,7 +4,7 @@ import { useSelectedStory } from "./useSelectedStory";
 
 type Props = {
   page: string;
-  pinned?: string;
+  locked?: string;
   clicked?: string;
   thread?: string;
   center?: string;
@@ -12,8 +12,8 @@ type Props = {
 
 const renderSelected = (initialProps: Props) =>
   renderHook<string | undefined, Props>(
-    ({ page, pinned, clicked, thread, center }: Props) =>
-      useSelectedStory(page, { pinned, clicked, thread, center }),
+    ({ page, locked, clicked, thread, center }: Props) =>
+      useSelectedStory(page, { locked, clicked, thread, center }),
     { initialProps },
   );
 
@@ -39,11 +39,11 @@ describe("useSelectedStory", () => {
     });
     rerender({
       page: "shop",
-      pinned: "shop-admin--default",
+      locked: "shop-admin--default",
       center: "shop-form--default",
     });
     expect(result.current).toBe("shop-admin--default");
-    rerender({ page: "shop", pinned: "shop-admin--default" });
+    rerender({ page: "shop", locked: "shop-admin--default" });
     expect(result.current).toBe("shop-admin--default");
 
     rerender({ page: "shop" });

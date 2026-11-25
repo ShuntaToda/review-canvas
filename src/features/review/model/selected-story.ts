@@ -9,14 +9,14 @@ import type { StorySource } from "./sources";
 export type StoryOnPage = { source: StorySource; storyId: string };
 
 export const resolveSelectedStory = ({
-  pinned,
+  locked,
   clicked,
   thread,
   center,
   lastCenter,
 }: {
   /** 固定した画面 */
-  pinned: string | undefined;
+  locked: string | undefined;
   /** クリックで選んだ画面 */
   clicked: string | undefined;
   /** 開いているスレッドの画面（いまのページのもの） */
@@ -27,7 +27,7 @@ export const resolveSelectedStory = ({
   lastCenter: string | undefined;
 }): string | undefined =>
   // 真ん中がすき間なら、直前に真ん中にあった画面のまま（矢印を出したまま画面のあいだを動かせるように）
-  pinned ?? clicked ?? thread ?? center ?? lastCenter;
+  locked ?? clicked ?? thread ?? center ?? lastCenter;
 
 /**
  * 固定・クリックで選んだ画面の ID。いまのページのもので、キャンバスに並んでいるときだけ返す
@@ -49,7 +49,7 @@ export const storyOnCanvas = (
     : undefined;
 
 /** 「固定」を押した。固定している画面なら外し、ほかの画面なら固定をその画面へ移す */
-export const togglePin = (
+export const toggleLock = (
   current: StoryOnPage | null,
   target: StoryOnPage,
 ): StoryOnPage | null =>
@@ -63,5 +63,5 @@ export const togglePin = (
 export const clickStory = (
   current: StoryOnPage | null,
   target: StoryOnPage,
-  { pinned }: { pinned: boolean },
-): StoryOnPage | null => (pinned ? current : target);
+  { locked }: { locked: boolean },
+): StoryOnPage | null => (locked ? current : target);

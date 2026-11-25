@@ -106,14 +106,14 @@ type CanvasProps = {
   /** 「画面のつながり」の選んだ画面（ふちに枠を出す。無ければ undefined） */
   selectedStoryId: string | undefined;
   /** 選んだ画面を固定している画面（固定していなければ undefined） */
-  pinnedStoryId: string | undefined;
+  lockedStoryId: string | undefined;
   /**
    * 画面をクリックして選んだ（左ボタンで押して動かさずに離したとき。移動の道具で画面を押した・どの道具でも状態の名前の行を押した。
    * Space を押しながら・中ボタン・行の中のボタンでは選ばない）
    */
   onSelectStory: (storyId: string) => void;
   /** 見出しの「固定」「固定中」を押した */
-  onTogglePin: (storyId: string) => void;
+  onToggleLock: (storyId: string) => void;
   /** 画像の画面に置こうとしたコメントを、動く画面と中身がずれていたので置かなかった（クリックし直してもらう） */
   onScreenChanged: () => void;
   /**
@@ -133,7 +133,7 @@ type CanvasProps = {
 
 type Point = { x: number; y: number };
 
-/** 押してから動いたとみなす量(px)。これより小さい揺れは、クリックとして扱う */
+/** 押し始めからこれより離れたら、動かしたとみなす(px)。これより小さい揺れは、クリックとして扱う（ゆっくり動かしても、押し始めから測る） */
 const movedFar = (from: Point, to: Point): boolean =>
   Math.abs(to.x - from.x) + Math.abs(to.y - from.y) > 2;
 
@@ -174,9 +174,9 @@ export const Canvas = ({
   linkHighlight,
   onBackgroundClick,
   selectedStoryId,
-  pinnedStoryId,
+  lockedStoryId,
   onSelectStory,
-  onTogglePin,
+  onToggleLock,
   onScreenChanged,
   focusStoryId = null,
   onCompare,
@@ -186,6 +186,7 @@ export const Canvas = ({
 }: CanvasProps) => {
   const pointersRef = useRef(new Map<number, Point>());
   const panRef = useRef<{
+    start: Point;
     last: Point;
     moved: boolean;
     onBackground: boolean;
@@ -195,7 +196,7 @@ export const Canvas = ({
   const labelPressRef = useRef<{
     pointerId: number;
     storyId: string;
-    last: Point;
+    start: Point;
     moved: boolean;
   } | null>(null);
 
@@ -310,7 +311,7 @@ export const Canvas = ({
         : {
             pointerId: event.pointerId,
             storyId: labelStoryId,
-            last: point,
+            start: point,
             moved: false,
           };
     const onBackground =
@@ -323,7 +324,12 @@ export const Canvas = ({
     // 中ボタンの自動スクロールを止める
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    panRef.current = { last: point, moved: false, onBackground };
+    panRef.current = {
+      start: point,
+      last: point,
+      moved: false,
+      onBackground,
+    };
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -355,8 +361,7 @@ export const Canvas = ({
     if (press !== null && press.pointerId === event.pointerId) {
       labelPressRef.current = {
         ...press,
-        last: point,
-        moved: press.moved || movedFar(press.last, point),
+        moved: press.moved || movedFar(press.start, point),
       };
     }
 
@@ -367,7 +372,7 @@ export const Canvas = ({
     panRef.current = {
       ...pan,
       last: point,
-      moved: pan.moved || movedFar(pan.last, point),
+      moved: pan.moved || movedFar(pan.start, point),
     };
     onCameraChange((current) => ({
       ...current,
@@ -612,8 +617,8 @@ export const Canvas = ({
                       : null
                   }
                   selected={placement.story.id === selectedStoryId}
-                  pinned={placement.story.id === pinnedStoryId}
-                  onTogglePin={onTogglePin}
+                  locked={placement.story.id === lockedStoryId}
+                  onToggleLock={onToggleLock}
                   transitionBoxes={
                     transitionBoxesOf?.(placement.story.id) ?? []
                   }

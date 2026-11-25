@@ -41,8 +41,8 @@ export type TransitionViewContext = {
   applyFilters: (filters: ViewFilters) => void;
   /** 「変わった画面だけ」で隠れていれば外す */
   revealChangedOnly: (storyId: string) => void;
-  /** いまのページの見え方を決める */
-  setCameraState: (state: CameraState) => void;
+  /** いまのページの見え方を、人の操作で動かしたものとして決める（クリックで選んだ画面を外す） */
+  moveCameraByUser: (state: CameraState) => void;
   /** 飛んだ（行き先に枠を出す・開いているスレッドを閉じる） */
   onJumped: (storyId: string) => void;
   /** 寄るときの倍率（いまの倍率から） */
@@ -174,7 +174,7 @@ export const useTransitions = ({
         excludeTitlePrefixes,
         applyFilters,
         revealChangedOnly,
-        setCameraState,
+        moveCameraByUser,
         onJumped,
         focusZoom,
         focusBack,
@@ -208,7 +208,7 @@ export const useTransitions = ({
           revealChangedOnly(target.id);
           // つながる画面だけを入にしていれば、飛んだ先を起点にし直す
           if (reachableRoot !== null) setReachableRoot(target.id);
-          setCameraState({
+          moveCameraByUser({
             kind: "focus",
             storyId: target.id,
             point: storyFocusPoint(width),
@@ -227,7 +227,7 @@ export const useTransitions = ({
         flushSync(() => {
           applyFilters(entry.filters);
           setReachableRoot(entry.reachableRoot);
-          setCameraState({ kind: "fixed", camera: entry.camera });
+          moveCameraByUser({ kind: "fixed", camera: entry.camera });
         });
         if (wasLastStep) focusLabel(entry.lineKey);
         else focusBack();
@@ -251,7 +251,7 @@ export const useTransitions = ({
           x: viewport.width / 2,
           y: viewport.height / 2,
         });
-        setCameraState({
+        moveCameraByUser({
           kind: "focus",
           storyId: selectedStoryId,
           point: { x: center.x - frame.x, y: center.y - frame.y },

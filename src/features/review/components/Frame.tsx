@@ -128,9 +128,9 @@ type FrameProps = {
   /** 「画面のつながり」の選んだ画面か（ふちに枠を出す） */
   selected: boolean;
   /** 選んだ画面をこの画面に固定しているか（見出しの「固定」を「固定中」にする） */
-  pinned: boolean;
+  locked: boolean;
   /** 見出しの「固定」「固定中」を押した */
-  onTogglePin: (storyId: string) => void;
+  onToggleLock: (storyId: string) => void;
   /** 撮ったときの、遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
   transitionBoxes?: ReadonlyArray<ShotTransition>;
   /** 目録にある遷移の行（index。画面のつながりを出さないときは空。動く画面ではこの行のボタンを探す） */
@@ -201,8 +201,8 @@ export const Frame = ({
   onCopyStoryLink,
   linkHighlight,
   selected,
-  pinned,
-  onTogglePin,
+  locked,
+  onToggleLock,
   onActivate,
   pendingPlace,
   onPendingPlace,
@@ -869,23 +869,23 @@ export const Frame = ({
             type="button"
             className={[
               "shrink-0 rounded px-1",
-              pinned
+              locked
                 ? "bg-accent text-white"
                 : "text-muted hover:bg-panel hover:text-accent",
             ].join(" ")}
             aria-label={`${story.title} / ${story.name} を固定`}
-            aria-pressed={pinned}
+            aria-pressed={locked}
             title={
-              pinned
+              locked
                 ? "固定を外します"
                 : "選んだ画面をこの画面に固定します。キャンバスを動かしても、ほかの画面をクリックしても変わりません"
             }
             // 「Storybook で開く」と同じく、キャンバスの中を Tab で巡らせない
             tabIndex={-1}
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onTogglePin(story.id)}
+            onClick={() => onToggleLock(story.id)}
           >
-            {pinned ? "固定中" : "固定"}
+            {locked ? "固定中" : "固定"}
           </button>
           {interrupted && (
             <button

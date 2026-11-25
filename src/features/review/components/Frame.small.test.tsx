@@ -177,8 +177,8 @@ describe("Frame の高さの知らせ", () => {
         onCopyStoryLink={() => undefined}
         linkHighlight={null}
         selected={false}
-        pinned={false}
-        onTogglePin={() => undefined}
+        locked={false}
+        onToggleLock={() => undefined}
         onActivate={() => undefined}
         pendingPlace={null}
         onPendingPlace={() => undefined}
@@ -439,15 +439,15 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
     linkHighlight = null,
     onCopyStoryLink = () => undefined,
     selected = false,
-    pinned = false,
-    onTogglePin = () => undefined,
+    locked = false,
+    onToggleLock = () => undefined,
     zoom = 0.5,
   }: {
     linkHighlight?: LinkHighlight | null;
     onCopyStoryLink?: (storyId: string) => void;
     selected?: boolean;
-    pinned?: boolean;
-    onTogglePin?: (storyId: string) => void;
+    locked?: boolean;
+    onToggleLock?: (storyId: string) => void;
     zoom?: number;
   }) =>
     render(
@@ -484,8 +484,8 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
           onCopyStoryLink={onCopyStoryLink}
           linkHighlight={linkHighlight}
           selected={selected}
-          pinned={pinned}
-          onTogglePin={onTogglePin}
+          locked={locked}
+          onToggleLock={onToggleLock}
           onActivate={() => undefined}
           pendingPlace={null}
           onPendingPlace={() => undefined}
@@ -544,10 +544,10 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
   });
 
   test("[正常系]選んだ画面には、ふちの外側にすき間なく、表示の上で 2px のアクセントの色の枠を出す（固定中も同じ）", () => {
-    for (const pinned of [false, true]) {
+    for (const locked of [false, true]) {
       const { container, unmount } = renderHeader({
         selected: true,
-        pinned,
+        locked,
         zoom: 0.25,
       });
 
@@ -563,8 +563,8 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
   });
 
   test("[正常系]「固定」は状態の名前のすぐ後ろにあり、Tab で止まらず、押すとその画面を渡す。固定中は「固定中」・押した状態になり、読み上げの名前は変わらない", () => {
-    const onTogglePin = vi.fn<(storyId: string) => void>();
-    const { unmount } = renderHeader({ onTogglePin });
+    const onToggleLock = vi.fn<(storyId: string) => void>();
+    const { unmount } = renderHeader({ onToggleLock });
 
     const button = screen.getByRole("button", {
       name: "Pages/Cart / Empty を固定",
@@ -578,16 +578,16 @@ describe("Frame の見出しのリンクと、リンクで開いたときの枠"
     expect(button.querySelector("svg")).toBeNull();
     expect(button.previousElementSibling?.textContent).toBe("Empty");
     fireEvent.click(button);
-    expect(onTogglePin).toHaveBeenCalledExactlyOnceWith("pages-cart--empty");
+    expect(onToggleLock).toHaveBeenCalledExactlyOnceWith("pages-cart--empty");
     unmount();
 
-    renderHeader({ pinned: true });
-    const pinned = screen.getByRole("button", {
+    renderHeader({ locked: true });
+    const locked = screen.getByRole("button", {
       name: "Pages/Cart / Empty を固定",
       pressed: true,
     });
-    expect(pinned.textContent).toBe("固定中");
-    expect(pinned.getAttribute("title")).toBe("固定を外します");
+    expect(locked.textContent).toBe("固定中");
+    expect(locked.getAttribute("title")).toBe("固定を外します");
   });
 });
 
@@ -637,8 +637,8 @@ describe("Frame の見出しの「ほかのブランチと比べる」", () => {
         onCopyStoryLink={() => undefined}
         linkHighlight={null}
         selected={false}
-        pinned={false}
-        onTogglePin={() => undefined}
+        locked={false}
+        onToggleLock={() => undefined}
         onCompare={onCompare}
       />
     </SourcesContext.Provider>
@@ -755,8 +755,8 @@ describe("Frame の遷移のボタンの枠", () => {
           onCopyStoryLink={() => undefined}
           linkHighlight={null}
           selected={false}
-          pinned={false}
-          onTogglePin={() => undefined}
+          locked={false}
+          onToggleLock={() => undefined}
           onActivate={() => undefined}
           pendingPlace={null}
           onPendingPlace={onPendingPlace}

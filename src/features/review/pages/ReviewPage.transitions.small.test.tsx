@@ -231,17 +231,17 @@ vi.mock(
         onCameraChange,
         onPlace,
         selectedStoryId,
-        pinnedStoryId,
+        lockedStoryId,
         onSelectStory,
-        onTogglePin,
+        onToggleLock,
         onBackgroundClick,
         onMeasure,
         onOpenThread,
       }: {
         selectedStoryId: string | undefined;
-        pinnedStoryId: string | undefined;
+        lockedStoryId: string | undefined;
         onSelectStory: (storyId: string) => void;
-        onTogglePin: (storyId: string) => void;
+        onToggleLock: (storyId: string) => void;
         onBackgroundClick: () => void;
         onMeasure: (storyId: string, height: number) => void;
         onOpenThread: (threadId: string) => void;
@@ -262,7 +262,7 @@ vi.mock(
           data-camera={JSON.stringify(camera)}
           data-highlight={linkHighlight?.storyId ?? ""}
           data-selected={selectedStoryId ?? ""}
-          data-pinned={pinnedStoryId ?? ""}
+          data-locked={lockedStoryId ?? ""}
           data-frames={JSON.stringify(
             Object.fromEntries(
               rows.flatMap((row) =>
@@ -317,8 +317,15 @@ vi.mock(
                 <button type="button" onClick={() => onSelectStory(story.id)}>
                   {story.id} をクリック
                 </button>
-                <button type="button" onClick={() => onTogglePin(story.id)}>
+                <button type="button" onClick={() => onToggleLock(story.id)}>
                   {story.id} の固定
+                </button>
+                {/* 「コメント」の道具でクリック・キーボードで置いたときに、Frame が渡すもの（Canvas.small.test.tsx で確かめる） */}
+                <button
+                  type="button"
+                  onClick={() => onPlace(story.id, { x: 10, y: 10 }, null)}
+                >
+                  {story.id} にコメントを置く
                 </button>
               </span>
             )),
@@ -831,11 +838,11 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
   });
 
   const selected = () => canvas().dataset["selected"];
-  const pinned = () => canvas().dataset["pinned"];
+  const locked = () => canvas().dataset["locked"];
   const press = (name: string) =>
     fireEvent.click(screen.getByRole("button", { name }));
   const clickStory = (storyId: string) => press(`${storyId} をクリック`);
-  const togglePin = (storyId: string) => press(`${storyId} の固定`);
+  const toggleLock = (storyId: string) => press(`${storyId} の固定`);
   /** 左の一覧で印の付いた状態（title は「<画面の名前> / <状態の名前>」） */
   const currentInList = () =>
     [
@@ -861,8 +868,8 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
 
   test("[正常系]固定中は、ほかの画面のクリック・スレッドを開いても固定のまま。外すと、固定中のクリックは数えず、スレッド・真ん中で決まる", () => {
     open(LIST);
-    togglePin(FORM_ID);
-    expect(pinned()).toBe(FORM_ID);
+    toggleLock(FORM_ID);
+    expect(locked()).toBe(FORM_ID);
     expect(selected()).toBe(FORM_ID);
     expect(currentInList()).toStrictEqual(["Shop/Form / Default"]);
 
@@ -872,8 +879,8 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
     expect(selected()).toBe(FORM_ID);
     expect(urlParams().get("story")).toBeNull();
 
-    togglePin(FORM_ID);
-    expect(pinned()).toBe("");
+    toggleLock(FORM_ID);
+    expect(locked()).toBe("");
     // 開いているスレッド（Shop/Done）の画面。固定中にクリックした Shop/Admin ではない
     expect(selected()).toBe(DONE_ID);
 
@@ -883,9 +890,9 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
 
   test("[正常系]別の画面の「固定」で固定が移り、キャンバスを動かしても外れない", () => {
     open(LIST);
-    togglePin(FORM_ID);
-    togglePin(DONE_ID);
-    expect(pinned()).toBe(DONE_ID);
+    toggleLock(FORM_ID);
+    toggleLock(DONE_ID);
+    expect(locked()).toBe(DONE_ID);
     expect(selected()).toBe(DONE_ID);
 
     press("キャンバスを動かす");
@@ -969,7 +976,23 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
     },
   );
 
-  test("[正常系]高さを測り直してキャンバスが動いても、クリックで選んだ画面は外れない", () => {
+  test("[正常系]「コメント」の道具でコメントを置くと、その画面を選ぶ。固定中に置いても固定した画面のまま", () => {
+    open(LIST);
+    press(`${DONE_ID} にコメントを置く`);
+    expect(
+      screen.queryByRole("dialog", { name: "新しいコメント" }),
+    ).not.toBeNull();
+    expect(selected()).toBe(DONE_ID);
+
+    toggleLock(FORM_ID);
+    press(`${ADMIN_ID} にコメントを置く`);
+    expect(selected()).toBe(FORM_ID);
+    toggleLock(FORM_ID);
+    // 固定中に置いた画面は覚えない（固定を外すと、前にクリックした（置いた）画面）
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  test("[正常系]高さを測り直してキャンバスが動いても、クリックで選んだ画面は外れない（人の操作でなく自動で寄せる道を足したときに、クリックの選択を外さない守りでもある）", () => {
     open(LIST);
     clickStory(DONE_ID);
 
@@ -1002,9 +1025,9 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
     expect(selected()).toBe(LIST_ID);
     expect(urlParams().has("comment")).toBe(false);
 
-    togglePin(FORM_ID);
+    toggleLock(FORM_ID);
     press("何も無い所をクリック");
-    expect(pinned()).toBe(FORM_ID);
+    expect(locked()).toBe(FORM_ID);
     expect(selected()).toBe(FORM_ID);
   });
 
@@ -1027,35 +1050,35 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
     const search = screen.getByRole<HTMLInputElement>("searchbox", {
       name: "画面名で絞り込む",
     });
-    togglePin(ADMIN_ID);
+    toggleLock(ADMIN_ID);
     clickStory(DONE_ID);
     fireEvent.change(search, { target: { value: "List" } });
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
     expect(selected()).toBe(LIST_ID);
     fireEvent.change(search, { target: { value: "" } });
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
     expect(selected()).toBe(LIST_ID);
 
     // 「つながる画面だけ」の起点を、固定した画面（Shop/List）から行き止まり（Shop/Done）へ札で移すと、Shop/List は並ばなくなる
-    togglePin(LIST_ID);
+    toggleLock(LIST_ID);
     openPicker();
     fireEvent.click(reachableOnly());
-    expect(pinned()).toBe(LIST_ID);
+    expect(locked()).toBe(LIST_ID);
     fireEvent.click(label("<img src=x>注文 → Shop/Done／Default"));
     expect(canvasTitles()).toStrictEqual(["Shop/Done"]);
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
     expect(selected()).toBe(DONE_ID);
   });
 
   test("[正常系]ページを替えると固定が外れ、元のページへ戻っても持ち越さない", () => {
     open(LIST);
-    togglePin(FORM_ID);
+    toggleLock(FORM_ID);
     const pageSelect = screen.getByRole("combobox", { name: "ページ" });
 
     fireEvent.change(pageSelect, { target: { value: "blog" } });
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
     fireEvent.change(pageSelect, { target: { value: "shop" } });
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
   });
 
   test("[正常系]ブランチを替えても、替えた先に同じ画面があれば固定を残し、無ければ外す。URL には載せない", () => {
@@ -1063,18 +1086,18 @@ describe("ReviewPage の選んだ画面（クリック・固定）", () => {
     open(LIST);
     const branchSelect = () =>
       screen.getByRole("combobox", { name: "ブランチ" });
-    togglePin(FORM_ID);
+    toggleLock(FORM_ID);
 
     fireEvent.change(branchSelect(), { target: { value: "feature/cart" } });
     expect(urlParams().get("branch")).toBe("feature/cart");
-    expect(pinned()).toBe(FORM_ID);
+    expect(locked()).toBe(FORM_ID);
     expect(selected()).toBe(FORM_ID);
     expect(window.location.search).not.toContain(FORM_ID);
 
     fireEvent.change(branchSelect(), { target: { value: "main" } });
-    togglePin(ADMIN_ID);
+    toggleLock(ADMIN_ID);
     fireEvent.change(branchSelect(), { target: { value: "feature/cart" } });
-    expect(pinned()).toBe("");
+    expect(locked()).toBe("");
   });
 
   test("[正常系]「画面のつながり」を「出さない」にしても、選んだ画面（枠を出す画面）をキャンバスに渡す", () => {

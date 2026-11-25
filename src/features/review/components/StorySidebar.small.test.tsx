@@ -39,24 +39,24 @@ const rows: RowPlacement[] = [
   },
 ];
 
-const onSelectStory = vi.fn();
+const onFocusStory = vi.fn();
 const onScopeChange = vi.fn();
 const onToggleFolder = vi.fn();
 afterEach(() => vi.clearAllMocks());
 
 const renderSidebar = (
   shown: ReadonlyArray<RowPlacement>,
-  currentStoryId?: string,
+  selectedStoryId?: string,
   props: Partial<ComponentProps<typeof StorySidebar>> = {},
 ) =>
   render(
     <StorySidebar
       rows={shown}
-      currentStoryId={currentStoryId}
+      selectedStoryId={selectedStoryId}
       query=""
       onQueryChange={() => undefined}
       searchRef={createRef<HTMLInputElement>()}
-      onSelectStory={onSelectStory}
+      onFocusStory={onFocusStory}
       scope={undefined}
       onScopeChange={onScopeChange}
       collapsed={new Set()}
@@ -88,11 +88,11 @@ const Harness = ({ shown }: { shown: ReadonlyArray<RowPlacement> }) => {
       rows={shown.filter(
         (r) => scope === undefined || r.title.startsWith(`${scope}/`),
       )}
-      currentStoryId={undefined}
+      selectedStoryId={undefined}
       query={query}
       onQueryChange={setQuery}
       searchRef={createRef<HTMLInputElement>()}
-      onSelectStory={onSelectStory}
+      onFocusStory={onFocusStory}
       scope={scope}
       onScopeChange={setScope}
       collapsed={collapsed}
@@ -132,7 +132,7 @@ describe("StorySidebar", () => {
     expect(storyButtons()).toEqual(["Default", "Filled", "Empty"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Filled" }));
-    expect(onSelectStory).toHaveBeenCalledExactlyOnceWith(filled);
+    expect(onFocusStory).toHaveBeenCalledExactlyOnceWith(filled);
   });
 
   test("[正常系]選んだ画面の状態に印を付ける", () => {
@@ -200,11 +200,11 @@ describe("StorySidebar", () => {
     view.rerender(
       <StorySidebar
         rows={nested}
-        currentStoryId={undefined}
+        selectedStoryId={undefined}
         query=""
         onQueryChange={() => undefined}
         searchRef={createRef<HTMLInputElement>()}
-        onSelectStory={onSelectStory}
+        onFocusStory={onFocusStory}
         scope={undefined}
         onScopeChange={onScopeChange}
         collapsed={new Set(["Shop/Order"])}
@@ -274,11 +274,11 @@ describe("StorySidebar", () => {
   test("[境界値]「すべて表示」の後に、範囲だったフォルダの行が閉じたフォルダの中で出ないときは、検索欄へフォーカスを移す", () => {
     const props = {
       rows: nested,
-      currentStoryId: undefined,
+      selectedStoryId: undefined,
       query: "",
       onQueryChange: () => undefined,
       searchRef: createRef<HTMLInputElement>(),
-      onSelectStory,
+      onFocusStory,
       onScopeChange,
       collapsed: new Set(["Shop"]),
       onToggleFolder,

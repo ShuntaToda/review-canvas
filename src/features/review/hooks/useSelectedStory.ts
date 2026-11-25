@@ -9,7 +9,7 @@ import type { StorySource } from "../model/sources";
 export const useSelectedStory = (
   page: StorySource,
   candidates: {
-    pinned: string | undefined;
+    locked: string | undefined;
     clicked: string | undefined;
     thread: string | undefined;
     center: string | undefined;

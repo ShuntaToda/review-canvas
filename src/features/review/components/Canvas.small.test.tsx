@@ -50,8 +50,9 @@ const IN_LIST = { clientX: 100, clientY: 300 };
 const EMPTY = { clientX: 450, clientY: 1200 };
 
 const onSelectStory = vi.fn<(storyId: string) => void>();
-const onTogglePin = vi.fn<(storyId: string) => void>();
+const onToggleLock = vi.fn<(storyId: string) => void>();
 const onBackgroundClick = vi.fn<() => void>();
+const onPlace = vi.fn<(storyId: string) => void>();
 
 const renderCanvas = ({
   tool = "move",
@@ -77,16 +78,16 @@ const renderCanvas = ({
         activeThreadId={null}
         draft={null}
         onMeasure={() => undefined}
-        onPlace={() => undefined}
+        onPlace={onPlace}
         onLocate={() => undefined}
         onOpenThread={() => undefined}
         onCopyStoryLink={() => undefined}
         linkHighlight={null}
         onBackgroundClick={onBackgroundClick}
         selectedStoryId={LIST.id}
-        pinnedStoryId={undefined}
+        lockedStoryId={undefined}
         onSelectStory={onSelectStory}
-        onTogglePin={onTogglePin}
+        onToggleLock={onToggleLock}
         onScreenChanged={() => undefined}
       />
     </SourcesContext.Provider>,
@@ -143,8 +144,9 @@ afterEach(() => {
   cleanup();
   frameLoadQueue.reset();
   onSelectStory.mockReset();
-  onTogglePin.mockReset();
+  onToggleLock.mockReset();
   onBackgroundClick.mockReset();
+  onPlace.mockReset();
 });
 
 describe("Canvas で画面をクリックして選ぶ", () => {
@@ -177,6 +179,67 @@ describe("Canvas で画面をクリックして選ぶ", () => {
     });
 
     expect(onSelectStory).not.toHaveBeenCalled();
+  });
+
+  test("[境界値]1px ずつゆっくり動かしても、押し始めから 2px を超えて動かしてから離すと選ばない（移動の道具の画面・行）", () => {
+    for (const target of [() => frameOf(LIST.id), () => labelOf(LIST.id)]) {
+      const view = renderCanvas();
+      const element = target();
+      fireEvent.pointerDown(element, { pointerId: 1, button: 0, ...IN_LIST });
+      for (let step = 1; step <= 4; step += 1) {
+        fireEvent.pointerMove(element, {
+          pointerId: 1,
+          clientX: IN_LIST.clientX + step,
+          clientY: IN_LIST.clientY,
+        });
+      }
+      fireEvent.pointerUp(element, {
+        pointerId: 1,
+        button: 0,
+        clientX: IN_LIST.clientX + 4,
+        clientY: IN_LIST.clientY,
+      });
+      view.unmount();
+    }
+
+    expect(onSelectStory).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]「コメント」「操作」の道具で、状態の名前の行から押して動かしてから離すと選ばない", () => {
+    for (const tool of ["comment", "interact"] as const) {
+      const view = renderCanvas({ tool });
+      const label = labelOf(LIST.id);
+      fireEvent.pointerDown(label, { pointerId: 1, button: 0, ...IN_LIST });
+      fireEvent.pointerMove(label, {
+        pointerId: 1,
+        clientX: IN_LIST.clientX,
+        clientY: IN_LIST.clientY + 30,
+      });
+      fireEvent.pointerUp(label, {
+        pointerId: 1,
+        button: 0,
+        clientX: IN_LIST.clientX,
+        clientY: IN_LIST.clientY + 30,
+      });
+      view.unmount();
+    }
+
+    expect(onSelectStory).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]「コメント」の道具で画面をクリック・キーボードで押すと、その画面にコメントを置く（選ぶのは置いたのを受けた作業の画面）", () => {
+    renderCanvas({ tool: "comment" });
+    const place = screen.getByRole("button", {
+      name: "Shop/List / Default にコメントを置く",
+    });
+
+    fireEvent.click(place, { detail: 1, ...IN_LIST });
+    fireEvent.click(place, { detail: 0 });
+
+    expect(onPlace.mock.calls.map(([storyId]) => storyId)).toStrictEqual([
+      LIST.id,
+      LIST.id,
+    ]);
   });
 
   test("[正常系]Space を押しながら・中ボタンでのクリックでは選ばない", () => {
@@ -240,11 +303,11 @@ describe("Canvas で画面をクリックして選ぶ", () => {
   test("[正常系]行の中のボタン（固定・リンクのコピー）を押しても選ばない。「固定」はその画面を渡す", () => {
     renderCanvas({ tool: "comment" });
 
-    const pin = screen.getByRole("button", {
+    const lock = screen.getByRole("button", {
       name: "Shop/List / Empty を固定",
     });
-    click(pin, IN_LIST);
-    fireEvent.click(pin);
+    click(lock, IN_LIST);
+    fireEvent.click(lock);
     click(
       screen.getByRole("button", {
         name: "Shop/List / Empty のリンクをコピー",
@@ -253,7 +316,7 @@ describe("Canvas で画面をクリックして選ぶ", () => {
     );
 
     expect(onSelectStory).not.toHaveBeenCalled();
-    expect(onTogglePin).toHaveBeenCalledExactlyOnceWith(FORM.id);
+    expect(onToggleLock).toHaveBeenCalledExactlyOnceWith(FORM.id);
   });
 
   test("[正常系]何も無い所を押すと、画面を選ばずに知らせる", () => {
