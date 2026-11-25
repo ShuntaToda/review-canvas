@@ -324,6 +324,29 @@ describe("review-canvas 自身の画面の Storybook", () => {
     },
   );
 
+  // 動く画面で遷移のボタンを探す決め方は playwright-core の写し。撮るときの Playwright の版を上げたら、写しも突き合わせ直す
+  test.each([
+    "src/features/review/model/playwright-aria.ts",
+    "THIRD_PARTY_NOTICES.md",
+  ])(
+    "[正常系]%s に書いた写しの版（playwright-core <版>）は、catalog（pnpm-workspace.yaml）の playwright と同じ",
+    (file) => {
+      const catalogPlaywright = /^\s+playwright:\s*(\S+)\s*$/mu.exec(
+        read("pnpm-workspace.yaml"),
+      )?.[1];
+      const copied = [
+        ...read(file).matchAll(/playwright-core (\d+\.\d+\.\d+)/gu),
+      ].map((match) => match[1]);
+
+      expect(catalogPlaywright).toBeDefined();
+      expect(copied.length).toBeGreaterThan(0);
+      expect(
+        copied,
+        `写しを playwright-core ${catalogPlaywright} の roleUtils.ts・domUtils.ts と突き合わせてから、${file} の「playwright-core <版>」を書き換える`,
+      ).toStrictEqual(copied.map(() => catalogPlaywright));
+    },
+  );
+
   // ブランチのキーの作り方は 3 か所に写してある（api・infra・ストーリー。層の import の決まりで 1 つにできない）。テストの例で揃える
   test("[正常系]ブランチのキーのテストの例（VECTORS）は、api・infra・ストーリーで同じ", () => {
     const vectorsOf = (file) =>

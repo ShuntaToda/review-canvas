@@ -222,7 +222,9 @@ export const useLiveTransitions = ({
   // 時間切れの後に、動く画面を出す前の頼みの返事が届いて新しい橋渡しと分かったときは、出していた右の端を、
   // 出した後の頼みの返事で位置が決まるまで残す（右の端 → 撮ったときの位置 → 見つかった位置と 2 度跳ねない）
   const keepDrifted =
-    legacyDrifted && (unsupported || (support?.late === true && !locatedNow));
+    legacyDrifted &&
+    (unsupported ||
+      (support?.generation === generation && support.late && !locatedNow));
   const live: LiveTransitions | null = !revealed
     ? null
     : supported && locatedNow && located.width === width

@@ -1,24 +1,45 @@
+/*!
+ * @license
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Modifications: このファイルは playwright-core 1.63.0 の packages/injected/src/roleUtils.ts（getAriaRole・isElementHiddenForAria・
+ * getTextAlternativeInternal・innerAccumulatedElementText ほか）と domUtils.ts（isElementVisible ほか）を元に、review-canvas が書き換えたもの。
+ * TypeScript の形（型・名前・このリポジトリの lint の決まり）を直し、覚えておく先を 1 度の探し方ごとの読み手に移し（label の引き方も）、
+ * Shadow DOM（影の木・スロット）と、名前の手がかりになった要素の記録を省いた。くわしくは THIRD_PARTY_NOTICES.md
+ */
+
 import { tagOf } from "./anchor-dom";
 import { TRANSITION_ROLES, type TransitionRole } from "./story-shots";
 
 /**
  * Playwright の getByRole と同じ決め方で、要素のロール・アクセシブルな名前・隠れているかを読む（動く画面で遷移のボタンを探すときに使う）。
- * 出典: playwright-core 1.63.0 の injected script（packages/injected/src/roleUtils.ts の getAriaRole・isElementHiddenForAria・
- * getTextAlternativeInternal・innerAccumulatedElementText と domUtils.ts の isElementVisible）。撮るときは Playwright そのものが決めるので、
- * 同じ並びで書き写し、Playwright の版を上げて決め方が変わったときはここも合わせる。
- * 写していないもの: Shadow DOM（スロット・aria-owns の先の影の木）と、名前の手がかりになった要素の記録（getByRole は使わない）
+ * 撮るときは Playwright そのものが決めるので、同じ並びで書き写す。
+ * 出典: playwright-core 1.63.0（版を上げたら、写しを新しい版の roleUtils.ts・domUtils.ts と突き合わせてから、この版を書き換える。
+ * repo-rules のテストが catalog の版と比べる）
  */
 
 /** Playwright が内部で使うロール（getByRole に書ける役割と、書けない mark） */
 export type PlaywrightRole = TransitionRole | "mark";
 
-const KNOWN_ROLES: ReadonlySet<string> = new Set<PlaywrightRole>([
+const PLAYWRIGHT_ROLES: ReadonlySet<string> = new Set<PlaywrightRole>([
   ...TRANSITION_ROLES,
   "mark",
 ]);
 
 const isKnownRole = (role: string): role is PlaywrightRole =>
-  KNOWN_ROLES.has(role);
+  PLAYWRIGHT_ROLES.has(role);
 
 /** 名前を付けられないロール（aria-label・aria-labelledby を数えず、ほかの決め方の前でもある） */
 const ARIA_NAME_PROHIBITED_ROLES: ReadonlyArray<string> = [
@@ -338,12 +359,6 @@ const idRefsOf = (element: Element, ref: string | null): Element[] => {
 const inputTypeOf = (element: Element): string =>
   (element as HTMLInputElement).type.toLowerCase();
 
-/** label 要素（ラベルを付けられない要素は空） */
-const labelsOf = (element: Element): HTMLLabelElement[] => {
-  const labels = (element as Partial<HTMLInputElement>).labels;
-  return labels === undefined || labels === null ? [] : [...labels];
-};
-
 const explicitRoleOf = (element: Element): PlaywrightRole | null =>
   (element.getAttribute("role") ?? "")
     .split(" ")
@@ -479,6 +494,8 @@ export type AriaReader = {
   nameOf: (element: Element) => string;
   /** 見えているか（filter({ visible: true }) と同じ） */
   isVisible: (element: Element) => boolean;
+  /** 付いた label（element.labels と同じ並び） */
+  labelsOf: (element: Element) => HTMLLabelElement[];
 };
 
 /** 1 度の探し方のあいだだけ、読んだ見た目・ロールを覚えておく読み手を作る（DOM が変わったら作り直す） */
@@ -486,6 +503,41 @@ export const createAriaReader = (): AriaReader => {
   const styles = new Map<string, Map<Element, CSSStyleDeclaration | null>>();
   const roles = new Map<Element, PlaywrightRole | null>();
   const hiddenChain = new Map<Element, boolean>();
+  const labelsByDocument = new Map<
+    Document,
+    Map<Element, HTMLLabelElement[]>
+  >();
+
+  /**
+   * 要素に付いた label（文書の順。ラベルを付けられない要素は空）。element.labels と同じ結果になるが、Chrome は読むたびに文書全体を
+   * たどるので、1 度の探し方の中で文書の label を 1 度だけたどり、label.control（for= の先か、中の最初のラベルを付けられる要素）から引く
+   */
+  const labelsOf = (element: Element): HTMLLabelElement[] => {
+    const doc = element.ownerDocument;
+    let byControl = labelsByDocument.get(doc);
+    if (byControl === undefined) {
+      byControl = new Map();
+      for (const label of doc.querySelectorAll("label")) {
+        const control = label.control;
+        if (control === null) continue;
+        const labels = byControl.get(control);
+        if (labels === undefined) byControl.set(control, [label]);
+        else labels.push(label);
+      }
+      labelsByDocument.set(doc, byControl);
+    }
+    return byControl.get(element) ?? [];
+  };
+
+  /** 中の要素と、aria-owns で持たせた要素（とその中）のうち、セレクタに合うもの（Playwright の queryInAriaOwned） */
+  const queryInAriaOwned = (element: Element, selector: string): Element[] => {
+    const result = [...element.querySelectorAll(selector)];
+    for (const owned of idRefsOf(element, element.getAttribute("aria-owns"))) {
+      if (owned.matches(selector)) result.push(owned);
+      result.push(...owned.querySelectorAll(selector));
+    }
+    return result;
+  };
 
   const styleOf = (
     element: Element,
@@ -615,6 +667,7 @@ export const createAriaReader = (): AriaReader => {
       | { kind: "string"; value: string }
       | { kind: "attr"; name: string }
       | { kind: "slash" }
+      | { kind: "other" }
     )[] = [];
     let rest = content;
     for (;;) {
@@ -632,7 +685,20 @@ export const createAriaReader = (): AriaReader => {
         continue;
       }
       const quote = rest[0];
-      if (quote !== '"' && quote !== "'") return undefined;
+      if (quote !== '"' && quote !== "'") {
+        // 文字列・attr(…) でない字句（url(…)・counter(…)・open-quote など）。/ より前にあってもよく、後ろにあれば読まない
+        let depth = 0;
+        let index = 0;
+        for (; index < rest.length; index += 1) {
+          const char = rest[index] ?? "";
+          if (char === "(") depth += 1;
+          else if (char === ")") depth -= 1;
+          else if (depth <= 0 && (char === "/" || /\s/.test(char))) break;
+        }
+        tokens.push({ kind: "other" });
+        rest = rest.slice(Math.max(index, 1));
+        continue;
+      }
       let value = "";
       let index = 1;
       for (; index < rest.length && rest[index] !== quote; index += 1) {
@@ -817,16 +883,16 @@ export const createAriaReader = (): AriaReader => {
           } else {
             const listbox =
               role === "combobox"
-                ? [...element.querySelectorAll("*")].find(
+                ? queryInAriaOwned(element, "*").find(
                     (candidate) => roleOf(candidate) === "listbox",
                   )
                 : element;
             selected =
               listbox === undefined
                 ? []
-                : [
-                    ...listbox.querySelectorAll('[aria-selected="true"]'),
-                  ].filter((option) => roleOf(option) === "option");
+                : queryInAriaOwned(listbox, '[aria-selected="true"]').filter(
+                    (option) => roleOf(option) === "option",
+                  );
           }
           if (selected.length === 0 && tag === "input")
             return (element as HTMLInputElement).value;
@@ -988,5 +1054,5 @@ export const createAriaReader = (): AriaReader => {
     return normalizeWhiteSpace(asFlatString(text));
   };
 
-  return { roleOf, isHidden, nameOf, isVisible };
+  return { roleOf, isHidden, nameOf, isVisible, labelsOf };
 };

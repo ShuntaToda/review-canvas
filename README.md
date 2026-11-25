@@ -109,4 +109,6 @@ pnpm dev                    # → http://localhost:4100
 | [docs/architecture.md](docs/architecture.md)                     | つくりと決まり（層ごとの置き場・やってはいけないこと・API や画面の機能を足すときの順番）                                      |
 | [docs/adr/README.md](docs/adr/README.md)                         | 決定の記録（SPA と Lambda・小さな AWS の構成・別のオリジン・状態の導出・契約の生成・道具で縛る）                              |
 
+ほかのソフトウェアから写して書き換えたコードと、その著作権・ライセンスの表示は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) にあります。
+
 npm には出していません。使う側は、このリポジトリのコミットを指して使います（[docs/development.md](docs/development.md#リリースと互換性)）。

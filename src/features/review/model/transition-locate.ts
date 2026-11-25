@@ -20,7 +20,7 @@ import {
  * 動く画面（ストーリーの iframe）の中で、ストーリーに書いた遷移のボタンを探す（橋渡しが使う）。
  * 撮るとき（infra/scripts/story-screenshots.ts）は Playwright の getByRole・getByText・getByTestId（exact: true・見えている要素だけ）で探し、
  * 見出しで絞って 1 つに当たったものの位置を目録に残す。ここでも同じ書き方を、なるべく同じ決め方で読む。
- * ロール・アクセシブルな名前・見え方は Playwright の決め方を書き写したもの（playwright-aria.ts。写していないものは docs/host-setup.md）。
+ * ロール・アクセシブルな名前・見え方は、撮るときに使う版の Playwright の決め方を書き写したもので読む（playwright-aria.ts。違うのは Shadow DOM の中。docs/host-setup.md）。
  * 要素を読むだけで、フォーカス・スクロール・DOM は変えない
  */
 
@@ -78,7 +78,8 @@ const testIdMatches = (body: Element, testId: string): Element[] =>
     (element) => element.getAttribute("data-testid") === testId,
   );
 
-const KNOWN_ROLES: ReadonlySet<string> = new Set(TRANSITION_ROLES);
+/** 遷移の role に書ける役割 */
+const WRITABLE_ROLES: ReadonlySet<string> = new Set(TRANSITION_ROLES);
 
 const roleMatches = (
   body: Element,
@@ -86,7 +87,7 @@ const roleMatches = (
   role: string,
   name: string,
 ): Element[] => {
-  if (!KNOWN_ROLES.has(role)) return [];
+  if (!WRITABLE_ROLES.has(role)) return [];
   const wanted = normalizeWhiteSpace(name);
   return [...body.querySelectorAll("*")].filter(
     (element) =>

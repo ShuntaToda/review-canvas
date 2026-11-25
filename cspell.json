@@ -11,7 +11,8 @@
     "infra/cdk.out",
     "infra/cdk.json",
     "examples/sample-storybook/public/mockServiceWorker.js",
-    ".storybook/public/mockServiceWorker.js"
+    ".storybook/public/mockServiceWorker.js",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "words": [
     "adminorders",

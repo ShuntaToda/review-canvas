@@ -1,7 +1,22 @@
 // @vitest-environment jsdom
 import { createAriaReader } from "./playwright-aria";
 
+// jsdom は ::before・::after の見た目を持たず、要素そのものの見た目を返す。ブラウザと同じく、疑似要素の content は無い（none）とする
+beforeEach(() => {
+  const original = window.getComputedStyle.bind(window);
+  vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) =>
+    pseudo === undefined || pseudo === null
+      ? original(element)
+      : ({
+          content: "none",
+          display: "inline",
+          visibility: "visible",
+        } as CSSStyleDeclaration),
+  );
+});
+
 afterEach(() => {
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
 });
@@ -266,8 +281,75 @@ describe("createAriaReader().nameOf（Playwright の getByRole の name と比�
       `<nav data-target title="パンくず">ホーム</nav>`,
       "パンくず",
     ],
+    [
+      "改行しない空白も、getByRole と比べるときは 1 つの空白",
+      `<button data-target>カート&nbsp;&nbsp;に入れる</button>`,
+      "カート に入れる",
+    ],
+    [
+      "display: contents の子は中の文字を読む",
+      `<button data-target><span style="display: contents">保存</span></button>`,
+      "保存",
+    ],
+    [
+      "aria-owns で持たせた要素の文字も読む",
+      `<button data-target aria-owns="o">カート</button><span id="o">に入れる</span>`,
+      "カートに入れる",
+    ],
+    [
+      "aria-owns で持たせた listbox の選んだ option を読む",
+      `<button data-target aria-labelledby="l"></button><span id="l">数量 <span role="combobox" aria-owns="lb"></span></span><div role="listbox" id="lb"><div role="option" aria-selected="true">2 個</div></div>`,
+      "数量 2 個",
+    ],
+    [
+      "要素そのものの content は、/ が無いと読まない",
+      `<button data-target style='content: "置き換え"'>保存</button>`,
+      "保存",
+    ],
+    [
+      "要素そのものの content は、/ の後ろの文字を読む（前に url(…) があってもよい）",
+      `<button data-target style='content: url(a/b.png) / "代わり"'>保存</button>`,
+      "代わり",
+    ],
+    [
+      "content の / の後ろに文字列でないものがあれば読まない",
+      `<button data-target style='content: "x" / counter(n)'>保存</button>`,
+      "保存",
+    ],
   ])("%s", (_, html, name) => {
     expect(createAriaReader().nameOf(targetOf(html))).toBe(name);
+  });
+});
+
+describe("createAriaReader() の label の引き方（element.labels と同じ並び）", () => {
+  test("[正常系]for= と入れ子の label を、文書の順に返す（ラベルを付けられない要素・label の無い要素は無い）", () => {
+    document.body.innerHTML = `
+      <label for="q">数量</label>
+      <label id="nested">個数 <input id="q"></label>
+      <label for="q">（必須）</label>
+      <label for="d">x</label><div id="d"></div>
+      <input id="none">
+      <label>中の最初の要素だけ <input id="first"><input id="second"></label>`;
+    const byId = (id: string) => {
+      const element = document.getElementById(id);
+      if (element === null) throw new Error(id);
+      return element;
+    };
+    const textsOf = (id: string) =>
+      [...((byId(id) as HTMLInputElement).labels ?? [])].map((label) =>
+        (label.textContent ?? "").trim(),
+      );
+    const reader = createAriaReader();
+
+    for (const id of ["q", "d", "none", "first", "second"]) {
+      expect(
+        reader
+          .labelsOf(byId(id))
+          .map((label) => (label.textContent ?? "").trim()),
+      ).toStrictEqual(id === "d" ? [] : textsOf(id));
+    }
+    expect(textsOf("q")).toStrictEqual(["数量", "個数", "（必須）"]);
+    expect(reader.nameOf(byId("q"))).toBe("数量 個数 （必須）");
   });
 });
 
@@ -290,6 +372,16 @@ describe("createAriaReader().isHidden・isVisible", () => {
       true,
     ],
     ["script", `<script data-target></script>`, true],
+    [
+      "display: contents で中が空",
+      `<span data-target style="display: contents"></span>`,
+      true,
+    ],
+    [
+      "display: contents で中に要素がある",
+      `<span data-target style="display: contents"><b>x</b></span>`,
+      false,
+    ],
   ])("isHidden: %s", (_, html, hidden) => {
     expect(createAriaReader().isHidden(targetOf(html))).toBe(hidden);
   });
