@@ -94,6 +94,100 @@ export const INTERACTIVE_SELECTORS = [
   '[role="combobox"]',
 ] as const;
 
+/** 遷移のボタンを文字で探したときに、さかのぼる押せる要素（撮るとき・動く画面で探すときの両方） */
+export const TRANSITION_CLIMB_SELECTOR = INTERACTIVE_SELECTORS.join(", ");
+
+/**
+ * 遷移の role に書ける役割（Playwright の getByRole が受け付ける役割と同じ役割。そろっていることは撮影の側の型の検査が縛る）。
+ * ここに無い role の行は、撮るときも動く画面で探すときもボタンが見つからない
+ */
+export const TRANSITION_ROLES = [
+  "alert",
+  "alertdialog",
+  "application",
+  "article",
+  "banner",
+  "blockquote",
+  "button",
+  "caption",
+  "cell",
+  "checkbox",
+  "code",
+  "columnheader",
+  "combobox",
+  "complementary",
+  "contentinfo",
+  "definition",
+  "deletion",
+  "dialog",
+  "directory",
+  "document",
+  "emphasis",
+  "feed",
+  "figure",
+  "form",
+  "generic",
+  "grid",
+  "gridcell",
+  "group",
+  "heading",
+  "img",
+  "insertion",
+  "link",
+  "list",
+  "listbox",
+  "listitem",
+  "log",
+  "main",
+  "marquee",
+  "math",
+  "meter",
+  "menu",
+  "menubar",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "navigation",
+  "none",
+  "note",
+  "option",
+  "paragraph",
+  "presentation",
+  "progressbar",
+  "radio",
+  "radiogroup",
+  "region",
+  "row",
+  "rowgroup",
+  "rowheader",
+  "scrollbar",
+  "search",
+  "searchbox",
+  "separator",
+  "slider",
+  "spinbutton",
+  "status",
+  "strong",
+  "subscript",
+  "superscript",
+  "switch",
+  "tab",
+  "table",
+  "tablist",
+  "tabpanel",
+  "term",
+  "textbox",
+  "time",
+  "timer",
+  "toolbar",
+  "tooltip",
+  "tree",
+  "treegrid",
+  "treeitem",
+] as const;
+
+export type TransitionRole = (typeof TRANSITION_ROLES)[number];
+
 const HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
 /** 目録へ残す主な要素（押せる要素と見出し） */
@@ -329,6 +423,51 @@ export type TransitionSpec = {
 
 /** ページの中で読んだ遷移（overflow は、上限より後の行があったか） */
 export type TransitionSpecs = { rows: TransitionSpec[]; overflow: boolean };
+
+/** 遷移の行を読むときの文字の長さ（上限の判定に要る分より長く取る。巨大な文字を持ち出さない） */
+export const TRANSITION_SPEC_TEXT_LENGTH = 1_000;
+
+/** ボタンの決め方（role と name・見えている文字・data-testid のどれか 1 つ。heading は見出しで絞るとき。空白を除いた先頭） */
+export type TransitionFrom = (
+  | { kind: "role"; role: string; name: string }
+  | { kind: "text"; text: string }
+  | { kind: "testId"; testId: string }
+) & { heading: string | null };
+
+/**
+ * 読んだ行の from を、ボタンの決め方にする（どれか 1 つでなければ null）。
+ * 撮るとき（infra/scripts/story-transitions.ts）と、動く画面で橋渡しが探すとき（model/transition-locate.ts）とで、同じ決め方にする
+ */
+export const transitionFromOf = (
+  from: TransitionSpec["from"],
+): TransitionFrom | null => {
+  if (from === null) return null;
+  const { role, name, text, testId, heading } = from;
+  const ways = [role, text, testId].filter((value) => value !== undefined);
+  if (ways.length !== 1) return null;
+  const headingKey =
+    heading === undefined
+      ? null
+      : heading.replace(/\s+/g, "").slice(0, SHOT_ELEMENT_TEXT_LENGTH);
+  if (role !== undefined) {
+    // role だけで name が無い行は、書き方が違う
+    return name === undefined
+      ? null
+      : {
+          kind: "role",
+          role: role.trim(),
+          name: name.trim(),
+          heading: headingKey,
+        };
+  }
+  if (name !== undefined) return null;
+  if (text !== undefined) {
+    return { kind: "text", text: text.trim(), heading: headingKey };
+  }
+  return testId === undefined
+    ? null
+    : { kind: "testId", testId, heading: headingKey };
+};
 
 /**
  * 描画したストーリーの parameters.reviewCanvas.transitions を、文字だけの行にして読む（撮影がブラウザの中で動かす。文字列で渡すので、外の値は引数で受ける）。

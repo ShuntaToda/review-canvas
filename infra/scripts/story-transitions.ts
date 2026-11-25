@@ -3,10 +3,11 @@ import {
   MAX_STORY_TRANSITIONS,
   MAX_TRANSITION_LABEL_LENGTH,
   MAX_TRANSITION_TO_LENGTH,
-  SHOT_ELEMENT_TEXT_LENGTH,
   type ShotTransition,
   type StoryTransition,
   type TransitionCandidate,
+  type TransitionFrom,
+  transitionFromOf,
   type TransitionSpec,
   type TransitionSpecs,
 } from "../../src/features/review/model/story-shots";
@@ -15,13 +16,6 @@ import {
  * ストーリーに書いた遷移（parameters.reviewCanvas.transitions）を確かめ、書き間違いの一覧を作る（撮影の story-screenshots.ts が使う）。
  * ページの中で読んだ行（readTransitionSpecs）は、置くブランチのコードが返すものなので、形をここで確かめ直す
  */
-
-/** ボタンの決め方（role と name・見えている文字・data-testid のどれか 1 つ。heading は見出しで絞るとき） */
-export type TransitionFrom = (
-  | { kind: "role"; role: string; name: string }
-  | { kind: "text"; text: string }
-  | { kind: "testId"; testId: string }
-) & { heading: string | null };
 
 /** ボタンを探す 1 行（行き先ではなく、起点のボタンの探し方） */
 export type TransitionLookup = { index: number; from: TransitionFrom };
@@ -50,9 +44,6 @@ export type TransitionProblemGroup = {
   problem: TransitionProblem;
   widths: number[];
 };
-
-/** 読む文字の長さ（上限の判定に要る分より長く取る。巨大な文字を持ち出さない） */
-export const TRANSITION_SPEC_TEXT_LENGTH = 1_000;
 
 const textField = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value : undefined;
@@ -116,36 +107,6 @@ export const toTransitionCandidates = (raw: unknown): TransitionCandidate[] =>
       : [];
   });
 
-/** from を、ボタンの決め方にする（どれか 1 つでなければ null） */
-const toFrom = (from: TransitionSpec["from"]): TransitionFrom | null => {
-  if (from === null) return null;
-  const { role, name, text, testId, heading } = from;
-  const ways = [role, text, testId].filter((value) => value !== undefined);
-  if (ways.length !== 1) return null;
-  const headingKey =
-    heading === undefined
-      ? null
-      : heading.replace(/\s+/g, "").slice(0, SHOT_ELEMENT_TEXT_LENGTH);
-  if (role !== undefined) {
-    // role だけで name が無い行は、書き方が違う
-    return name === undefined
-      ? null
-      : {
-          kind: "role",
-          role: role.trim(),
-          name: name.trim(),
-          heading: headingKey,
-        };
-  }
-  if (name !== undefined) return null;
-  if (text !== undefined) {
-    return { kind: "text", text: text.trim(), heading: headingKey };
-  }
-  return testId === undefined
-    ? null
-    : { kind: "testId", testId, heading: headingKey };
-};
-
 /**
  * 読んだ遷移を確かめ、目録に残す行・探す行・書き間違い（幅によらないもの）にする。
  * 書き方の違う行は残さない（位置は index で保つ）。行き先が同じ Storybook に無い行は、知らせて残す
@@ -166,7 +127,7 @@ export const checkTransitionSpecs = (
     const row = index + 1;
     const invalid = (where: string) =>
       problems.push({ storyId, row, kind: "invalid", where });
-    const from = toFrom(spec.from);
+    const from = transitionFromOf(spec.from);
     if (from === null) {
       invalid("from に role・text・testId のどれか 1 つを書いてください");
       return;

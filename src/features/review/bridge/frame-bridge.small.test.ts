@@ -6,7 +6,11 @@ import {
   type FrameBridgeHandlers,
   storybookOriginOf,
 } from "./frame-bridge";
-import { type BridgeMessage, toBridgeEnvelope } from "./protocol";
+import {
+  type BridgeMessage,
+  type BridgeTransition,
+  toBridgeEnvelope,
+} from "./protocol";
 
 const STORYBOOK = "https://sb.example.com";
 const render = {
@@ -162,6 +166,87 @@ describe("FrameBridge", () => {
     ]);
     bridge.dispose();
     await expect(pending).resolves.toBeNull();
+  });
+});
+
+describe("FrameBridge の遷移のボタン", () => {
+  const answerSpy = () => ({
+    onAnswer: vi.fn<(results: BridgeTransition[]) => void>(),
+    onTimeout: vi.fn<() => void>(),
+  });
+
+  test("[正常系]探す行を付けて頼みを送り、同じ番号の返事を渡す", () => {
+    const { bridge, sent, receive } = setUp();
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+    const answer = answerSpy();
+
+    expect(bridge.findTransitions([0, 2], answer)).toBe(true);
+    const request = sent.at(-1)?.data as {
+      type: string;
+      requestId: number;
+      rowIndexes: number[];
+    };
+    expect(request).toMatchObject({ type: "transitions", rowIndexes: [0, 2] });
+    const results = [
+      { index: 0, box: { x: 1, y: 2, width: 3, height: 4 } },
+      { index: 2, box: null },
+    ];
+    receive({
+      type: "transitions",
+      requestId: request.requestId + 1,
+      results: [],
+    });
+    receive({ type: "transitions", requestId: request.requestId, results });
+
+    expect(answer.onAnswer).toHaveBeenCalledExactlyOnceWith(results);
+    expect(answer.onTimeout).not.toHaveBeenCalled();
+    bridge.dispose();
+  });
+
+  test("[正常系]時間切れを知らせた後に届いた返事も渡す（探すのに時間のかかる画面でも、新しい橋渡しと分かる）", () => {
+    const { bridge, sent, receive } = setUp();
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+    const answer = answerSpy();
+
+    bridge.findTransitions([0], answer, 50);
+    vi.advanceTimersByTime(50);
+    expect(answer.onTimeout).toHaveBeenCalledTimes(1);
+    const request = sent.at(-1)?.data as { requestId: number };
+    receive({ type: "transitions", requestId: request.requestId, results: [] });
+
+    expect(answer.onAnswer).toHaveBeenCalledExactlyOnceWith([]);
+    bridge.dispose();
+  });
+
+  test("[正常系]つながる前は頼まない。やめたら、待っている頼みの時間切れも知らせない", () => {
+    const { bridge, sent, receive } = setUp();
+    const before = answerSpy();
+    expect(bridge.findTransitions([0], before)).toBe(false);
+    expect(sent).toHaveLength(0);
+
+    bridge.connect(false);
+    receive({ type: "ready", render, focused: false, height: 1 });
+    const pending = answerSpy();
+    bridge.findTransitions([0], pending, 50);
+    bridge.dispose();
+    vi.advanceTimersByTime(50);
+
+    expect(pending.onTimeout).not.toHaveBeenCalled();
+    expect(pending.onAnswer).not.toHaveBeenCalled();
+  });
+
+  test("[正常系]操作のモードで中を押した知らせを渡す", () => {
+    const { bridge, handlers, receive } = setUp();
+    const onInteracted = vi.fn();
+    handlers.onInteracted = onInteracted;
+    bridge.connect(true);
+
+    receive({ type: "interacted" });
+
+    expect(onInteracted).toHaveBeenCalledTimes(1);
+    bridge.dispose();
   });
 });
 

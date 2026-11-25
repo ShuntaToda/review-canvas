@@ -5,6 +5,7 @@ import {
   type BridgeKey,
   type BridgeLocated,
   type BridgeStory,
+  type BridgeTransition,
   type ParentMessage,
   parseBridgeMessage,
   toParentEnvelope,
@@ -36,7 +37,19 @@ export type FrameBridgeHandlers = {
   onBlur: () => void;
   onKeyDown: (key: BridgeKey & { typing: boolean }) => void;
   onKeyUp: (key: string) => void;
+  /** 操作のモードで、利用者が中を押した（知らせない橋渡しもある） */
+  onInteracted?: () => void;
 };
+
+/** 遷移のボタンを探す頼みの返事の受け手 */
+export type TransitionsAnswer = {
+  /** 返事が届いた（時間切れの後に届いたものも渡す。探すのに時間のかかる画面でも、新しい橋渡しと分かるように） */
+  onAnswer: (results: BridgeTransition[]) => void;
+  /** 決まった時間のうちに返事が無かった（探す前の版の橋渡しかもしれない。この後も返事を待つ） */
+  onTimeout: () => void;
+};
+
+type PendingTransitions = TransitionsAnswer & { timer: number };
 
 type Pending<T> = {
   resolve: (value: T) => void;
@@ -65,6 +78,8 @@ export class FrameBridge {
   #captures = new Map<number, Pending<CommentAnchor | null>>();
 
   #locates = new Map<number, Pending<BridgeLocated[] | null>>();
+
+  #transitions = new Map<number, PendingTransitions>();
 
   #timers: number[] = [];
 
@@ -174,6 +189,25 @@ export class FrameBridge {
     });
   }
 
+  /**
+   * ストーリーに書いた遷移のボタンのうち、rowIndexes（目録の行の index）を探してもらう。つながっていなければ頼まずに false。
+   * 探す前の版の橋渡しは答えないので、時間切れ（onTimeout）で見分ける。時間切れの後に届いた返事も onAnswer に渡す
+   */
+  findTransitions(
+    rowIndexes: ReadonlyArray<number>,
+    answer: TransitionsAnswer,
+    timeoutMs = BRIDGE_REQUEST_TIMEOUT_MS,
+  ): boolean {
+    if (this.#state !== "ready") return false;
+    const requestId = this.#nextId();
+    this.#transitions.set(requestId, {
+      ...answer,
+      timer: this.#window.setTimeout(answer.onTimeout, timeoutMs),
+    });
+    this.#send({ type: "transitions", requestId, rowIndexes: [...rowIndexes] });
+    return true;
+  }
+
   /** やめる（待っている返事は null で終える） */
   dispose(): void {
     if (this.#state === "disposed") return;
@@ -184,12 +218,16 @@ export class FrameBridge {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
     }
-    for (const pending of [...this.#locates.values()]) {
+    for (const pending of this.#locates.values()) {
       this.#window.clearTimeout(pending.timer);
       pending.resolve(null);
     }
+    for (const pending of this.#transitions.values()) {
+      this.#window.clearTimeout(pending.timer);
+    }
     this.#captures.clear();
     this.#locates.clear();
+    this.#transitions.clear();
   }
 
   #nextId(): number {
@@ -265,6 +303,17 @@ export class FrameBridge {
         pending.resolve(message.results);
         return;
       }
+      case "transitions": {
+        const pending = this.#transitions.get(message.requestId);
+        if (pending === undefined) return;
+        this.#transitions.delete(message.requestId);
+        this.#window.clearTimeout(pending.timer);
+        pending.onAnswer(message.results);
+        return;
+      }
+      case "interacted":
+        this.#handlers.onInteracted?.();
+        return;
     }
   };
 }

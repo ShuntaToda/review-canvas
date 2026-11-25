@@ -47,7 +47,7 @@ export type TransitionEdge = {
   index: number;
   to: string;
   label?: string;
-  /** いまの幅の画像の上のボタンの矩形（見つからなかった・画像が無ければ null。画面の右の端から出す） */
+  /** ボタンの矩形（画像の画面は撮ったときの位置、動く画面は探した位置。見つからなかった・画像が無ければ null。画面の右の端から出す） */
   rect: ShotTransition | null;
 };
 
@@ -181,13 +181,13 @@ export const STUB_LENGTH = 72;
 /** 曲線の膨らみの下限(px。画面上) */
 const MIN_BEND = 48;
 
-/** 線の出る点（キャンバス上）。ボタンの矩形があり、画面がずれていなければボタンの右の端、無ければ画面の右の端 */
+/** 線の出る点（キャンバス上）。ボタンの矩形があればボタンの右の端、無ければ画面の右の端 */
 export const transitionStart = (
   frame: FramePlacement,
   edge: TransitionEdge,
-  { drifted, edgeOrder }: { drifted: boolean; edgeOrder: number },
+  { edgeOrder }: { edgeOrder: number },
 ): Point => {
-  if (edge.rect !== null && !drifted) {
+  if (edge.rect !== null) {
     return {
       x: frame.x + edge.rect.x + edge.rect.width,
       y: frame.y + edge.rect.y + edge.rect.height / 2,
@@ -273,7 +273,6 @@ export const transitionShape = ({
   from,
   target,
   edge,
-  drifted,
   edgeOrder,
   camera,
   viewport,
@@ -282,13 +281,12 @@ export const transitionShape = ({
   from: FramePlacement;
   target: FramePlacement | undefined;
   edge: TransitionEdge;
-  drifted: boolean;
   edgeOrder: number;
   camera: Camera;
   viewport: Size;
   stubWhenOffscreen: boolean;
 }): TransitionShape => {
-  const startWorld = transitionStart(from, edge, { drifted, edgeOrder });
+  const startWorld = transitionStart(from, edge, { edgeOrder });
   const start = worldToScreen(camera, startWorld);
   if (target === undefined) return stubShape(start, null);
   const { point: endWorld, side } = transitionEnd(target, startWorld);
@@ -335,7 +333,6 @@ export const transitionLines = ({
   rows,
   selectedStoryId,
   storyOf,
-  driftedStoryIds,
   camera,
   viewport,
 }: {
@@ -345,8 +342,6 @@ export const transitionLines = ({
   selectedStoryId: string | undefined;
   /** ページのストーリーを ID で引く（無ければ undefined） */
   storyOf: (storyId: string) => Story | undefined;
-  /** 動く画面が撮ったときとずれた画面 */
-  driftedStoryIds: ReadonlySet<string>;
   camera: Camera;
   viewport: Size;
 }): TransitionLine[] => {
@@ -357,8 +352,7 @@ export const transitionLines = ({
   // 右の端から出す線の、同じ画面の中での順番
   const orders = new Map<string, number>();
   const orderOf = (edge: TransitionEdge): number => {
-    const drifted = driftedStoryIds.has(edge.from);
-    if (edge.rect !== null && !drifted) return 0;
+    if (edge.rect !== null) return 0;
     const order = orders.get(edge.from) ?? 0;
     orders.set(edge.from, order + 1);
     return order;
@@ -394,7 +388,6 @@ export const transitionLines = ({
           from,
           target: targetFrame,
           edge,
-          drifted: driftedStoryIds.has(edge.from),
           edgeOrder,
           camera,
           viewport,

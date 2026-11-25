@@ -3,6 +3,10 @@ import { flushSync } from "react-dom";
 import { type Camera, screenToWorld, type Size } from "../model/camera";
 import type { CameraState } from "../model/camera-state";
 import { findFrame, type RowPlacement } from "../model/layout";
+import {
+  type LiveTransitions,
+  transitionBoxesFor,
+} from "../model/live-transitions";
 import { storyFocusPoint } from "../model/story-link";
 import type { ShotCatalog, ShotTransition } from "../model/story-shots";
 import type { Story } from "../model/storybook";
@@ -70,10 +74,10 @@ export const useTransitions = ({
     { parse: parseTransitionMode, serialize: String },
   );
   const [reachableRoot, setReachableRoot] = useState<string | null>(null);
-  // 動く画面が撮ったときとずれた画面（ボタンの枠を出さず、矢印を画面の右の端から出す）
-  const [driftedStories, setDriftedStories] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  // 動く画面での遷移のボタンの位置（画面ごと。無い画面は撮ったときの位置から出す。model/live-transitions.ts）
+  const [liveStories, setLiveStories] = useState<
+    ReadonlyMap<string, LiveTransitions>
+  >(() => new Map());
   const history = useTransitionHistory();
 
   // 画像を撮っていない幅・ブランチでは出さない。目録を取りに行って失敗したときは、撮っていないとは言わない
@@ -85,10 +89,14 @@ export const useTransitions = ({
         stories.map((story) => story.id),
         {
           rowsOf: (storyId) => shots.transitionsOf(storyId),
-          rectsOf: (storyId) => shots.find(storyId, width)?.transitions,
+          rectsOf: (storyId) =>
+            transitionBoxesFor(
+              shots.find(storyId, width)?.transitions ?? [],
+              liveStories.get(storyId),
+            ),
         },
       ),
-    [stories, shots, width],
+    [stories, shots, width, liveStories],
   );
   const activeRoot = available ? reachableRoot : null;
   const reachable = useMemo(
@@ -129,17 +137,22 @@ export const useTransitions = ({
       setReachableRoot(next);
       return next;
     },
-    /** 遷移を持つボタンの矩形（出さないときは undefined） */
+    /** 撮ったときの、遷移を持つボタンの矩形（出さないときは undefined。動く画面の位置は Frame が決める） */
     boxesOf: shown
       ? (storyId: string): ReadonlyArray<ShotTransition> =>
           shots.find(storyId, width)?.transitions ?? []
       : undefined,
-    onTransitionDrift: (storyId: string, drifted: boolean) =>
-      setDriftedStories((previous) => {
-        if (previous.has(storyId) === drifted) return previous;
-        const next = new Set(previous);
-        if (drifted) next.add(storyId);
-        else next.delete(storyId);
+    /** 目録にある遷移の行（index。出さないときは undefined。動く画面ではこの行のボタンを探す） */
+    rowIndexesOf: shown
+      ? (storyId: string): ReadonlyArray<number> =>
+          shots.transitionsOf(storyId).map((row) => row.index)
+      : undefined,
+    onLiveTransitions: (storyId: string, live: LiveTransitions | null) =>
+      setLiveStories((previous) => {
+        if ((previous.get(storyId) ?? null) === live) return previous;
+        const next = new Map(previous);
+        if (live === null) next.delete(storyId);
+        else next.set(storyId, live);
         return next;
       }),
     /** ページを替えた（札で飛んだ見え方・つながる画面だけの起点は、ページの中のもの） */
@@ -174,7 +187,6 @@ export const useTransitions = ({
             rows,
             selectedStoryId,
             storyOf,
-            driftedStoryIds: driftedStories,
             camera,
             viewport,
           })

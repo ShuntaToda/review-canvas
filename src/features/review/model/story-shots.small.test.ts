@@ -13,6 +13,7 @@ import {
   SHOT_ELEMENT_SELECTOR,
   SHOT_ELEMENT_TEXT_LENGTH,
   shotUrlAt,
+  transitionFromOf,
 } from "./story-shots";
 
 const shot = (overrides: Record<string, unknown> = {}) => ({
@@ -768,5 +769,42 @@ describe("measureTransitionCandidates", () => {
     expect(
       measureTransitionCandidates(byId("skip"), readers(), null, null),
     ).toStrictEqual([]);
+  });
+});
+
+describe("transitionFromOf", () => {
+  test("[正常系]role・text・testId のどれか 1 つをボタンの決め方にし、role と name の前後の空白を除き、heading は空白を除いた先頭にする", () => {
+    expect(
+      transitionFromOf({
+        role: " button ",
+        name: " 確認へ進む ",
+        heading: "お 届け先",
+      }),
+    ).toStrictEqual({
+      kind: "role",
+      role: "button",
+      name: "確認へ進む",
+      heading: "お届け先",
+    });
+    expect(transitionFromOf({ text: " 注文履歴 " })).toStrictEqual({
+      kind: "text",
+      text: "注文履歴",
+      heading: null,
+    });
+    expect(transitionFromOf({ testId: "next" })).toStrictEqual({
+      kind: "testId",
+      testId: "next",
+      heading: null,
+    });
+  });
+
+  test.each([
+    ["from が無い", null],
+    ["どれも無い", {}],
+    ["role に name が無い", { role: "button" }],
+    ["text に name を付けた", { text: "次へ", name: "次へ" }],
+    ["2 つ書いた", { role: "button", name: "次へ", testId: "next" }],
+  ])("[異常系]%s行は書き方が違う（null）", (_label, from) => {
+    expect(transitionFromOf(from)).toBeNull();
   });
 });

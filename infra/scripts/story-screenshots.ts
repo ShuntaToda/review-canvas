@@ -12,7 +12,6 @@ import {
 import {
   collectShotElements,
   createShotTextReaders,
-  INTERACTIVE_SELECTORS,
   isShotPath,
   MAX_MEASURED_NODES,
   MAX_SHOT_ELEMENTS,
@@ -33,7 +32,12 @@ import {
   type ShotTransition,
   type StoryShot,
   type StoryTransition,
+  TRANSITION_CLIMB_SELECTOR,
+  TRANSITION_ROLES,
+  TRANSITION_SPEC_TEXT_LENGTH,
   type TransitionCandidate,
+  type TransitionFrom,
+  type TransitionRole,
 } from "../../src/features/review/model/story-shots";
 import {
   checkTransitionSpecs,
@@ -42,8 +46,6 @@ import {
   placeTransition,
   toTransitionCandidates,
   toTransitionSpecs,
-  TRANSITION_SPEC_TEXT_LENGTH,
-  type TransitionFrom,
   type TransitionProblem,
   type TransitionProblemGroup,
   type TransitionLookup,
@@ -401,9 +403,6 @@ const TRANSITION_FINDER_SCRIPT = `(() => {
     );
 })()`;
 
-/** 文字で探したときに、さかのぼる押せる要素 */
-const CLIMB_SELECTOR = INTERACTIVE_SELECTORS.join(", ");
-
 type TransitionFinder = (
   elements: Element[],
   options: { heading: string | null; climb: string | null },
@@ -411,91 +410,16 @@ type TransitionFinder = (
 
 type AriaRole = Parameters<Page["getByRole"]>[0];
 
-/** Playwright の getByRole が受け付ける役割（型と同じ役割の集まり。足りない・余るものは型の検査で落ちる） */
-const ARIA_ROLES: Readonly<Record<AriaRole, true>> = {
-  alert: true,
-  alertdialog: true,
-  application: true,
-  article: true,
-  banner: true,
-  blockquote: true,
-  button: true,
-  caption: true,
-  cell: true,
-  checkbox: true,
-  code: true,
-  columnheader: true,
-  combobox: true,
-  complementary: true,
-  contentinfo: true,
-  definition: true,
-  deletion: true,
-  dialog: true,
-  directory: true,
-  document: true,
-  emphasis: true,
-  feed: true,
-  figure: true,
-  form: true,
-  generic: true,
-  grid: true,
-  gridcell: true,
-  group: true,
-  heading: true,
-  img: true,
-  insertion: true,
-  link: true,
-  list: true,
-  listbox: true,
-  listitem: true,
-  log: true,
-  main: true,
-  marquee: true,
-  math: true,
-  meter: true,
-  menu: true,
-  menubar: true,
-  menuitem: true,
-  menuitemcheckbox: true,
-  menuitemradio: true,
-  navigation: true,
-  none: true,
-  note: true,
-  option: true,
-  paragraph: true,
-  presentation: true,
-  progressbar: true,
-  radio: true,
-  radiogroup: true,
-  region: true,
-  row: true,
-  rowgroup: true,
-  rowheader: true,
-  scrollbar: true,
-  search: true,
-  searchbox: true,
-  separator: true,
-  slider: true,
-  spinbutton: true,
-  status: true,
-  strong: true,
-  subscript: true,
-  superscript: true,
-  switch: true,
-  tab: true,
-  table: true,
-  tablist: true,
-  tabpanel: true,
-  term: true,
-  textbox: true,
-  time: true,
-  timer: true,
-  toolbar: true,
-  tooltip: true,
-  tree: true,
-  treegrid: true,
-  treeitem: true,
-};
+/**
+ * Playwright の getByRole が受け付ける役割。一覧は動く画面で探すときと同じもの（story-shots.ts の TRANSITION_ROLES）を使い、
+ * Playwright の AriaRole とそろうことを型で縛る（余る役割は satisfies、足りない役割は Record への代入で、型の検査が落ちる）
+ */
+const ARIA_ROLES: Readonly<Record<AriaRole, true>> = Object.fromEntries(
+  (TRANSITION_ROLES satisfies ReadonlyArray<AriaRole>).map((role) => [
+    role,
+    true,
+  ]),
+) as Record<TransitionRole, true>;
 
 const isAriaRole = (role: string): role is AriaRole =>
   Object.hasOwn(ARIA_ROLES, role);
@@ -546,7 +470,7 @@ const findTransitionCandidates = async (
           {
             fn: finder,
             heading: from.heading,
-            climb: from.kind === "text" ? CLIMB_SELECTOR : null,
+            climb: from.kind === "text" ? TRANSITION_CLIMB_SELECTOR : null,
           },
         );
         found.set(index, toTransitionCandidates(raw));
