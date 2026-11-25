@@ -205,21 +205,23 @@ describe("Canvas で画面をクリックして選ぶ", () => {
     expect(onSelectStory).not.toHaveBeenCalled();
   });
 
-  test("[正常系]「コメント」「操作」の道具で、状態の名前の行から押して動かしてから離すと選ばない", () => {
+  test("[正常系]「コメント」「操作」の道具で、状態の名前の行から押して 1px ずつ動かし、押し始めから 2px を超えてから離すと選ばない", () => {
     for (const tool of ["comment", "interact"] as const) {
       const view = renderCanvas({ tool });
       const label = labelOf(LIST.id);
       fireEvent.pointerDown(label, { pointerId: 1, button: 0, ...IN_LIST });
-      fireEvent.pointerMove(label, {
-        pointerId: 1,
-        clientX: IN_LIST.clientX,
-        clientY: IN_LIST.clientY + 30,
-      });
+      for (let step = 1; step <= 4; step += 1) {
+        fireEvent.pointerMove(label, {
+          pointerId: 1,
+          clientX: IN_LIST.clientX,
+          clientY: IN_LIST.clientY + step,
+        });
+      }
       fireEvent.pointerUp(label, {
         pointerId: 1,
         button: 0,
         clientX: IN_LIST.clientX,
-        clientY: IN_LIST.clientY + 30,
+        clientY: IN_LIST.clientY + 4,
       });
       view.unmount();
     }
