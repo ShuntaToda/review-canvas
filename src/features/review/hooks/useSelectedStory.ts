@@ -1,20 +1,28 @@
 import { useState } from "react";
+import { resolveSelectedStory } from "../model/selected-story";
 import type { StorySource } from "../model/sources";
 
 /**
- * 「画面のつながり」の選んだ画面（ac1）。candidate は、開いているスレッドの画面か、真ん中に見えている画面（すき間なら undefined）。
- * すき間のあいだは、直前の画面のままにする。ページを替えたら、前のページの画面を持ち越さない
+ * 「画面のつながり」の選んだ画面（#47。決まり方は model/selected-story.ts）。
+ * 真ん中がすき間のあいだに使う「直前に真ん中にあった画面」を覚える。ページを替えたら、前のページの画面を持ち越さない
  */
 export const useSelectedStory = (
   page: StorySource,
-  candidate: string | undefined,
+  candidates: {
+    locked: string | undefined;
+    clicked: string | undefined;
+    thread: string | undefined;
+    center: string | undefined;
+  },
 ): string | undefined => {
-  const [last, setLast] = useState({ page, storyId: candidate });
-  if (
-    last.page !== page ||
-    (candidate !== undefined && candidate !== last.storyId)
-  ) {
-    setLast({ page, storyId: candidate });
+  const [last, setLast] = useState<{
+    page: StorySource;
+    storyId: string | undefined;
+  }>({ page, storyId: candidates.center });
+  const lastCenter = last.page === page ? last.storyId : undefined;
+  const nextLast = candidates.center ?? lastCenter;
+  if (last.page !== page || nextLast !== last.storyId) {
+    setLast({ page, storyId: nextLast });
   }
-  return candidate ?? (last.page === page ? last.storyId : undefined);
+  return resolveSelectedStory({ ...candidates, lastCenter });
 };

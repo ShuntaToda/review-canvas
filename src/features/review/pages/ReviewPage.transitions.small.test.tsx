@@ -94,6 +94,8 @@ const fixtures = vi.hoisted(() => {
   /** 目録（kind: transitions は遷移あり、old は遷移を残す前の版、none は目録が無い、failed は読めなかった） */
   const state = {
     manifest: "transitions" as "transitions" | "old" | "none" | "failed",
+    /** feature/cart の Storybook に無い画面 */
+    missingOnFeature: [] as string[],
   };
   /** changed: 画像の名前（中身のハッシュ）が既定のブランチと違う画面 */
   const manifest = (changed: ReadonlyArray<string> = []) =>
@@ -159,9 +161,16 @@ vi.mock("../hooks/useReviewData", async (importOriginal) => {
       error: undefined,
       retry: () => undefined,
     }),
-    useStories: () =>
+    useStories: (base: string) =>
       loaded({
-        shop: { kind: "ok" as const, stories: fixtures.stories },
+        shop: {
+          kind: "ok" as const,
+          stories: base.includes("/sb/feature/cart/")
+            ? fixtures.stories.filter(
+                (s) => !fixtures.state.missingOnFeature.includes(s.id),
+              )
+            : fixtures.stories,
+        },
         blog: { kind: "ok" as const, stories: fixtures.blogStories },
       }),
     // feature/cart では Shop/List の画像だけが既定のブランチ（main）と違う
@@ -221,7 +230,21 @@ vi.mock(
         containerRef,
         onCameraChange,
         onPlace,
+        selectedStoryId,
+        lockedStoryId,
+        onSelectStory,
+        onToggleLock,
+        onBackgroundClick,
+        onMeasure,
+        onOpenThread,
       }: {
+        selectedStoryId: string | undefined;
+        lockedStoryId: string | undefined;
+        onSelectStory: (storyId: string) => void;
+        onToggleLock: (storyId: string) => void;
+        onBackgroundClick: () => void;
+        onMeasure: (storyId: string, height: number) => void;
+        onOpenThread: (threadId: string) => void;
         onPlace: (
           storyId: string,
           point: { x: number; y: number },
@@ -238,6 +261,8 @@ vi.mock(
           data-testid="canvas"
           data-camera={JSON.stringify(camera)}
           data-highlight={linkHighlight?.storyId ?? ""}
+          data-selected={selectedStoryId ?? ""}
+          data-locked={lockedStoryId ?? ""}
           data-frames={JSON.stringify(
             Object.fromEntries(
               rows.flatMap((row) =>
@@ -286,6 +311,39 @@ vi.mock(
           >
             一覧にピンを置く
           </button>
+          {rows.flatMap((row) =>
+            row.frames.map(({ story }) => (
+              <span key={story.id}>
+                <button type="button" onClick={() => onSelectStory(story.id)}>
+                  {story.id} をクリック
+                </button>
+                <button type="button" onClick={() => onToggleLock(story.id)}>
+                  {story.id} の固定
+                </button>
+                {/* 「コメント」の道具でクリック・キーボードで置いたときに、Frame が渡すもの（Canvas.small.test.tsx で確かめる） */}
+                <button
+                  type="button"
+                  onClick={() => onPlace(story.id, { x: 10, y: 10 }, null)}
+                >
+                  {story.id} にコメントを置く
+                </button>
+              </span>
+            )),
+          )}
+          <button type="button" onClick={onBackgroundClick}>
+            何も無い所をクリック
+          </button>
+          <button
+            type="button"
+            onClick={() => onMeasure("shop-list--default", 2400)}
+          >
+            一覧の高さを測り直す
+          </button>
+          {["01", "02", "03"].map((id) => (
+            <button key={id} type="button" onClick={() => onOpenThread(id)}>
+              #{id} のピンを開く
+            </button>
+          ))}
         </div>
       ),
     }) satisfies typeof CanvasModule,
@@ -364,6 +422,7 @@ class FakeResizeObserver {
 beforeEach(() => {
   window.localStorage.clear();
   fixtures.state.manifest = "transitions";
+  fixtures.state.missingOnFeature = [];
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   vi.stubGlobal("matchMedia", () => ({ matches: false }));
 });
@@ -744,5 +803,311 @@ describe("ReviewPage の画面のつながり", () => {
     fireEvent.click(reachableOnly());
     expect(canvasTitles().indexOf("Shop/Done")).toBe(2);
     expect(screenPositionOf("shop-done--default")).toStrictEqual(before);
+  });
+});
+
+describe("ReviewPage の選んだ画面（クリック・固定）", () => {
+  const LIST_ID = "shop-list--default";
+  const FORM_ID = "shop-form--default";
+  const FILLED_ID = "shop-form--filled";
+  const DONE_ID = "shop-done--default";
+  const ADMIN_ID = "shop-admin--default";
+
+  const originalSetPointerCapture = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "setPointerCapture",
+  );
+  beforeEach(() => {
+    // jsdom は pointer capture を持たない（ミニマップが使う）
+    Object.defineProperty(Element.prototype, "setPointerCapture", {
+      configurable: true,
+      writable: true,
+      value: () => undefined,
+    });
+  });
+  afterEach(() => {
+    if (originalSetPointerCapture === undefined) {
+      Reflect.deleteProperty(Element.prototype, "setPointerCapture");
+    } else {
+      Object.defineProperty(
+        Element.prototype,
+        "setPointerCapture",
+        originalSetPointerCapture,
+      );
+    }
+  });
+
+  const selected = () => canvas().dataset["selected"];
+  const locked = () => canvas().dataset["locked"];
+  const press = (name: string) =>
+    fireEvent.click(screen.getByRole("button", { name }));
+  const clickStory = (storyId: string) => press(`${storyId} をクリック`);
+  const toggleLock = (storyId: string) => press(`${storyId} の固定`);
+  /** 左の一覧で印の付いた状態（title は「<画面の名前> / <状態の名前>」） */
+  const currentInList = () =>
+    [
+      ...within(
+        screen.getByRole("complementary", { name: "画面の一覧" }),
+      ).queryAllByRole("button", { current: true }),
+    ].map((button) => button.getAttribute("title"));
+
+  test("[正常系]画面をクリックするとその画面を選び、一覧の印もその画面に付く。URL の story= は真ん中の画面のまま。「コメントするには…」は出さない", () => {
+    open(LIST);
+    expect(selected()).toBe(LIST_ID);
+    expect(currentInList()).toStrictEqual(["Shop/List / Default"]);
+
+    clickStory(FILLED_ID);
+
+    expect(selected()).toBe(FILLED_ID);
+    expect(currentInList()).toStrictEqual(["Shop/Form / Filled"]);
+    expect(urlParams().get("story")).toBe(LIST_ID);
+    expect(screen.queryByText(/コメントするには/)).toBeNull();
+    // 選んだ画面から出る線に札が付く
+    expect(label("→ Shop/List／Default")).not.toBeNull();
+  });
+
+  test("[正常系]固定中は、ほかの画面のクリック・スレッドを開いても固定のまま。外すと、固定中のクリックは数えず、スレッド・真ん中で決まる", () => {
+    open(LIST);
+    toggleLock(FORM_ID);
+    expect(locked()).toBe(FORM_ID);
+    expect(selected()).toBe(FORM_ID);
+    expect(currentInList()).toStrictEqual(["Shop/Form / Default"]);
+
+    clickStory(ADMIN_ID);
+    expect(selected()).toBe(FORM_ID);
+    press("#02 のピンを開く");
+    expect(selected()).toBe(FORM_ID);
+    expect(urlParams().get("story")).toBeNull();
+
+    toggleLock(FORM_ID);
+    expect(locked()).toBe("");
+    // 開いているスレッド（Shop/Done）の画面。固定中にクリックした Shop/Admin ではない
+    expect(selected()).toBe(DONE_ID);
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(selected()).toBe(LIST_ID);
+  });
+
+  test("[正常系]別の画面の「固定」で固定が移り、キャンバスを動かしても外れない", () => {
+    open(LIST);
+    toggleLock(FORM_ID);
+    toggleLock(DONE_ID);
+    expect(locked()).toBe(DONE_ID);
+    expect(selected()).toBe(DONE_ID);
+
+    press("キャンバスを動かす");
+    press("縮小");
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  const moves: ReadonlyArray<{
+    name: string;
+    before?: () => void;
+    move: () => void;
+  }> = [
+    { name: "ドラッグ・ホイール", move: () => press("キャンバスを少し動かす") },
+    {
+      name: "矢印キー",
+      move: () => fireEvent.keyDown(document.body, { key: "ArrowDown" }),
+    },
+    { name: "拡大縮小のボタン", move: () => press("縮小") },
+    {
+      name: "拡大縮小の近道",
+      move: () => fireEvent.keyDown(document.body, { key: "-" }),
+    },
+    { name: "全体を表示", move: () => press("全体を表示") },
+    {
+      name: "ミニマップ",
+      move: () =>
+        fireEvent.pointerDown(
+          screen.getByRole("img", { name: "全体の縮図（押した場所へ移動）" }),
+          { pointerId: 1, clientX: 10, clientY: 10 },
+        ),
+    },
+    {
+      name: "一覧で画面を選ぶ",
+      move: () => fireEvent.click(screen.getByTitle("Shop/Admin / Default")),
+    },
+    {
+      name: "札で飛ぶ",
+      move: () => fireEvent.click(label("→ Shop/Form／Filled")),
+    },
+    {
+      name: "「← 戻る」",
+      before: () =>
+        fireEvent.click(label("在庫があるとき → Shop/Form／Default")),
+      move: () => fireEvent.click(label("Shop/List／Defaultへ戻る")),
+    },
+    {
+      name: "コメントの一覧でスレッドへ移る",
+      move: () => fireEvent.click(threadButton("一覧の指摘")),
+    },
+    {
+      name: "J でスレッドへ移る",
+      move: () => fireEvent.keyDown(document.body, { key: "j" }),
+    },
+    {
+      name: "見せる範囲を切り替える",
+      move: () =>
+        fireEvent.click(
+          screen.getByRole("button", { name: "Shop だけを表示" }),
+        ),
+    },
+    {
+      name: "「つながる画面だけ」を切り替える",
+      move: () => {
+        openPicker();
+        fireEvent.click(reachableOnly());
+      },
+    },
+  ];
+
+  test.each(moves)(
+    "[正常系]クリックで選んだ後、$name でキャンバスを動かすと外れる",
+    ({ before, move }) => {
+      open(LIST);
+      before?.();
+      clickStory(FORM_ID);
+      expect(selected()).toBe(FORM_ID);
+
+      move();
+
+      expect(selected()).not.toBe(FORM_ID);
+    },
+  );
+
+  test("[正常系]「コメント」の道具でコメントを置くと、その画面を選ぶ。固定中に置いても固定した画面のまま", () => {
+    open(LIST);
+    press(`${DONE_ID} にコメントを置く`);
+    expect(
+      screen.queryByRole("dialog", { name: "新しいコメント" }),
+    ).not.toBeNull();
+    expect(selected()).toBe(DONE_ID);
+
+    toggleLock(FORM_ID);
+    press(`${ADMIN_ID} にコメントを置く`);
+    expect(selected()).toBe(FORM_ID);
+    toggleLock(FORM_ID);
+    // 固定中に置いた画面は覚えない（固定を外すと、前にクリックした（置いた）画面）
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  test("[正常系]高さを測り直してキャンバスが動いても、クリックで選んだ画面は外れない（人の操作でなく自動で寄せる道を足したときに、クリックの選択を外さない守りでもある）", () => {
+    open(LIST);
+    clickStory(DONE_ID);
+
+    press("一覧の高さを測り直す");
+
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  test("[正常系]スレッド A を開いた後に画面 B をクリックすると B、その後キャンバスを動かすと A。B をクリックした後にスレッド A を開くと A", () => {
+    open(LIST);
+    press("#02 のピンを開く");
+    expect(selected()).toBe(DONE_ID);
+
+    clickStory(ADMIN_ID);
+    expect(selected()).toBe(ADMIN_ID);
+    press("キャンバスを少し動かす");
+    expect(selected()).toBe(DONE_ID);
+
+    clickStory(ADMIN_ID);
+    press("#02 のピンを開く");
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  test("[正常系]何も無い所をクリックすると、クリックの選択は外れてスレッドを閉じ、固定は残る", () => {
+    open(LIST);
+    press("#02 のピンを開く");
+    clickStory(ADMIN_ID);
+
+    press("何も無い所をクリック");
+    expect(selected()).toBe(LIST_ID);
+    expect(urlParams().has("comment")).toBe(false);
+
+    toggleLock(FORM_ID);
+    press("何も無い所をクリック");
+    expect(locked()).toBe(FORM_ID);
+    expect(selected()).toBe(FORM_ID);
+  });
+
+  test("[境界値]何も無い所をクリックしたとき真ん中がすき間なら、直前に真ん中にあった画面（無ければ選ばない）", () => {
+    open(LIST);
+    // 真ん中を画面の無い所（左上の外）へ
+    fireEvent.click(screen.getByRole("button", { name: /いまの倍率/ }));
+    for (let i = 0; i < 40; i += 1) {
+      fireEvent.keyDown(document.body, { key: "ArrowLeft", shiftKey: true });
+    }
+    expect(urlParams().get("story")).toBe(LIST_ID);
+    clickStory(DONE_ID);
+
+    press("何も無い所をクリック");
+    expect(selected()).toBe(LIST_ID);
+  });
+
+  test("[正常系]固定した画面・クリックした画面が、絞り込みや「つながる画面だけ」で並ばなくなると外れ、並び直しても戻らない", () => {
+    open(LIST);
+    const search = screen.getByRole<HTMLInputElement>("searchbox", {
+      name: "画面名で絞り込む",
+    });
+    toggleLock(ADMIN_ID);
+    clickStory(DONE_ID);
+    fireEvent.change(search, { target: { value: "List" } });
+    expect(locked()).toBe("");
+    expect(selected()).toBe(LIST_ID);
+    fireEvent.change(search, { target: { value: "" } });
+    expect(locked()).toBe("");
+    expect(selected()).toBe(LIST_ID);
+
+    // 「つながる画面だけ」の起点を、固定した画面（Shop/List）から行き止まり（Shop/Done）へ札で移すと、Shop/List は並ばなくなる
+    toggleLock(LIST_ID);
+    openPicker();
+    fireEvent.click(reachableOnly());
+    expect(locked()).toBe(LIST_ID);
+    fireEvent.click(label("<img src=x>注文 → Shop/Done／Default"));
+    expect(canvasTitles()).toStrictEqual(["Shop/Done"]);
+    expect(locked()).toBe("");
+    expect(selected()).toBe(DONE_ID);
+  });
+
+  test("[正常系]ページを替えると固定が外れ、元のページへ戻っても持ち越さない", () => {
+    open(LIST);
+    toggleLock(FORM_ID);
+    const pageSelect = screen.getByRole("combobox", { name: "ページ" });
+
+    fireEvent.change(pageSelect, { target: { value: "blog" } });
+    expect(locked()).toBe("");
+    fireEvent.change(pageSelect, { target: { value: "shop" } });
+    expect(locked()).toBe("");
+  });
+
+  test("[正常系]ブランチを替えても、替えた先に同じ画面があれば固定を残し、無ければ外す。URL には載せない", () => {
+    fixtures.state.missingOnFeature = [ADMIN_ID];
+    open(LIST);
+    const branchSelect = () =>
+      screen.getByRole("combobox", { name: "ブランチ" });
+    toggleLock(FORM_ID);
+
+    fireEvent.change(branchSelect(), { target: { value: "feature/cart" } });
+    expect(urlParams().get("branch")).toBe("feature/cart");
+    expect(locked()).toBe(FORM_ID);
+    expect(selected()).toBe(FORM_ID);
+    expect(window.location.search).not.toContain(FORM_ID);
+
+    fireEvent.change(branchSelect(), { target: { value: "main" } });
+    toggleLock(ADMIN_ID);
+    fireEvent.change(branchSelect(), { target: { value: "feature/cart" } });
+    expect(locked()).toBe("");
+  });
+
+  test("[正常系]「画面のつながり」を「出さない」にしても、選んだ画面（枠を出す画面）をキャンバスに渡す", () => {
+    open(LIST);
+    openPicker();
+    fireEvent.click(screen.getByRole("radio", { name: "出さない" }));
+
+    clickStory(FILLED_ID);
+
+    expect(lineRoles()).toStrictEqual([]);
+    expect(selected()).toBe(FILLED_ID);
   });
 });

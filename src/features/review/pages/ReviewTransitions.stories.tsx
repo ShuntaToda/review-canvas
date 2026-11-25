@@ -31,6 +31,9 @@ const SHOWN_AT_768: [string, ...string[]] = [
 const EDGE_AT_768 = "shop-checkout-confirm--default";
 const EDGE_SCROLL = 200;
 
+/** 固定する画面（Shop/Checkout/Cart／With Items）の見出しの「固定」。読み上げの名前は固定中も同じ */
+const LOCK_CART = "Shop/Checkout/Cart / With Items を固定";
+
 /** 上の帯の「画面のつながり」（名前は「画面のつながり: <いまの出し方>」） */
 const PICKER_NAME = /^画面のつながり/;
 
@@ -211,6 +214,48 @@ export const Unavailable: Story = {
       ...SHOWN_AT_768,
       EDGE_AT_768,
     );
+    await settle();
+  },
+};
+
+/**
+ * 25% まで縮め、Shop/Checkout/Cart／With Items の見出しの「固定」を押した。選んだ画面はその画面のまま（枠と札がその画面に出る）。
+ * 幅 375 の画面を 25% で見ても、「固定」は見出しの行の中に見えて押せる
+ */
+export const Locked: Story = {
+  name: "固定中",
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await waitForShot(canvas, "Shop/OrderForm / Default");
+    // 選んだ画面は動く画面に切り替わる。描き終えてから縮める（縮めた後も、読み込んだ画面は残る）
+    await waitForLiveFrame(canvasElement, "shop-orderform--default");
+    const zoomOut = canvas.getByRole("button", { name: "縮小" });
+    await userEvent.click(zoomOut);
+    await userEvent.click(zoomOut);
+    await waitForButton(canvas, "いまの倍率 25%（押すと100%）");
+
+    const lock = await waitForButton(canvas, LOCK_CART);
+    const row = lock.closest("[data-frame-label]");
+    await expect(row, "固定は状態の名前の行にある").not.toBeNull();
+    const lockBox = lock.getBoundingClientRect();
+    const rowBox = row?.getBoundingClientRect();
+    await expect(
+      rowBox !== undefined &&
+        lockBox.width > 0 &&
+        lockBox.left >= rowBox.left &&
+        lockBox.right <= rowBox.right,
+      "固定が行の中に見えている",
+    ).toBe(true);
+    await userEvent.click(lock);
+    await expect(lock).toHaveAttribute("aria-pressed", "true");
+    await expect(lock).toHaveTextContent("固定中");
+    await expect(
+      canvasElement.querySelector(
+        '[data-story-frame="shop-checkout-cart--with-items"] [data-selected-frame]',
+      ),
+      "固定した画面に枠が出る",
+    ).not.toBeNull();
+    await waitForButton(canvas, /→ Shop\/OrderForm／Default$/);
+    await waitForLiveFrame(canvasElement, "shop-orderform--default");
     await settle();
   },
 };

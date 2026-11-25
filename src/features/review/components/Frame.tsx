@@ -125,6 +125,12 @@ type FrameProps = {
   onCopyStoryLink: (storyId: string) => void;
   /** 画面を指すリンクで開いたときの枠（この画面に出さなければ null） */
   linkHighlight: LinkHighlight | null;
+  /** 「画面のつながり」の選んだ画面か（ふちに枠を出す） */
+  selected: boolean;
+  /** 選んだ画面をこの画面に固定しているか（見出しの「固定」を「固定中」にする） */
+  locked: boolean;
+  /** 見出しの「固定」「固定中」を押した */
+  onToggleLock: (storyId: string) => void;
   /** 撮ったときの、遷移を持つボタンの矩形（画面のつながりを出さないとき・ボタンが無ければ空） */
   transitionBoxes?: ReadonlyArray<ShotTransition>;
   /** 目録にある遷移の行（index。画面のつながりを出さないときは空。動く画面ではこの行のボタンを探す） */
@@ -194,6 +200,9 @@ export const Frame = ({
   onOpenThread,
   onCopyStoryLink,
   linkHighlight,
+  selected,
+  locked,
+  onToggleLock,
   onActivate,
   pendingPlace,
   onPendingPlace,
@@ -844,6 +853,8 @@ export const Frame = ({
       {showLabel && (
         <div
           className="absolute bottom-full left-0 flex items-center gap-1 overflow-hidden pb-1 text-xs text-ink-sub"
+          // 行の文字・空きを押すと、この画面を選ぶ（Canvas が押した所を見る。行の中のボタンは押しても選ばない）
+          data-frame-label={story.id}
           style={{
             width: w * zoom,
             height: FRAME_LABEL_SCREEN_HEIGHT,
@@ -852,6 +863,30 @@ export const Frame = ({
           }}
         >
           <span className="truncate font-medium">{story.name}</span>
+          {/* 状態の名前のすぐ後ろに置く（行が狭いと、名前が先に省略され、後ろの札・ボタンから見えなくなるので、固定は残る）。
+              アイコンは付けない（コメントのピンと取り違えないため） */}
+          <button
+            type="button"
+            className={[
+              "shrink-0 rounded px-1",
+              locked
+                ? "bg-accent text-white"
+                : "text-muted hover:bg-panel hover:text-accent",
+            ].join(" ")}
+            aria-label={`${story.title} / ${story.name} を固定`}
+            aria-pressed={locked}
+            title={
+              locked
+                ? "固定を外します"
+                : "選んだ画面をこの画面に固定します。キャンバスを動かしても、ほかの画面をクリックしても変わりません"
+            }
+            // 「Storybook で開く」と同じく、キャンバスの中を Tab で巡らせない
+            tabIndex={-1}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onToggleLock(story.id)}
+          >
+            {locked ? "固定中" : "固定"}
+          </button>
           {interrupted && (
             <button
               type="button"
@@ -1011,6 +1046,18 @@ export const Frame = ({
               height: highlightBox.height,
               outline: `${2 / zoom}px solid var(--color-accent)`,
               zIndex: 5,
+            }}
+          />
+        )}
+        {selected && (
+          // 選んだ画面の枠。画面のふちの外側にすき間なく、表示の上で 2px（リンクで開いたときの枠は、太さと位置で見分ける）
+          <div
+            aria-hidden
+            data-selected-frame
+            className="pointer-events-none absolute inset-0"
+            style={{
+              outline: `${2 / zoom}px solid var(--color-accent)`,
+              zIndex: 6,
             }}
           />
         )}

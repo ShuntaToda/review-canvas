@@ -91,6 +91,12 @@ import { buildMarkdown } from "../model/markdown";
 import { framePointToWorld } from "../model/pin-point";
 import { popoverPosition } from "../model/popover";
 import {
+  clickStory,
+  type StoryOnPage,
+  storyOnCanvas,
+  toggleLock,
+} from "../model/selected-story";
+import {
   isImeComposing,
   isTypingTarget,
   resolveShortcut,
@@ -162,12 +168,13 @@ type ReviewWorkspaceProps = {
   published: ReviewMetaBranch | null;
   /** Storybook を置いてあるブランチ（切り替える欄の行） */
   publishedBranches: ReadonlyArray<ReviewMetaBranch>;
-  /** ブランチを切り替える（いまのページと、真ん中に見えている画面・見せる範囲は保つ） */
+  /** ブランチを切り替える（いまのページと、真ん中に見えている画面・見せる範囲・固定した画面は保つ） */
   onBranchChange: (
     branch: string,
     page: StorySource,
     story: string | undefined,
     storyScope: string | undefined,
+    lockedStoryId: string | undefined,
   ) => void;
   /** ページごとのストーリー（設定のページの ID ごと） */
   stories: Readonly<Record<StorySource, Story[]>>;
@@ -185,6 +192,8 @@ type ReviewWorkspaceProps = {
   /** ページごとの、比べる相手の画像（見比べる。比べないとき・目録の無いページは空。読み終えるまでは null） */
   baseShots: Readonly<Record<StorySource, ShotCatalog>> | null;
   initialUrl: UrlState;
+  /** 開いたときに固定しておく画面（ブランチを替える前に固定していた画面。開いたページに並ばなければ外す） */
+  initialLockedStoryId?: string | undefined;
   /** この作業の画面をどう作ったか（リンクの幅・開いたときの枠は、URL から開いた最初の 1 回だけ） */
   openedBy: WorkspaceOpening;
   initialComments: Comment[];
@@ -211,6 +220,7 @@ export const ReviewWorkspace = ({
   onCompareChoiceChange,
   baseShots,
   initialUrl,
+  initialLockedStoryId,
   openedBy,
   initialComments,
   me,
@@ -336,11 +346,36 @@ export const ReviewWorkspace = ({
     setStoryListOpenState(open);
   };
 
-  const [cameraStates, setCameraStates] = useState(initial.cameras);
+  // 見え方を決め直すのは、人の操作で動かす moveCameraByUser（下）を通す。じかに決め直すと、クリックで選んだ画面が残る
+  const [cameraStates, setCameraStatesKeepingSelection] = useState(
+    initial.cameras,
+  );
+  // 選んだ画面を固定した画面・クリックで選んだ画面（model/selected-story.ts）
+  const [locked, setLocked] = useState<StoryOnPage | null>(
+    initialLockedStoryId === undefined
+      ? null
+      : { source: initial.page, storyId: initialLockedStoryId },
+  );
+  const [clicked, setClicked] = useState<StoryOnPage | null>(null);
+  /**
+   * 人の操作でキャンバスを動かす（ドラッグ・ホイール・拡大縮小・一覧や札で移る・戻る・寄せ直しなど）。クリックで選んだ画面を外す（#47）。
+   * 高さの測り直し・ピンを追って寄るときは、見え方の決め方を置き換えずに描き直すので、ここを通らず外れない
+   */
+  const moveCameraByUser: typeof setCameraStatesKeepingSelection = (update) => {
+    setClicked(null);
+    setCameraStatesKeepingSelection(update);
+  };
   const [heights, setHeights] = useState<Record<string, number>>({});
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(
+  // スレッドは openThread で開き、closeThread で閉じる（開くときだけクリックで選んだ画面を外す）
+  const [activeThreadId, setActiveThreadIdState] = useState<string | null>(
     initial.threadId,
   );
+  /** スレッドを開く。クリックで選んだ画面は外す（後にした方が勝つ。開いた後に画面をクリックすれば、その画面を選ぶ） */
+  const openThread = (threadId: string) => {
+    setActiveThreadIdState(threadId);
+    setClicked(null);
+  };
+  const closeThread = () => setActiveThreadIdState(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   // 読み込んだ画面でピンの要素を探した結果（locatedKey ごと）。見つけたピンは要素に合わせて置く
   const [located, setLocated] = useState<Readonly<Record<string, LocatedPin>>>(
@@ -506,7 +541,7 @@ export const ReviewWorkspace = ({
   });
 
   const updateCamera = (update: (current: Camera) => Camera) =>
-    setCameraStates((previous) => ({
+    moveCameraByUser((previous) => ({
       ...previous,
       [page]: {
         kind: "fixed",
@@ -540,17 +575,37 @@ export const ReviewWorkspace = ({
       ? undefined
       : frameAt(rows, screenToWorld(camera, viewportCenter))?.story.id;
 
-  // 画面のつながりの選んだ画面（開いているスレッドの画面。無ければ真ん中に見えている画面で、すき間なら直前の画面のまま）
+  // 固定した画面・クリックで選んだ画面は、いまのページのキャンバスに並んでいるあいだだけ効き、並ばなくなったら外す（原因によらない）
+  const onCanvas = {
+    source: page,
+    shown: (storyId: string) => findFrame(rows, storyId) !== undefined,
+  };
+  const lockedStoryId = storyOnCanvas(locked, onCanvas);
+  if (locked !== null && lockedStoryId === undefined) setLocked(null);
+  const clickedStoryId = storyOnCanvas(clicked, onCanvas);
+  if (clicked !== null && clickedStoryId === undefined) setClicked(null);
+  // 画面のつながりの選んだ画面（固定 ＞ クリック ＞ 開いているスレッド ＞ 真ん中。model/selected-story.ts）
   const activeThreadOnPage = threads.find(
     (t) => t.root.id === activeThreadId && t.root.source === page,
   );
-  const selectedStoryId = useSelectedStory(
-    page,
-    activeThreadOnPage?.root.storyId ??
-      (viewport.width === 0
+  const selectedStoryId = useSelectedStory(page, {
+    locked: lockedStoryId,
+    clicked: clickedStoryId,
+    thread: activeThreadOnPage?.root.storyId,
+    center:
+      viewport.width === 0
         ? undefined
-        : storyAtPoint(rows, screenToWorld(camera, viewportCenter))),
-  );
+        : storyAtPoint(rows, screenToWorld(camera, viewportCenter)),
+  });
+  /** 画面をクリックして選ぶ（固定しているあいだは覚えない） */
+  const selectStory = (storyId: string) =>
+    setClicked((current) =>
+      clickStory(
+        current,
+        { source: page, storyId },
+        { locked: lockedStoryId !== undefined },
+      ),
+    );
   const transitionView = transitions.viewOf({
     rows,
     camera,
@@ -565,12 +620,12 @@ export const ReviewWorkspace = ({
       setStoryScope(next.scope);
     },
     revealChangedOnly: (storyId) => branchCompare.reveal(page, storyId),
-    setCameraState: (state) =>
-      setCameraStates((previous) => ({ ...previous, [page]: state })),
+    moveCameraByUser: (state) =>
+      moveCameraByUser((previous) => ({ ...previous, [page]: state })),
     onJumped: (storyId) => {
       linkHighlight.show(storyId);
-      // 選んだ画面は開いているスレッドの画面が勝つので、飛んだ先を選ぶために閉じる
-      setActiveThreadId(null);
+      // 開いているスレッドの画面は真ん中の画面より先に選ばれるので、飛んだ先（真ん中）を選ぶために閉じる（固定しているあいだは、固定した画面のまま）
+      closeThread();
       setDraft(null);
     },
     focusZoom,
@@ -669,7 +724,7 @@ export const ReviewWorkspace = ({
   /** 見せる範囲を替える（並びが変わるので、見え方は初めに戻す。範囲の外の画面で絞った一覧は外す） */
   const changeStoryScope = (next: string | undefined) => {
     setStoryScope(next);
-    setCameraStates((previous) => ({
+    moveCameraByUser((previous) => ({
       ...previous,
       [page]: { kind: "initial" },
     }));
@@ -684,7 +739,7 @@ export const ReviewWorkspace = ({
 
   /** 画面の一覧で選んだ状態へ移る（並びに出ているものだけを選べるので、絞り込みは変えない） */
   const focusStory = (story: Story) => {
-    setCameraStates((previous) => ({
+    moveCameraByUser((previous) => ({
       ...previous,
       [page]: {
         kind: "focus",
@@ -739,7 +794,7 @@ export const ReviewWorkspace = ({
           viewport,
         },
       ).zoom;
-      setCameraStates((previous) => ({
+      moveCameraByUser((previous) => ({
         ...previous,
         [root.source]: {
           kind: "focus",
@@ -756,7 +811,7 @@ export const ReviewWorkspace = ({
       transitions.clearHistory();
     }
     setPage(root.source);
-    setActiveThreadId(root.id);
+    openThread(root.id);
     setDraft(null);
   };
 
@@ -782,7 +837,7 @@ export const ReviewWorkspace = ({
     await refresh();
     setDraft(null);
     setDraftBody(NEW_COMMENT_DRAFT, "");
-    setActiveThreadId(created.id);
+    openThread(created.id);
     showToast("コメントしました");
   };
 
@@ -814,7 +869,7 @@ export const ReviewWorkspace = ({
     await report(() =>
       reviewApi.deleteComment({ branch, commentId: comment.id }),
     );
-    if (comment.parentId === null) setActiveThreadId(null);
+    if (comment.parentId === null) closeThread();
     await refresh();
     showToast("削除しました");
   };
@@ -943,7 +998,7 @@ export const ReviewWorkspace = ({
           break;
         case "escape":
           if (draft !== null) setDraft(null);
-          else if (activeThreadId !== null) setActiveThreadId(null);
+          else if (activeThreadId !== null) closeThread();
           else setTool("move");
           break;
         case "zoom-in":
@@ -955,7 +1010,7 @@ export const ReviewWorkspace = ({
           );
           break;
         case "zoom-fit":
-          setCameraStates((previous) => ({
+          moveCameraByUser((previous) => ({
             ...previous,
             [page]: { kind: "fit" },
           }));
@@ -1124,7 +1179,13 @@ export const ReviewWorkspace = ({
         onCompareChoiceChange={onCompareChoiceChange}
         onBranchChange={(next) => {
           if (next !== branch) {
-            onBranchChange(next, page, centerStoryId, storyScope);
+            onBranchChange(
+              next,
+              page,
+              centerStoryId,
+              storyScope,
+              lockedStoryId,
+            );
           }
         }}
         userName={me.name}
@@ -1156,11 +1217,11 @@ export const ReviewWorkspace = ({
           >
             <StorySidebar
               rows={rows}
-              currentStoryId={centerStoryId}
+              selectedStoryId={selectedStoryId}
               query={query}
               onQueryChange={setQuery}
               searchRef={searchRef}
-              onSelectStory={focusStory}
+              onFocusStory={focusStory}
               scope={storyScope}
               onScopeChange={changeStoryScope}
               collapsed={collapsedFolders}
@@ -1237,7 +1298,9 @@ export const ReviewWorkspace = ({
                   }}
                   onPlace={(storyId, point, anchor) => {
                     setDraft({ source: page, storyId, ...point, anchor });
-                    setActiveThreadId(null);
+                    closeThread();
+                    // コメントを置いた画面も選ぶ（#46 の決めごと）
+                    selectStory(storyId);
                   }}
                   onLocate={(_storyId, results) =>
                     setLocated((previous) =>
@@ -1258,16 +1321,21 @@ export const ReviewWorkspace = ({
                     : { transitionRowIndexesOf: transitions.rowIndexesOf })}
                   onLiveTransitions={transitions.onLiveTransitions}
                   onOpenThread={(threadId) => {
-                    setActiveThreadId(threadId);
+                    openThread(threadId);
                     setDraft(null);
                   }}
                   onBackgroundClick={() => {
-                    setActiveThreadId(null);
+                    closeThread();
                     setDraft(null);
+                    // クリックで選んだ画面は外す（固定は外さない）
+                    setClicked(null);
                   }}
-                  onFrameClick={() =>
-                    showToast(
-                      "コメントするには上の「コメント」を選んで、画面をクリックします",
+                  selectedStoryId={selectedStoryId}
+                  lockedStoryId={lockedStoryId}
+                  onSelectStory={selectStory}
+                  onToggleLock={(storyId) =>
+                    setLocked((current) =>
+                      toggleLock(current, { source: page, storyId }),
                     )
                   }
                   onScreenChanged={() =>
@@ -1322,7 +1390,7 @@ export const ReviewWorkspace = ({
                         : () => goToThread(neighbors.next),
                   }}
                   onSwitchWidth={(next) => pageWidths.select(page, next)}
-                  onClose={() => setActiveThreadId(null)}
+                  onClose={closeThread}
                   onReply={reply(activeThread)}
                   onEdit={editComment}
                   onDelete={deleteComment}
@@ -1353,7 +1421,7 @@ export const ReviewWorkspace = ({
               {activeThreadDeleted && (
                 <DeletedThreadNotice
                   draftBody={drafts[activeThreadId] ?? ""}
-                  onClose={() => setActiveThreadId(null)}
+                  onClose={closeThread}
                 />
               )}
               {rows.length === 0 && (
@@ -1385,7 +1453,7 @@ export const ReviewWorkspace = ({
                   camera={camera}
                   viewport={viewport}
                   onNavigate={(point) =>
-                    setCameraStates((previous) => ({
+                    moveCameraByUser((previous) => ({
                       ...previous,
                       [page]: {
                         kind: "fixed",
@@ -1411,7 +1479,7 @@ export const ReviewWorkspace = ({
                   updateCamera((c) => zoomAt(c, 1, viewportCenter))
                 }
                 onFit={() =>
-                  setCameraStates((previous) => ({
+                  moveCameraByUser((previous) => ({
                     ...previous,
                     [page]: { kind: "fit" },
                   }))

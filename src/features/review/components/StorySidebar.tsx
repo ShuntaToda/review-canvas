@@ -17,11 +17,11 @@ const INDENT = 12;
  */
 export const StorySidebar = ({
   rows,
-  currentStoryId,
+  selectedStoryId,
   query,
   onQueryChange,
   searchRef,
-  onSelectStory,
+  onFocusStory,
   scope,
   onScopeChange,
   collapsed,
@@ -32,12 +32,12 @@ export const StorySidebar = ({
 }: {
   /** キャンバスに並べている行（絞り込んだあと。並びもキャンバスと同じ） */
   rows: ReadonlyArray<RowPlacement>;
-  /** いま真ん中に見えている状態 */
-  currentStoryId: string | undefined;
+  /** 印を付ける状態（「画面のつながり」の選んだ画面。無ければ undefined で、どれにも付けない） */
+  selectedStoryId: string | undefined;
   query: string;
   onQueryChange: (query: string) => void;
   searchRef: Ref<HTMLInputElement>;
-  onSelectStory: (story: Story) => void;
+  onFocusStory: (story: Story) => void;
   /** 見せる範囲（フォルダのパス。絞っていなければ undefined） */
   scope: string | undefined;
   onScopeChange: (scope: string | undefined) => void;
@@ -146,8 +146,8 @@ export const StorySidebar = ({
           <TreeList
             nodes={buildStoryTree(rows)}
             depth={0}
-            currentStoryId={currentStoryId}
-            onSelectStory={onSelectStory}
+            selectedStoryId={selectedStoryId}
+            onFocusStory={onFocusStory}
             marks={marks}
             scope={scope}
             onScopeChange={(path) => changeScope(path, path)}
@@ -169,8 +169,8 @@ export const StorySidebar = ({
 
 /** 木の各段で引き継ぐもの */
 type TreeProps = {
-  currentStoryId: string | undefined;
-  onSelectStory: (story: Story) => void;
+  selectedStoryId: string | undefined;
+  onFocusStory: (story: Story) => void;
   scope: string | undefined;
   onScopeChange: (scope: string) => void;
   isOpen: (path: string) => boolean;
@@ -201,8 +201,8 @@ const TreeList = ({
           name={node.name}
           row={node.row}
           depth={depth}
-          currentStoryId={props.currentStoryId}
-          onSelectStory={props.onSelectStory}
+          selectedStoryId={props.selectedStoryId}
+          onFocusStory={props.onFocusStory}
           marks={props.marks}
         />
       ),
@@ -256,15 +256,15 @@ const ScreenItem = ({
   name,
   row,
   depth,
-  currentStoryId,
-  onSelectStory,
+  selectedStoryId,
+  onFocusStory,
   marks,
 }: {
   name: string;
   row: RowPlacement;
   depth: number;
-  currentStoryId: string | undefined;
-  onSelectStory: (story: Story) => void;
+  selectedStoryId: string | undefined;
+  onFocusStory: (story: Story) => void;
   marks: ReadonlyMap<string, CompareMark> | undefined;
 }) => (
   <li>
@@ -282,10 +282,10 @@ const ScreenItem = ({
           <li key={story.id}>
             <button
               type="button"
-              aria-current={story.id === currentStoryId ? "true" : undefined}
+              aria-current={story.id === selectedStoryId ? "true" : undefined}
               className={[
                 "flex w-full items-center gap-2 py-1 pr-3 text-left text-sm",
-                story.id === currentStoryId
+                story.id === selectedStoryId
                   ? "bg-accent-soft text-accent"
                   : "text-ink-sub hover:bg-panel-sub hover:text-ink",
               ].join(" ")}
@@ -297,7 +297,7 @@ const ScreenItem = ({
                   ? undefined
                   : `${story.name}（${COMPARE_MARK_LABELS[mark]}）`
               }
-              onClick={() => onSelectStory(story)}
+              onClick={() => onFocusStory(story)}
             >
               <span className="min-w-0 flex-1 truncate">{story.name}</span>
               {mark !== undefined && (
